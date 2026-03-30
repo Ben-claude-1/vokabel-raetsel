@@ -1,0 +1,2285 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Vokabel-Rätsel</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+    input, button, select, textarea { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useMemo, useCallback, useEffect, useRef } = React;
+
+
+// ── Config ────────────────────────────────────────────────────
+const SB_URL = "https://zdtwlxclgsrfskqqnved.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdHdseGNsZ3NyZnNrcXFudmVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4MTMzNDIsImV4cCI6MjA5MDM4OTM0Mn0.CQbzIo8a9uJnZIgZ1Ulp4okrgwl9IZH48j0HHUBRVJc";
+const HG = { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
+// NOTE: No "Prefer" header on POST — triggers CORS preflight that is blocked in claude.ai sandbox
+var HW_POST = { "Content-Type": "application/json", apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
+
+function sbGet(t, q) {
+  var url = SB_URL + "/rest/v1/" + t + (q ? "?" + q : "");
+  return fetch(url, { headers: HG, mode: "cors", credentials: "omit" })
+    .then(function(r) {
+      if (!r.ok) return [];
+      return r.text().then(function(txt) {
+        if (!txt || txt.trim() === "[]" || txt.trim() === "") return [];
+        try { return JSON.parse(txt); } catch(e) { return []; }
+      });
+    })
+    .catch(function(e) { console.log("sbGet err:", e.message); return []; });
+}
+function sbPost(t, b) {
+  var headers = Object.assign({}, HW_POST, { "Prefer": "return=representation" });
+  return fetch(SB_URL + "/rest/v1/" + t, { method: "POST", headers: headers, body: JSON.stringify(b), mode: "cors", credentials: "omit" })
+    .then(function(r) {
+      if (!r.ok) return r.text().then(function(txt) { return { _err: true, status: r.status, msg: txt }; });
+      return r.text().then(function(txt) {
+        if (!txt || txt === "[]") return { _ok: true };
+        try { var j = JSON.parse(txt); return Array.isArray(j) ? (j[0] || { _ok: true }) : j; } catch(e) { return { _ok: true }; }
+      });
+    })
+    .catch(function(e) { console.log("sbPost err:", e.message); return { _err: true, msg: e.message }; });
+}
+function sbPatch(t, b, q) {
+  return fetch(SB_URL + "/rest/v1/" + t + "?" + q, { method: "PATCH", headers: HW_POST, body: JSON.stringify(b), mode: "cors", credentials: "omit" })
+    .then(function() { return true; }).catch(function() { return false; });
+}
+function sbDel(t, q) {
+  return fetch(SB_URL + "/rest/v1/" + t + "?" + q, { method: "DELETE", headers: HG, mode: "cors", credentials: "omit" })
+    .then(function() { return true; }).catch(function() { return false; });
+}
+function sbSingle(t, q) {
+  return sbGet(t, q).then(function(d) { return Array.isArray(d) && d.length > 0 ? d[0] : null; });
+}
+
+// ── window.storage helpers — shared:true so ALL users see ALL registrations cross-device ──
+// This is the key: shared storage persists across artifact versions AND across devices
+const STORE = {
+  getUser: function(name) {
+    try {
+      if (typeof window.storage === "undefined") return Promise.resolve(null);
+      return window.storage.get("user:" + name.toLowerCase(), true)
+        .then(function(r) { return r && r.value ? JSON.parse(r.value) : null; })
+        .catch(function() { return null; });
+    } catch(e) { return Promise.resolve(null); }
+  },
+  setUser: function(u) {
+    try {
+      if (typeof window.storage === "undefined") return Promise.resolve();
+      return window.storage.set("user:" + u.name.toLowerCase(), JSON.stringify(u), true)
+        .catch(function() {});
+    } catch(e) { return Promise.resolve(); }
+  },
+  listUsers: function() {
+    try {
+      if (typeof window.storage === "undefined") return Promise.resolve([]);
+      return window.storage.list("user:", true)
+        .then(function(keys) {
+          var promises = (keys.keys || []).map(function(k) {
+            return window.storage.get(k, true).then(function(r) { return r && r.value ? JSON.parse(r.value) : null; }).catch(function() { return null; });
+          });
+          return Promise.all(promises).then(function(arr) { return arr.filter(Boolean); });
+        })
+        .catch(function() { return []; });
+    } catch(e) { return Promise.resolve([]); }
+  }
+};
+
+// ── Hash — always synchronous, no hanging on mobile ──
+function simpleHash(str) {
+  var s = str + "vocab_salt_2024", h = 5381, h2 = 0;
+  for (var i = 0; i < s.length; i++) { h = ((h << 5) + h) ^ s.charCodeAt(i); h2 = (h2 * 31 + s.charCodeAt(i)) | 0; }
+  return "fb_" + Math.abs(h).toString(16).padStart(8,"0") + Math.abs(h2).toString(16).padStart(8,"0");
+}
+// hashPw is synchronous — avoids crypto.subtle hanging on mobile browsers
+// Returns Promise for API compatibility, but resolves instantly
+function hashPw(pw) {
+  return Promise.resolve(simpleHash(pw));
+}
+
+// ── Built-in Chapters ─────────────────────────────────────────
+const BUILTIN = [
+  { id: "c1", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
+    { word: "birthday", clue: "Geburtstag", important: true }, { word: "calendar", clue: "Kalender", important: true },
+    { word: "sing", clue: "singen", important: false }, { word: "month", clue: "Monat", important: true },
+    { word: "celebrate", clue: "feiern", important: true }, { word: "enjoy", clue: "genießen", important: true },
+    { word: "take", clue: "(mit)nehmen", important: true }, { word: "balloon", clue: "Luftballon", important: false },
+    { word: "bring", clue: "(mit)bringen", important: true }, { word: "spring", clue: "Frühling", important: true },
+    { word: "summer", clue: "Sommer", important: true }, { word: "autumn", clue: "Herbst", important: true },
+    { word: "winter", clue: "Winter", important: true }, { word: "date", clue: "Datum", important: true },
+    { word: "first", clue: "erste(r,s)", important: true }, { word: "second", clue: "zweite(r,s)", important: true },
+    { word: "third", clue: "dritte(r,s)", important: true }, { word: "dream", clue: "Traum", important: true },
+    { word: "something", clue: "etwas", important: true }, { word: "ride", clue: "reiten, fahren", important: false },
+  ]},
+  { id: "c2", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
+    { word: "fireworks", clue: "Feuerwerk", important: true }, { word: "present", clue: "Geschenk", important: true },
+    { word: "drink", clue: "Getränk", important: false }, { word: "ice", clue: "Eis", important: false },
+    { word: "wonderful", clue: "wunderbar", important: true }, { word: "price", clue: "Preis", important: true },
+    { word: "free", clue: "frei, gratis", important: true }, { word: "guest", clue: "Gast", important: false },
+    { word: "lemonade", clue: "Limonade", important: true }, { word: "juice", clue: "Saft", important: true },
+    { word: "invitation", clue: "Einladung", important: true }, { word: "card", clue: "Karte", important: true },
+    { word: "lazy", clue: "faul, träge", important: true }, { word: "sleep", clue: "schlafen", important: true },
+    { word: "buffet", clue: "Büfett", important: false }, { word: "coffee", clue: "Kaffee", important: false },
+  ]},
+  { id: "c3", title: "Monate", color: "#b45309", icon: "📅", is_builtin: true, sentences: [], words: [
+    { word: "January", clue: "Januar", important: true }, { word: "February", clue: "Februar", important: true },
+    { word: "March", clue: "März", important: true }, { word: "April", clue: "April", important: true },
+    { word: "May", clue: "Mai", important: true }, { word: "June", clue: "Juni", important: true },
+    { word: "July", clue: "Juli", important: true }, { word: "August", clue: "August", important: true },
+    { word: "September", clue: "September", important: true }, { word: "October", clue: "Oktober", important: true },
+    { word: "November", clue: "November", important: true }, { word: "December", clue: "Dezember", important: true },
+  ]},
+  { id: "c4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
+    { word: "holiday", clue: "Urlaub, Ferien", important: true }, { word: "text", clue: "SMS senden", important: true },
+    { word: "shop", clue: "einkaufen", important: true }, { word: "score", clue: "Tor schießen", important: true },
+    { word: "goal", clue: "Ziel, Tor", important: true }, { word: "collect", clue: "(ein)sammeln", important: true },
+    { word: "close", clue: "schließen", important: true }, { word: "bag", clue: "Tasche", important: true },
+    { word: "case", clue: "Hülle", important: true }, { word: "train", clue: "trainieren", important: true },
+    { word: "plan", clue: "planen", important: true }, { word: "field", clue: "Spielfeld", important: false },
+    { word: "fun", clue: "Spaß", important: false }, { word: "gym", clue: "Turnhalle", important: false },
+  ]},
+  { id: "c5", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
+    { word: "cheap", clue: "billig, preiswert", important: true }, { word: "expensive", clue: "teuer", important: true },
+    { word: "customer", clue: "Kunde/Kundin", important: true }, { word: "any", clue: "(irgend)ein(e)", important: true },
+    { word: "somebody", clue: "(irgend)jemand", important: true }, { word: "just", clue: "nur, gerade", important: true },
+    { word: "home", clue: "zu Hause", important: true }, { word: "have", clue: "haben, trinken", important: true },
+    { word: "put", clue: "setzen, legen", important: false }, { word: "everything", clue: "alles", important: false },
+  ]},
+];
+
+// ── Colors ────────────────────────────────────────────────────
+var T = "#0f766e", TL = "#ccfbf1", TD = "#134e4a", AM = "#f59e0b", RE = "#ef4444", GR = "#22c55e";
+var G50 = "#f8fafc", G100 = "#f1f5f9", G200 = "#e2e8f0", G400 = "#94a3b8", G600 = "#475569", G900 = "#0f172a";
+
+function BtnStyle(bg, col, extra) {
+  var base = { padding: "8px 18px", background: bg, color: col || "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: "bold", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" };
+  if (extra) Object.assign(base, extra);
+  return base;
+}
+
+// ── Crossword Engine ──────────────────────────────────────────
+var SZ = 25;
+function canPlace(grid, word, row, col, dir, must) {
+  var L = word.length;
+  if (row < 0 || col < 0) return false;
+  if (dir === "H" && col + L > SZ) return false;
+  if (dir === "V" && row + L > SZ) return false;
+  if (dir === "H") { if (col > 0 && grid[row][col-1] !== "") return false; if (col+L < SZ && grid[row][col+L] !== "") return false; }
+  else { if (row > 0 && grid[row-1][col] !== "") return false; if (row+L < SZ && grid[row+L][col] !== "") return false; }
+  var ix = false;
+  for (var i = 0; i < L; i++) {
+    var r = dir === "H" ? row : row + i, c = dir === "H" ? col + i : col, cell = grid[r][c];
+    if (cell !== "") { if (cell.toLowerCase() !== word[i].toLowerCase()) return false; ix = true; }
+    else {
+      if (dir === "H") { if (r > 0 && grid[r-1][c] !== "") return false; if (r < SZ-1 && grid[r+1][c] !== "") return false; }
+      else { if (c > 0 && grid[r][c-1] !== "") return false; if (c < SZ-1 && grid[r][c+1] !== "") return false; }
+    }
+  }
+  return !must || ix;
+}
+function findSolCells(grid, rows, cols, phrase) {
+  var used = new Set(), cells = [];
+  for (var li = 0; li < phrase.length; li++) {
+    var cands = [];
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++)
+      if (!used.has(r+","+c) && grid[r][c].toLowerCase() === phrase[li].toLowerCase()) cands.push({r:r,c:c});
+    if (!cands.length) return null;
+    var pick = cands[Math.floor((li/phrase.length)*cands.length)];
+    used.add(pick.r+","+pick.c); cells.push({r:pick.r,c:pick.c,letter:grid[pick.r][pick.c],pos:li+1});
+  }
+  return cells;
+}
+function buildCW(words, solPhrase) {
+  var grid = [], placed = [];
+  for (var gi = 0; gi < SZ; gi++) { grid.push([]); for (var gj = 0; gj < SZ; gj++) grid[gi].push(""); }
+  var sorted = words.slice().sort(function(a,b){ return b.word.length - a.word.length; });
+  var fw = sorted[0], r0 = Math.floor(SZ/2), c0 = Math.floor((SZ-fw.word.length)/2);
+  for (var fi = 0; fi < fw.word.length; fi++) grid[r0][c0+fi] = fw.word[fi];
+  placed.push(Object.assign({}, fw, {row:r0,col:c0,dir:"H"}));
+  for (var wi = 1; wi < sorted.length; wi++) {
+    var wo = sorted[wi], found = false;
+    for (var pi = placed.length-1; pi >= 0 && !found; pi--) {
+      var pw = placed[pi];
+      for (var pj = 0; pj < pw.word.length && !found; pj++) {
+        for (var wj = 0; wj < wo.word.length && !found; wj++) {
+          if (pw.word[pj].toLowerCase() !== wo.word[wj].toLowerCase()) continue;
+          var dir2 = pw.dir === "H" ? "V" : "H";
+          var row2 = pw.dir === "H" ? pw.row - wj : pw.row + pj;
+          var col2 = pw.dir === "H" ? pw.col + pj : pw.col - wj;
+          if (canPlace(grid, wo.word, row2, col2, dir2, true)) {
+            for (var ii = 0; ii < wo.word.length; ii++) {
+              var rr = dir2==="H"?row2:row2+ii, cc = dir2==="H"?col2+ii:col2;
+              if (grid[rr][cc]==="") grid[rr][cc]=wo.word[ii];
+            }
+            placed.push(Object.assign({}, wo, {row:row2,col:col2,dir:dir2})); found=true;
+          }
+        }
+      }
+    }
+  }
+  var r1=SZ,r2=0,c1=SZ,c2=0;
+  for (var gr=0;gr<SZ;gr++) for (var gc=0;gc<SZ;gc++) if(grid[gr][gc]!==""){r1=Math.min(r1,gr);r2=Math.max(r2,gr);c1=Math.min(c1,gc);c2=Math.max(c2,gc);}
+  var rows=r2-r1+1, cols=c2-c1+1;
+  var tGrid=[]; for(var tr=0;tr<rows;tr++){tGrid.push(grid[tr+r1].slice(c1,c2+1));}
+  var tPlaced=placed.map(function(p){return Object.assign({},p,{row:p.row-r1,col:p.col-c1});});
+  var smap={}, keys=[];
+  tPlaced.forEach(function(p){var k=p.row+","+p.col;if(!smap[k])smap[k]={H:null,V:null};smap[k][p.dir]=p;});
+  keys=Object.keys(smap).sort(function(a,b){var ap=a.split(",").map(Number),bp=b.split(",").map(Number);return ap[0]!==bp[0]?ap[0]-bp[0]:ap[1]-bp[1];});
+  var nums={},across=[],down=[],nn=1;
+  keys.forEach(function(k){var s=smap[k];nums[k]=nn;if(s.H)across.push({n:nn,clue:s.H.clue,word:s.H.word});if(s.V)down.push({n:nn,clue:s.V.clue,word:s.V.word});nn++;});
+  var solCells=solPhrase?(findSolCells(tGrid,rows,cols,solPhrase)||[]):[];
+  return {grid:tGrid,nums:nums,across:across,down:down,rows:rows,cols:cols,placed:tPlaced,total:words.length,solCells:solCells};
+}
+
+var SOLS = [
+  {phrase:"superstar",msg:"⭐ Du bist ein SUPERSTAR!"},
+  {phrase:"topschueler",msg:"🧠 Du bist ein TOP-SCHÜLER!"},
+  {phrase:"englishpro",msg:"🏆 Du bist ein ENGLISH PRO!"},
+  {phrase:"champion",msg:"🥇 Du bist ein CHAMPION!"},
+];
+
+// ── Quiz Utils ────────────────────────────────────────────────
+function shuffleArr(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
+
+function makeQuizRound(allWords, usedWords) {
+  // Pick 3 words not yet used
+  var pool = allWords.filter(function(w){ return !usedWords.has(w.word); });
+  if (pool.length < 3) pool = allWords; // fallback
+  var picked = shuffleArr(pool).slice(0, 3);
+  return picked.map(function(correct) {
+    var distractors = shuffleArr(allWords.filter(function(w){ return w.word !== correct.word; })).slice(0,3);
+    var answers = shuffleArr([correct].concat(distractors));
+    return { correct: correct, answers: answers, type: Math.random() > 0.5 ? "de2en" : "en2de" };
+  });
+}
+
+function makeAllRounds(chapters) {
+  var allWords = [];
+  chapters.forEach(function(ch){ ch.words.forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
+  if (allWords.length < 4) return [];
+  var rounds = [], used = new Set();
+  for (var i = 0; i < 6; i++) {
+    var round = makeQuizRound(allWords, used);
+    round.forEach(function(q){ used.add(q.correct.word); });
+    rounds.push(round);
+  }
+  return rounds;
+}
+
+
+// ── Answer checking (partial credit) ─────────────────────────
+function normalizeAnswer(s) {
+  return s.trim().toLowerCase()
+    .replace(/^(to|die|der|das|ein|eine|einen|einem|einer|ich|sie|er|es|wir|ihr)\s+/i, '')
+    .replace(/[.,!?;:()]/g, '').trim();
+}
+function checkAnswer(typed, correct) {
+  if (!typed || !typed.trim()) return 'empty';
+  var t = typed.trim().toLowerCase();
+  var tN = normalizeAnswer(t);
+  var variants = correct.split(/[,;\/]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
+  var variantsN = variants.map(normalizeAnswer);
+  // Exact match
+  for (var i=0;i<variants.length;i++) {
+    if (variants[i]===t || variantsN[i]===t || variantsN[i]===tN || variants[i]===tN) return 'correct';
+  }
+  // Partial match
+  for (var j=0;j<variantsN.length;j++) {
+    var v=variantsN[j];
+    if (v.includes(tN) || tN.includes(v)) return 'partial';
+  }
+  return 'wrong';
+}
+
+// ── Word Progress (green/yellow/red) ─────────────────────────
+function getWordColor(history) {
+  if (!history || history.length===0) return 'new';
+  var last = history.slice(-4);
+  var correct = last.filter(Boolean).length;
+  if (last.length>=4 && correct===4) return 'green';
+  if (correct===0) return 'red';
+  return 'yellow';
+}
+var COLOR_BG = { green:'#d1fae5', yellow:'#fef9c3', red:'#fee2e2', new:'#f1f5f9' };
+var COLOR_FG = { green:'#065f46', yellow:'#92400e', red:'#991b1b', new:'#475569' };
+var COLOR_DOT = { green:'#22c55e', yellow:'#f59e0b', red:'#ef4444', new:'#94a3b8' };
+
+// Progress stored in window.storage: key "wp:{userId}:{word}"
+var PROGRESS = {
+  key: function(uid, word) { return 'wp:' + uid + ':' + word.toLowerCase(); },
+  get: function(uid, word) {
+    try {
+      if (typeof window.storage === "undefined") return Promise.resolve(null);
+      return window.storage.get(PROGRESS.key(uid, word))
+        .then(function(r) { return r && r.value ? JSON.parse(r.value) : null; })
+        .catch(function() { return null; });
+    } catch(e) { return Promise.resolve(null); }
+  },
+  set: function(uid, word, clue, chapId, correct) {
+    PROGRESS.get(uid, word).then(function(existing) {
+      var data = existing || {history:[]};
+      data.history = data.history.concat([correct]).slice(-10);
+      data.word = word; data.clue = clue; data.chapId = chapId; data.lastSeen = Date.now();
+      try {
+        if (typeof window.storage !== "undefined") {
+          window.storage.set(PROGRESS.key(uid, word), JSON.stringify(data)).catch(function(){});
+        }
+      } catch(e) {}
+    });
+  },
+  getAll: function(uid) {
+    try {
+      if (typeof window.storage === "undefined") return Promise.resolve({});
+      return window.storage.list('wp:' + uid + ':')
+        .then(function(keys) {
+          var promises = (keys.keys || []).map(function(k) {
+            return window.storage.get(k).then(function(r) {
+              if (r && r.value) { var d = JSON.parse(r.value); return [d.word, d.history]; }
+              return null;
+            }).catch(function() { return null; });
+          });
+          return Promise.all(promises).then(function(arr) {
+            var map = {};
+            arr.filter(Boolean).forEach(function(pair) { map[pair[0]] = pair[1]; });
+            return map;
+          });
+        })
+        .catch(function() { return {}; });
+    } catch(e) { return Promise.resolve({}); }
+  }
+};
+
+function selectWorkoutWords(allWords, progressMap, count) {
+  var categorized={red:[],yellow:[],green:[],new:[]};
+  allWords.forEach(function(w){
+    var hist=progressMap[w.word]||[];
+    categorized[getWordColor(hist)].push(w);
+  });
+  var red=shuffleArr(categorized.red.concat(categorized.new));
+  var yellow=shuffleArr(categorized.yellow);
+  var green=shuffleArr(categorized.green);
+  var nRed=Math.min(Math.ceil(count*0.5), red.length);
+  var nYellow=Math.min(Math.ceil(count*0.3), yellow.length);
+  var nGreen=Math.min(count-nRed-nYellow, green.length);
+  var pool=[].concat(red.slice(0,nRed), yellow.slice(0,nYellow), green.slice(0,nGreen));
+  if (pool.length<count) {
+    var used=new Set(pool.map(function(w){return w.word;}));
+    var rest=shuffleArr(allWords.filter(function(w){return !used.has(w.word);}));
+    pool=pool.concat(rest.slice(0,count-pool.length));
+  }
+  return shuffleArr(pool).slice(0,count);
+}
+
+// ── VokabelTrainer ────────────────────────────────────────────
+function VokabelTrainer({ words, player, onDone, title }) {
+  var shuffled = useMemo(function(){ return shuffleArr(words); }, []);
+  var [idx, setIdx] = useState(0);
+  var [input, setInput] = useState('');
+  var [result, setResult] = useState(null); // null | {status, correct, typed}
+  var [results, setResults] = useState([]);
+  var [direction, setDirection] = useState('de2en'); // de2en or en2de
+  var inputRef = useRef();
+
+  useEffect(function(){ if(inputRef.current && !result) inputRef.current.focus(); }, [idx, result]);
+
+  var current = shuffled[idx];
+  var question = direction==='de2en' ? current.clue : current.word;
+  var answer = direction==='de2en' ? current.word : current.clue;
+  var qLabel = direction==='de2en' ? 'Englisch eingeben:' : 'Deutsch eingeben:';
+
+  function submit() {
+    if (!input.trim() && !result) return;
+    if (result) { // next word
+      var nextIdx = idx+1;
+      if (nextIdx >= shuffled.length) { setResult(null); setIdx(shuffled.length); return; }
+      setIdx(nextIdx); setInput(''); setResult(null);
+      setTimeout(function(){ if(inputRef.current) inputRef.current.focus(); }, 50);
+      return;
+    }
+    var status = checkAnswer(input, answer);
+    var res = {status:status, correct:answer, typed:input, word:current.word, clue:current.clue, chapId:current.chapterId};
+    setResult(res);
+    setResults(function(prev){ return prev.concat([res]); });
+    if (player && player.id) {
+      PROGRESS.set(player.id, current.word, current.clue, current.chapterId, status==='correct');
+    }
+  }
+
+  if (idx >= shuffled.length) {
+    var corr=results.filter(function(r){return r.status==='correct';}).length;
+    var part=results.filter(function(r){return r.status==='partial';}).length;
+    var wrong=results.filter(function(r){return r.status==='wrong';}).length;
+    return (
+      <div style={{padding:8}}>
+        <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:'20px',color:'white',textAlign:'center',marginBottom:14}}>
+          <div style={{fontSize:36,marginBottom:6}}>{corr===shuffled.length?'🏆':corr>shuffled.length/2?'👍':'📚'}</div>
+          <div style={{fontSize:20,fontWeight:'bold'}}>{corr} richtig · {part} halb · {wrong} falsch</div>
+          <div style={{fontSize:12,opacity:.8}}>{shuffled.length} Vokabeln</div>
+        </div>
+        {results.map(function(r,i){
+          var bg=r.status==='correct'?'#d1fae5':r.status==='partial'?'#fef9c3':'#fee2e2';
+          var icon=r.status==='correct'?'✓':r.status==='partial'?'~':'✗';
+          return (
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',marginBottom:3,borderRadius:8,background:bg,fontSize:12}}>
+              <span style={{fontSize:16,minWidth:20}}>{icon}</span>
+              <span style={{color:G600,minWidth:120}}>{r.clue}</span>
+              <span style={{fontWeight:'bold',color:G900,flex:1}}>{r.correct}</span>
+              {r.status!=='correct'&&<span style={{color:RE,fontSize:11}}>→ {r.typed}</span>}
+            </div>
+          );
+        })}
+        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>← Zurück</button>
+      </div>
+    );
+  }
+
+  var resultColor = result ? (result.status==='correct'?GR:result.status==='partial'?AM:RE) : T;
+  var resultBg = result ? (result.status==='correct'?'#d1fae5':result.status==='partial'?'#fef9c3':'#fee2e2') : 'white';
+
+  return (
+    <div style={{padding:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+        <div style={{flex:1,height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
+          <div style={{height:'100%',width:((idx/shuffled.length)*100)+'%',background:T,borderRadius:3}}/>
+        </div>
+        <span style={{fontSize:11,color:G400}}>{idx+1}/{shuffled.length}</span>
+        <button onClick={function(){setDirection(direction==='de2en'?'en2de':'de2en');setInput('');setResult(null);}}
+          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>
+          ⇄ Richtung
+        </button>
+      </div>
+      <div style={{textAlign:'center',padding:'30px 20px',background:resultBg,borderRadius:16,marginBottom:12,border:'2px solid '+(result?resultColor:G200),transition:'all .3s'}}>
+        <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>{qLabel}</div>
+        <div style={{fontSize:28,fontWeight:'bold',color:G900,marginBottom:result?12:0}}>{question}</div>
+        {result&&<div style={{fontSize:18,fontWeight:'bold',color:resultColor}}>{result.status==='correct'?'✓ Richtig!':result.status==='partial'?'~ Fast richtig':'✗ Falsch'}</div>}
+        {result&&<div style={{fontSize:13,color:G600,marginTop:4}}>Richtig: <strong>{result.correct}</strong>{result.typed&&result.status!=='correct'?'  (du: '+result.typed+')':''}</div>}
+      </div>
+      {!result&&(
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')submit();}}
+            autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
+            placeholder="Antwort eingeben…"
+            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
+          <button onClick={submit} style={BtnStyle(T,'#fff',{padding:'12px 18px',fontSize:15})}>✓</button>
+        </div>
+      )}
+      {result&&(
+        <button onClick={submit} style={BtnStyle(T,'#fff',{width:'100%',padding:'12px',fontSize:15})}>
+          {idx+1>=shuffled.length?'📊 Auswertung':'→ Nächste'}
+        </button>
+      )}
+      <button onClick={function(){if(confirm('Abbrechen?'))onDone();}} style={BtnStyle(G100,G600,{width:'100%',marginTop:8,fontSize:12})}>Abbrechen</button>
+    </div>
+  );
+}
+
+// ── Workout Setup + Session ───────────────────────────────────
+function WorkoutSetup({ chapters, player, onStart }) {
+  var [count, setCount] = useState(10);
+  var [onlyImportant, setOnlyImportant] = useState(true);
+  var [progressMap, setProgressMap] = useState({});
+  var [loading, setLoading] = useState(true);
+
+  useEffect(function(){
+    if(!player) return;
+    PROGRESS.getAll(player.id).then(function(map){setProgressMap(map);setLoading(false);});
+  },[]);
+
+  var allWords = useMemo(function(){
+    var w=[];
+    chapters.forEach(function(ch){
+      (onlyImportant?ch.words.filter(function(x){return x.important;}):ch.words)
+        .forEach(function(ww){ w.push(Object.assign({},ww,{chapterId:ch.id,chapTitle:ch.title})); });
+    });
+    return w;
+  },[chapters,onlyImportant]);
+
+  var stats = useMemo(function(){
+    var s={green:0,yellow:0,red:0,new:0};
+    allWords.forEach(function(w){
+      var hist=progressMap[w.word]||[];
+      s[getWordColor(hist)]++;
+    });
+    return s;
+  },[allWords,progressMap]);
+
+  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
+
+  return(
+    <div style={{padding:8}}>
+      <div style={{background:G50,borderRadius:12,padding:16,marginBottom:14,border:'1px solid '+G200}}>
+        <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>📊 Dein Fortschritt</div>
+        <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+          {[['green','🟢','Grün (sicher)'],['yellow','🟡','Gelb (unsicher)'],['red','🔴','Rot (schwach)'],['new','⬜','Neu']].map(function(x){
+            return(
+              <div key={x[0]} style={{flex:'1 1 80px',textAlign:'center',padding:'10px 6px',background:COLOR_BG[x[0]],borderRadius:10}}>
+                <div style={{fontSize:20,fontWeight:'bold',color:COLOR_FG[x[0]]}}>{stats[x[0]]}</div>
+                <div style={{fontSize:10,color:G400}}>{x[2]}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{fontSize:12,color:G600,padding:'8px 12px',background:'white',borderRadius:8,border:'1px solid '+G200}}>
+          🎯 Im Workout: <strong>50% rot/neu</strong> · <strong>30% gelb</strong> · <strong>20% grün</strong>
+        </div>
+      </div>
+
+      <div style={{marginBottom:14,padding:14,background:'white',borderRadius:12,border:'1px solid '+G200}}>
+        <div style={{fontWeight:'bold',fontSize:13,marginBottom:10}}>Einstellungen</div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:12,color:G600,marginBottom:6}}>Anzahl Vokabeln: <strong>{count}</strong></div>
+          <div style={{display:'flex',gap:6}}>
+            {[5,10,15,20,30].map(function(n){
+              return <button key={n} onClick={function(){setCount(n);}} style={{flex:1,padding:'6px',borderRadius:6,border:'2px solid '+(count===n?T:G200),background:count===n?TL:'white',cursor:'pointer',fontWeight:'bold',fontSize:13,color:count===n?T:G600}}>{n}</button>;
+            })}
+          </div>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div onClick={function(){setOnlyImportant(!onlyImportant);}} style={{width:22,height:22,borderRadius:6,border:'2px solid '+(onlyImportant?T:G200),background:onlyImportant?T:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            {onlyImportant&&<span style={{color:'white',fontSize:14}}>✓</span>}
+          </div>
+          <span style={{fontSize:13,color:G600}}>Nur ⭐ fett gedruckte Vokabeln ({allWords.length} verfügbar)</span>
+        </div>
+      </div>
+
+      {allWords.length < 3 && <div style={{color:RE,fontSize:12,marginBottom:10,textAlign:'center'}}>Zu wenige Vokabeln. Filter ändern oder mehr Kapitel laden.</div>}
+      <button onClick={function(){
+        var selected = selectWorkoutWords(allWords, progressMap, Math.min(count, allWords.length));
+        onStart(selected, progressMap);
+      }} disabled={allWords.length<3} style={BtnStyle(T,'#fff',{width:'100%',padding:'12px',fontSize:15,opacity:allWords.length<3?0.5:1})}>
+        🏋️ Workout starten ({Math.min(count,allWords.length)} Vokabeln)
+      </button>
+    </div>
+  );
+}
+
+function WorkoutSession({ words, player, progressMap, onDone }) {
+  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" />;
+}
+
+// ── SentenceLearner ───────────────────────────────────────────
+function SentenceLearner({ chapters, player, onDone }) {
+  var [selectedCh, setSelectedCh] = useState(null);
+  var [idx, setIdx] = useState(0);
+  var [input, setInput] = useState('');
+  var [result, setResult] = useState(null);
+  var [results, setResults] = useState([]);
+  var [direction, setDirection] = useState('en2de');
+  var inputRef = useRef();
+
+  var chapWithSentences = useMemo(function(){
+    return chapters.filter(function(ch){ return ch.sentences && ch.sentences.filter(function(s){return s.important;}).length>0; });
+  },[chapters]);
+
+  useEffect(function(){ if(inputRef.current && !result && selectedCh) inputRef.current.focus(); },[idx,result,selectedCh]);
+
+  if(!selectedCh) return(
+    <div style={{padding:8}}>
+      <p style={{color:G600,fontSize:13,marginBottom:12}}>Wähle ein Kapitel zum Sätze lernen (nur fett gedruckte Sätze):</p>
+      {chapWithSentences.length===0&&<div style={{textAlign:'center',color:G400,padding:20}}>Noch keine Sätze gespeichert. Bitte Bilder mit Sätzen hochladen.</div>}
+      {chapWithSentences.map(function(ch){
+        var cnt=ch.sentences.filter(function(s){return s.important;}).length;
+        return(
+          <button key={ch.id} onClick={function(){setSelectedCh(ch);setIdx(0);setInput('');setResult(null);setResults([]);}}
+            style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,borderRadius:10,border:'2px solid '+ch.color,background:'white',cursor:'pointer'}}>
+            <div style={{fontWeight:'bold',color:ch.color}}>{ch.icon} {ch.title}</div>
+            <div style={{fontSize:11,color:G400}}>{cnt} fett gedruckte Sätze</div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  var sentences = shuffleArr(selectedCh.sentences.filter(function(s){return s.important;}));
+  if(idx>=sentences.length){
+    var corr2=results.filter(function(r){return r.status==='correct';}).length;
+    return(
+      <div style={{padding:8}}>
+        <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:20,color:'white',textAlign:'center',marginBottom:14}}>
+          <div style={{fontSize:32,marginBottom:6}}>{corr2===sentences.length?'🏆':'📚'}</div>
+          <div style={{fontSize:18,fontWeight:'bold'}}>{corr2}/{sentences.length} Sätze</div>
+        </div>
+        {results.map(function(r,i){
+          return(
+            <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,background:r.status==='correct'?'#d1fae5':'#fef9c3',fontSize:12}}>
+              <div style={{fontWeight:'bold',color:G900}}>{r.en}</div>
+              <div style={{color:G600}}>{r.de}</div>
+              {r.status!=='correct'&&<div style={{color:AM,fontSize:11}}>Deine Antwort: {r.typed}</div>}
+            </div>
+          );
+        })}
+        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>← Zurück</button>
+      </div>
+    );
+  }
+
+  var current = sentences[idx];
+  var question = direction==='en2de'?current.text:current.translation;
+  var answer = direction==='en2de'?current.translation:current.text;
+
+  function submitSentence(){
+    if(!input.trim()&&!result) return;
+    if(result){
+      if(idx+1>=sentences.length){ setIdx(sentences.length); return; }
+      setIdx(function(i){return i+1;}); setInput(''); setResult(null);
+      setTimeout(function(){if(inputRef.current)inputRef.current.focus();},50);
+      return;
+    }
+    var status=checkAnswer(input,answer);
+    var res={status:status,en:current.text,de:current.translation,typed:input};
+    setResult(res); setResults(function(p){return p.concat([res]);});
+  }
+
+  return(
+    <div style={{padding:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+        <div style={{flex:1,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
+          <div style={{height:'100%',width:((idx/sentences.length)*100)+'%',background:T,borderRadius:3}}/>
+        </div>
+        <span style={{fontSize:11,color:G400}}>{idx+1}/{sentences.length}</span>
+        <button onClick={function(){setDirection(direction==='en2de'?'de2en':'en2de');setInput('');setResult(null);}}
+          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>⇄</button>
+      </div>
+      <div style={{textAlign:'center',padding:'20px 16px',background:result?(result.status==='correct'?'#d1fae5':'#fef9c3'):'#f8fafc',borderRadius:14,marginBottom:12,border:'2px solid '+(result?(result.status==='correct'?GR:AM):G200)}}>
+        <div style={{fontSize:11,color:G400,marginBottom:6}}>Übersetze ins {direction==='en2de'?'Deutsche':'Englische'}:</div>
+        <div style={{fontSize:16,fontWeight:'bold',color:G900,lineHeight:1.4}}>{question}</div>
+        {result&&<div style={{marginTop:10,fontSize:13,color:result.status==='correct'?T:AM}}><strong>Richtig: </strong>{answer}</div>}
+      </div>
+      {!result&&(
+        <div style={{display:'flex',gap:8,marginBottom:10}}>
+          <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')submitSentence();}}
+            placeholder="Übersetzung…"
+            style={{flex:1,padding:'10px 12px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
+          <button onClick={submitSentence} style={BtnStyle(T)}>✓</button>
+        </div>
+      )}
+      {result&&<button onClick={submitSentence} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px'})}>{idx+1>=sentences.length?'📊 Fertig':'→ Nächster'}</button>}
+    </div>
+  );
+}
+
+// ── Progress Stats View ───────────────────────────────────────
+function ProgressStats({ chapters, player }) {
+  var [progressMap, setProgressMap] = useState({});
+  var [loading, setLoading] = useState(true);
+
+  useEffect(function(){
+    if(!player) return;
+    PROGRESS.getAll(player.id).then(function(m){setProgressMap(m);setLoading(false);});
+  },[]);
+
+  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
+
+  var allWords=[];
+  chapters.forEach(function(ch){ ch.words.forEach(function(w){ allWords.push(Object.assign({},w,{chapTitle:ch.title,chapColor:ch.color})); }); });
+  var byColor={green:[],yellow:[],red:[],new:[]};
+  allWords.forEach(function(w){ byColor[getWordColor(progressMap[w.word]||[])].push(w); });
+
+  return(
+    <div>
+      <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
+        {[['green','🟢','Sicher'],['yellow','🟡','Üben'],['red','🔴','Schwach'],['new','⬜','Neu']].map(function(x){
+          return <div key={x[0]} style={{flex:'1 1 70px',textAlign:'center',padding:'10px 6px',background:COLOR_BG[x[0]],borderRadius:10}}>
+            <div style={{fontSize:22,fontWeight:'bold',color:COLOR_FG[x[0]]}}>{byColor[x[0]].length}</div>
+            <div style={{fontSize:10,color:G400}}>{x[2]}</div>
+          </div>;
+        })}
+      </div>
+      {['red','yellow','green','new'].map(function(color){
+        if(!byColor[color].length) return null;
+        return(
+          <div key={color} style={{marginBottom:12}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:COLOR_FG[color],marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+              <span style={{width:10,height:10,borderRadius:'50%',background:COLOR_DOT[color],display:'inline-block'}}/>
+              {color==='green'?'Sicher (letzte 4 alle richtig)':color==='yellow'?'Üben (gemischt)':color==='red'?'Schwach (meist falsch)':'Noch nicht geübt'}
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {byColor[color].map(function(w,i){
+                return(
+                  <div key={i} style={{padding:'4px 8px',borderRadius:12,background:COLOR_BG[color],border:'1px solid '+COLOR_DOT[color]+'44',fontSize:11}}>
+                    <span style={{fontWeight:'bold',color:COLOR_FG[color]}}>{w.word}</span>
+                    <span style={{color:G400,marginLeft:4}}>{w.clue}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+// ── Quiz Solo ─────────────────────────────────────────────────
+function QuizSolo({ chapters, onDone }) {
+  var allRounds = useMemo(function(){ return makeAllRounds(chapters); }, []);
+  var [roundIdx, setRoundIdx] = useState(0);
+  var [qIdx, setQIdx] = useState(0);
+  var [chosen, setChosen] = useState(null);
+  var [timeLeft, setTimeLeft] = useState(20);
+  var [roundWins, setRoundWins] = useState([]);
+  var [roundScore, setRoundScore] = useState(0);
+  var [totalScore, setTotalScore] = useState(0);
+  var [gameOver, setGameOver] = useState(false);
+  var [roundOver, setRoundOver] = useState(false);
+  var timerRef = useRef(null);
+
+  var currentRound = allRounds[roundIdx] || [];
+  var currentQ = currentRound[qIdx];
+
+  function startTimer() {
+    clearInterval(timerRef.current);
+    setTimeLeft(20);
+    timerRef.current = setInterval(function() {
+      setTimeLeft(function(t) {
+        if (t <= 1) { clearInterval(timerRef.current); handleAnswer(null); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+  }
+
+  useEffect(function() {
+    if (!gameOver && !roundOver && !chosen) startTimer();
+    return function() { clearInterval(timerRef.current); };
+  }, [roundIdx, qIdx, roundOver, gameOver]);
+
+  function handleAnswer(word) {
+    clearInterval(timerRef.current);
+    setChosen(word || "__none__");
+    var correct = word === currentQ.correct.word;
+    var pts = correct ? (timeLeft > 15 ? 15 : timeLeft > 8 ? 10 : 5) : 0;
+    var newRoundScore = roundScore + (correct ? 1 : 0);
+    setRoundScore(newRoundScore);
+    setTotalScore(function(s) { return s + pts; });
+
+    setTimeout(function() {
+      if (qIdx + 1 >= currentRound.length) {
+        // End of round
+        var newWins = roundWins.concat([newRoundScore]);
+        setRoundWins(newWins);
+        setRoundScore(0);
+        setChosen(null);
+        if (roundIdx + 1 >= allRounds.length) {
+          setGameOver(true);
+        } else {
+          setRoundOver(true);
+        }
+      } else {
+        setQIdx(function(i) { return i + 1; });
+        setChosen(null);
+      }
+    }, 1200);
+  }
+
+  function nextRound() {
+    setRoundIdx(function(i) { return i + 1; });
+    setQIdx(0);
+    setRoundOver(false);
+    setChosen(null);
+  }
+
+  if (!allRounds.length) return (
+    <div style={{textAlign:"center",padding:40,color:G400}}>
+      Zu wenige Vokabeln. Bitte zuerst Kapitel laden.
+    </div>
+  );
+
+  if (gameOver) {
+    var won = roundWins.filter(function(s){ return s >= 2; }).length;
+    var lost = roundWins.filter(function(s){ return s < 2; }).length;
+    return (
+      <div style={{padding:"8px"}}>
+        <div style={{background:"linear-gradient(135deg,"+T+","+TD+")",borderRadius:16,padding:"24px 20px",color:"white",textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:40,marginBottom:8}}>{won >= 4 ? "🏆" : won >= 3 ? "🥈" : "📚"}</div>
+          <div style={{fontSize:28,fontWeight:"bold",marginBottom:4}}>{totalScore} Punkte</div>
+          <div style={{fontSize:14,opacity:0.8}}>{won} von 6 Runden gewonnen</div>
+        </div>
+        <div style={{marginBottom:12}}>
+          {roundWins.map(function(s, i) {
+            var win = s >= 2;
+            return (
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:8,background:win?"#f0fdf4":"#fef2f2",border:"1px solid "+(win?"#bbf7d0":"#fecaca")}}>
+                <span style={{fontSize:16}}>{win ? "✓" : "✗"}</span>
+                <span style={{fontSize:13,color:G600}}>Runde {i+1}</span>
+                <span style={{marginLeft:"auto",fontWeight:"bold",color:win?T:RE}}>{s}/3 richtig</span>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onDone} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>← Zurück zum Menü</button>
+      </div>
+    );
+  }
+
+  if (roundOver) {
+    var lastScore = roundWins[roundWins.length - 1] || 0;
+    var roundWon = lastScore >= 2;
+    return (
+      <div style={{padding:"8px"}}>
+        <div style={{textAlign:"center",padding:"32px 20px",background:roundWon?"#f0fdf4":"#fef2f2",borderRadius:16,marginBottom:16,border:"2px solid "+(roundWon?"#22c55e":RE)}}>
+          <div style={{fontSize:40,marginBottom:8}}>{roundWon ? "🎉" : "😔"}</div>
+          <div style={{fontSize:22,fontWeight:"bold",color:roundWon?T:RE,marginBottom:4}}>Runde {roundIdx+1} {roundWon?"gewonnen!":"verloren"}</div>
+          <div style={{fontSize:14,color:G600}}>{lastScore}/3 Fragen richtig</div>
+        </div>
+        <div style={{display:"flex",gap:6,justifyContent:"center",marginBottom:16}}>
+          {roundWins.map(function(s, i) {
+            return <div key={i} style={{width:28,height:28,borderRadius:"50%",background:s>=2?T:RE,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:"bold"}}>{s}</div>;
+          })}
+          {Array(6-roundWins.length).fill(0).map(function(_,i){ return <div key={"e"+i} style={{width:28,height:28,borderRadius:"50%",background:G200}}></div>; })}
+        </div>
+        <button onClick={nextRound} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>Runde {roundIdx+2} starten →</button>
+      </div>
+    );
+  }
+
+  var letters = ["A","B","C","D"];
+  var isEn2De = currentQ && currentQ.type === "en2de";
+  var question = currentQ ? (isEn2De ? currentQ.correct.word : currentQ.correct.clue) : "";
+  var questionLabel = isEn2De ? "Was bedeutet dieses englische Wort?" : "Wie heißt das auf Englisch?";
+
+  return (
+    <div style={{padding:"8px"}}>
+      {/* Progress */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{display:"flex",gap:4}}>
+          {allRounds.map(function(_, i) {
+            var active = i === roundIdx;
+            var done = i < roundIdx;
+            var win = done && roundWins[i] >= 2;
+            return <div key={i} style={{width:24,height:24,borderRadius:"50%",background:active?T:done?(win?GR:RE):G200,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:"bold"}}>{done?(roundWins[i]>=2?"✓":"✗"):(i+1)}</div>;
+          })}
+        </div>
+        <span style={{fontSize:11,color:G400,marginLeft:"auto"}}>Frage {qIdx+1}/3</span>
+      </div>
+      {/* Stats bar */}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:TL,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Punkte</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:T}}>{totalScore}</div>
+        </div>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:roundScore>=2?"#f0fdf4":G100,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Diese Runde</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:roundScore>=2?GR:G600}}>{roundScore}/3</div>
+        </div>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:timeLeft<=5?"#fef2f2":G100,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Zeit</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:timeLeft<=5?RE:G600}}>{timeLeft}s</div>
+        </div>
+      </div>
+      {/* Chapter badge */}
+      {currentQ && (
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+          <span style={{fontSize:14}}>{currentQ.correct.chapIcon}</span>
+          <span style={{fontSize:11,fontWeight:"bold",color:currentQ.correct.chapColor}}>{currentQ.correct.chapTitle}</span>
+          <span style={{marginLeft:"auto",fontSize:10,color:G400}}>Runde {roundIdx+1} · Frage {qIdx+1}</span>
+        </div>
+      )}
+      {/* Question */}
+      <div style={{textAlign:"center",padding:"28px 20px",background:G50,borderRadius:16,marginBottom:12,border:"2px solid "+G200}}>
+        <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{questionLabel}</div>
+        <div style={{fontSize:28,fontWeight:"bold",color:G900}}>{question}</div>
+      </div>
+      {/* Timer bar */}
+      <div style={{height:4,background:G200,borderRadius:2,overflow:"hidden",marginBottom:12}}>
+        <div style={{height:"100%",width:(timeLeft/20*100)+"%",background:timeLeft<=5?RE:T,borderRadius:2,transition:"width 1s linear"}}></div>
+      </div>
+      {/* Answers */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {currentQ && currentQ.answers.map(function(a, i) {
+          var answerText = isEn2De ? a.clue : a.word;
+          var isCorrect = a.word === currentQ.correct.word;
+          var isChosen = chosen && chosen === a.word;
+          var isNone = chosen === "__none__";
+          var bg = G50, border2 = "2px solid "+G200, col = G900;
+          if (chosen) {
+            if (isCorrect) { bg="#d1fae5"; border2="2px solid "+GR; col="#065f46"; }
+            else if (isChosen) { bg="#fee2e2"; border2="2px solid "+RE; col="#991b1b"; }
+          }
+          return (
+            <button key={i} onClick={function(){ if (!chosen) handleAnswer(a.word); }} disabled={!!chosen}
+              style={{padding:"14px 10px",background:bg,border:border2,borderRadius:12,cursor:chosen?"default":"pointer",textAlign:"left",transition:"all .2s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{width:24,height:24,borderRadius:"50%",background:chosen&&isCorrect?GR:chosen&&isChosen?RE:G200,color:chosen&&(isCorrect||isChosen)?"white":G600,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:"bold",flexShrink:0}}>{letters[i]}</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:col,lineHeight:1.3}}>{answerText}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Quiz Duel (async, turn-based) ─────────────────────────────
+function QuizDuel({ chapters, player, onDone }) {
+  var [phase, setPhase] = useState("setup"); // setup | invite | waiting | playing | roundResult | finalResult
+  var [myCode, setMyCode] = useState("");
+  var [joinCode, setJoinCode] = useState("");
+  var [joinErr, setJoinErr] = useState("");
+  var [gameId, setGameId] = useState(null);
+  var [gameData, setGameData] = useState(null);
+  var [rounds, setRounds] = useState([]); // pregenerated questions
+  var [currentRoundIdx, setCurrentRoundIdx] = useState(0);
+  var [qIdx, setQIdx] = useState(0);
+  var [chosen, setChosen] = useState(null);
+  var [timeLeft, setTimeLeft] = useState(20);
+  var [myAnswers, setMyAnswers] = useState([]); // answers for current round
+  var timerRef = useRef(null);
+
+  // Load game data
+  useEffect(function() {
+    if (!gameId) return;
+    function poll() {
+      sbSingle("quiz_duels", "id=eq."+gameId).then(function(d) {
+        if (d) setGameData(d);
+      });
+    }
+    poll();
+    var t = setInterval(poll, 3000);
+    return function() { clearInterval(t); };
+  }, [gameId]);
+
+  function createGame() {
+    var generated = makeAllRounds(chapters);
+    var code = Math.random().toString(36).slice(2,8).toUpperCase();
+    sbPost("quiz_duels", {
+      code: code,
+      player1_id: player.id,
+      player1_name: player.name,
+      rounds: JSON.stringify(generated),
+      round_wins_p1: JSON.stringify([]),
+      round_wins_p2: JSON.stringify([]),
+      current_round: 0,
+      whose_turn: "p1",
+      status: "waiting",
+    }).then(function(res) {
+      if (res && (res.id || res._ok)) {
+        sbSingle("quiz_duels", "code=eq."+code).then(function(d) {
+          if (d) { setGameId(d.id); setRounds(generated); setMyCode(code); setPhase("invite"); }
+        });
+      }
+    });
+  }
+
+  function joinGame() {
+    var code = joinCode.trim().toUpperCase();
+    if (!code) { setJoinErr("Code eingeben"); return; }
+    sbSingle("quiz_duels", "code=eq."+code+"&status=eq.waiting").then(function(d) {
+      if (!d) { setJoinErr("Spiel nicht gefunden"); return; }
+      sbPatch("quiz_duels", { player2_id: player.id, player2_name: player.name, status: "active" }, "id=eq."+d.id).then(function() {
+        var parsedRounds = JSON.parse(d.rounds || "[]");
+        setRounds(parsedRounds);
+        setGameId(d.id);
+        setGameData(Object.assign({}, d, { player2_id: player.id, status: "active" }));
+        setPhase("playing");
+        setCurrentRoundIdx(d.current_round || 0);
+      });
+    });
+  }
+
+  function startMyTurn() {
+    var round = rounds[currentRoundIdx];
+    if (!round) return;
+    setQIdx(0); setMyAnswers([]); setChosen(null); setTimeLeft(20);
+    setPhase("playing");
+  }
+
+  function handleDuelAnswer(word) {
+    clearInterval(timerRef.current);
+    setChosen(word || "__none__");
+    var correct = word === currentRound.correct.word;
+    var newAnswers = myAnswers.concat([{word: word, correct: correct}]);
+    setMyAnswers(newAnswers);
+
+    setTimeout(function() {
+      if (qIdx + 1 >= currentRoundArr.length) {
+        // Round done - save results
+        var roundCorrect = newAnswers.filter(function(a){ return a.correct; }).length;
+        var isP1 = gameData && gameData.player1_id === player.id;
+        var existingWins = JSON.parse((isP1 ? gameData.round_wins_p1 : gameData.round_wins_p2) || "[]");
+        var newWins = existingWins.concat([roundCorrect]);
+        var update = {};
+        if (isP1) {
+          update.round_wins_p1 = JSON.stringify(newWins);
+          update.whose_turn = "p2";
+        } else {
+          update.round_wins_p2 = JSON.stringify(newWins);
+          update.whose_turn = "p1";
+          update.current_round = (gameData.current_round || 0) + 1;
+        }
+        // Check if game over
+        var otherWins = JSON.parse((isP1 ? gameData.round_wins_p2 : gameData.round_wins_p1) || "[]");
+        var totalRoundsPlayed = newWins.length + otherWins.length;
+        if (newWins.length === 6 && otherWins.length === 6) update.status = "finished";
+
+        sbPatch("quiz_duels", update, "id=eq."+gameId).then(function() {
+          setPhase("roundResult");
+          setMyAnswers(newAnswers);
+        });
+      } else {
+        setQIdx(function(i){ return i + 1; });
+        setChosen(null);
+        setTimeLeft(20);
+      }
+    }, 1200);
+  }
+
+  useEffect(function() {
+    if (phase !== "playing" || chosen) return;
+    clearInterval(timerRef.current);
+    setTimeLeft(20);
+    timerRef.current = setInterval(function() {
+      setTimeLeft(function(t) {
+        if (t <= 1) { clearInterval(timerRef.current); handleDuelAnswer(null); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+    return function() { clearInterval(timerRef.current); };
+  }, [phase, qIdx, chosen]);
+
+  var currentRoundArr = rounds[currentRoundIdx] || [];
+  var currentRound = currentRoundArr[qIdx];
+  var isP1 = gameData && gameData.player1_id === player.id;
+  var myWins = JSON.parse((gameData && (isP1 ? gameData.round_wins_p1 : gameData.round_wins_p2)) || "[]");
+  var oppWins = JSON.parse((gameData && (isP1 ? gameData.round_wins_p2 : gameData.round_wins_p1)) || "[]");
+
+  // Setup screen
+  if (phase === "setup") return (
+    <div style={{padding:"8px"}}>
+      <div style={{marginBottom:16,padding:16,background:G50,borderRadius:12,border:"1px solid "+G200}}>
+        <div style={{fontWeight:"bold",fontSize:14,color:T,marginBottom:8}}>🎯 Neues Duell erstellen</div>
+        <p style={{fontSize:12,color:G600,marginBottom:12}}>Du erstellst ein Spiel und lädst jemanden ein. Du spielst als Erstes, dann ist dein Gegner dran — abwechselnd über 6 Runden.</p>
+        <button onClick={createGame} style={BtnStyle(T,"#fff",{width:"100%",padding:"10px"})}>Duell erstellen</button>
+      </div>
+      <div style={{padding:16,background:G50,borderRadius:12,border:"1px solid "+G200}}>
+        <div style={{fontWeight:"bold",fontSize:14,color:"#7c3aed",marginBottom:8}}>🔗 Bestehendem Duell beitreten</div>
+        <div style={{display:"flex",gap:8}}>
+          <input value={joinCode} onChange={function(e){ setJoinCode(e.target.value.toUpperCase()); }} placeholder="Code eingeben…"
+            style={{flex:1,padding:"10px 12px",fontSize:16,border:"2px solid "+T,borderRadius:8,outline:"none",letterSpacing:4,textTransform:"uppercase",textAlign:"center"}} />
+          <button onClick={joinGame} style={BtnStyle(T)}>Beitreten</button>
+        </div>
+        {joinErr && <div style={{color:RE,fontSize:12,marginTop:6}}>{joinErr}</div>}
+      </div>
+    </div>
+  );
+
+  // Invite screen
+  if (phase === "invite") return (
+    <div style={{textAlign:"center",padding:32}}>
+      <div style={{fontSize:32,marginBottom:12}}>⏳</div>
+      <h3 style={{color:T,marginBottom:8}}>Warte auf Mitspieler…</h3>
+      <div style={{fontSize:28,fontWeight:"bold",letterSpacing:8,color:AM,margin:"16px 0",background:G100,padding:"12px 20px",borderRadius:12,display:"inline-block"}}>{myCode}</div>
+      <p style={{color:G400,fontSize:13,marginBottom:16}}>Diesen Code teilen — sobald jemand beitritt, kannst du spielen</p>
+      <button onClick={startMyTurn} style={BtnStyle(T,"#fff",{padding:"10px 24px"})}>🚀 Ich spiele jetzt meine Runde</button>
+    </div>
+  );
+
+  // Waiting for opponent's turn
+  if (phase === "waiting") return (
+    <div style={{textAlign:"center",padding:32}}>
+      <div style={{fontSize:40,marginBottom:12}}>⏳</div>
+      <h3 style={{color:T}}>Dein Gegner ist dran!</h3>
+      <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {isP1 ? gameData.player2_name : gameData.player1_name} seine Runde gespielt hat.</p>
+      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:16}}>
+        {myWins.map(function(s,i){ return <div key={i} style={{width:32,height:32,borderRadius:"50%",background:s>=2?GR:RE,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold"}}>{s}</div>; })}
+        {oppWins.map(function(s,i){ return <div key={"o"+i} style={{width:32,height:32,borderRadius:"50%",background:G400,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{s}</div>; })}
+      </div>
+      <button onClick={function(){ sbSingle("quiz_duels","id=eq."+gameId).then(function(d){ if(d){setGameData(d);if(d.whose_turn===(isP1?"p1":"p2"))startMyTurn();} }); }}
+        style={BtnStyle(G100,G600,{border:"1px solid "+G200})}>🔄 Aktualisieren</button>
+    </div>
+  );
+
+  // Round result
+  if (phase === "roundResult") {
+    var roundCorrect2 = myAnswers.filter(function(a){ return a.correct; }).length;
+    return (
+      <div style={{padding:"8px"}}>
+        <div style={{textAlign:"center",padding:"24px",background:roundCorrect2>=2?"#f0fdf4":"#fef2f2",borderRadius:16,marginBottom:16,border:"2px solid "+(roundCorrect2>=2?GR:RE)}}>
+          <div style={{fontSize:36,marginBottom:8}}>{roundCorrect2>=2?"🎉":"😔"}</div>
+          <div style={{fontSize:20,fontWeight:"bold",color:roundCorrect2>=2?T:RE}}>Runde {currentRoundIdx+1}: {roundCorrect2}/3 richtig</div>
+        </div>
+        <div style={{padding:"12px",background:G50,borderRadius:10,marginBottom:16,fontSize:13,color:G600}}>
+          <strong>Jetzt ist {isP1?(gameData.player2_name||"dein Gegner"):(gameData.player1_name||"dein Gegner")} dran</strong> — danach kannst du Runde {currentRoundIdx+2} spielen.
+        </div>
+        <button onClick={function(){
+          // Check if game over
+          var newMyWins = myWins.slice();
+          if (gameData && gameData.status === "finished") { setPhase("finalResult"); return; }
+          setPhase("waiting");
+          setCurrentRoundIdx(function(i){ return i+1; });
+        }} style={BtnStyle(T,"#fff",{width:"100%",padding:"12px"})}>OK, Gegner ist dran →</button>
+      </div>
+    );
+  }
+
+  // Final result
+  if (phase === "finalResult") {
+    var myRoundsWon = myWins.filter(function(s){ return s>=2; }).length;
+    var oppRoundsWon = oppWins.filter(function(s){ return s>=2; }).length;
+    var iWon = myRoundsWon > oppRoundsWon;
+    return (
+      <div style={{padding:"8px"}}>
+        <div style={{background:"linear-gradient(135deg,"+T+","+TD+")",borderRadius:16,padding:"24px",color:"white",textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:40,marginBottom:8}}>{iWon?"🏆":"😔"}</div>
+          <div style={{fontSize:22,fontWeight:"bold"}}>{iWon?"Du hast gewonnen!":"Niederlage"}</div>
+          <div style={{fontSize:14,opacity:0.8,marginTop:4}}>{myRoundsWon} : {oppRoundsWon} Runden</div>
+        </div>
+        <button onClick={onDone} style={BtnStyle(T,"#fff",{width:"100%",padding:"12px"})}>← Zurück zum Menü</button>
+      </div>
+    );
+  }
+
+  // Playing
+  var letters2 = ["A","B","C","D"];
+  var isEn2De2 = currentRound && currentRound.type === "en2de";
+  var question2 = currentRound ? (isEn2De2 ? currentRound.correct.word : currentRound.correct.clue) : "";
+
+  return (
+    <div style={{padding:"8px"}}>
+      <div style={{background:TL,borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:12,display:"flex",gap:8,alignItems:"center"}}>
+        <span>Du: <strong>{player.name}</strong></span>
+        <span style={{color:G400}}>vs</span>
+        <span>{isP1?(gameData&&gameData.player2_name)||"wartet…":(gameData&&gameData.player1_name)||"wartet…"}</span>
+        <span style={{marginLeft:"auto",color:G400}}>Runde {currentRoundIdx+1}/6</span>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:12}}>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:TL,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Meine Runden</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:T}}>{myWins.filter(function(s){return s>=2;}).length}</div>
+        </div>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:G100,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Gegner</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:G600}}>{oppWins.filter(function(s){return s>=2;}).length}</div>
+        </div>
+        <div style={{flex:1,textAlign:"center",padding:"8px",background:timeLeft<=5?"#fef2f2":G100,borderRadius:8}}>
+          <div style={{fontSize:10,color:G400}}>Zeit</div>
+          <div style={{fontSize:18,fontWeight:"bold",color:timeLeft<=5?RE:G600}}>{timeLeft}s</div>
+        </div>
+      </div>
+      {currentRound && (
+        <div style={{textAlign:"center",padding:"28px 20px",background:G50,borderRadius:16,marginBottom:12,border:"2px solid "+G200}}>
+          <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{isEn2De2?"Was bedeutet dieses englische Wort?":"Wie heißt das auf Englisch?"}</div>
+          <div style={{fontSize:28,fontWeight:"bold",color:G900}}>{question2}</div>
+        </div>
+      )}
+      <div style={{height:4,background:G200,borderRadius:2,overflow:"hidden",marginBottom:12}}>
+        <div style={{height:"100%",width:(timeLeft/20*100)+"%",background:timeLeft<=5?RE:T,borderRadius:2,transition:"width 1s linear"}}></div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {currentRound && currentRound.answers.map(function(a, i) {
+          var answerText = isEn2De2 ? a.clue : a.word;
+          var isCorrect = a.word === currentRound.correct.word;
+          var isChosen = chosen && chosen === a.word;
+          var bg = G50, border3 = "2px solid "+G200, col3 = G900;
+          if (chosen) {
+            if (isCorrect) { bg="#d1fae5"; border3="2px solid "+GR; col3="#065f46"; }
+            else if (isChosen) { bg="#fee2e2"; border3="2px solid "+RE; col3="#991b1b"; }
+          }
+          return (
+            <button key={i} onClick={function(){ if (!chosen) handleDuelAnswer(a.word); }} disabled={!!chosen}
+              style={{padding:"14px 10px",background:bg,border:border3,borderRadius:12,cursor:chosen?"default":"pointer",textAlign:"left"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <span style={{width:24,height:24,borderRadius:"50%",background:chosen&&isCorrect?GR:chosen&&isChosen?RE:G200,color:chosen&&(isCorrect||isChosen)?"white":G600,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:"bold",flexShrink:0}}>{letters2[i]}</span>
+                <span style={{fontSize:13,fontWeight:"bold",color:col3,lineHeight:1.3}}>{answerText}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Puzzle ────────────────────────────────────────────────────
+function Puzzle({ data, solPhrase, solMsg, onWord, chapId }) {
+  var grid = data.grid, nums = data.nums, across = data.across, down = data.down, rows = data.rows, cols = data.cols, solCells = data.solCells;
+  var [user, setUser] = useState(function(){ var u=[]; for(var r=0;r<rows;r++){u.push([]);for(var c=0;c<cols;c++)u[r].push("");} return u; });
+  var [checked, setChecked] = useState(false);
+  var [cc, setCC] = useState(0);
+  var reported = useRef({});
+  var refs = useRef({});
+
+  var order = useMemo(function() {
+    var o = [];
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) if ((grid[r]||[])[c] !== "") o.push(r+","+c);
+    return o;
+  }, [grid, rows, cols]);
+
+  var solMap = useMemo(function() {
+    var m = {};
+    solCells.forEach(function(s){ m[s.r+","+s.c] = s; });
+    return m;
+  }, [solCells]);
+
+  var rev = solCells.map(function(s){ return (user[s.r]&&user[s.r][s.c]||"") === s.letter ? s.letter : null; });
+  var solOk = solCells.length > 0 && rev.every(function(l){ return l !== null; });
+
+  function focusNext(r, c) { var i = order.indexOf(r+","+c); if (i < order.length-1 && refs.current[order[i+1]]) refs.current[order[i+1]].focus(); }
+  function focusPrev(r, c) { var i = order.indexOf(r+","+c); if (i > 0 && refs.current[order[i-1]]) refs.current[order[i-1]].focus(); }
+
+  var setCell = useCallback(function(r, c, v) {
+    var ch = v.replace(/[^A-Za-z]/g,"").slice(-1);
+    setUser(function(u){ var n=u.map(function(row){return row.slice();}); n[r][c]=ch; return n; });
+    setChecked(false);
+    if (ch) setTimeout(function(){ focusNext(r, c); }, 0);
+  }, []);
+
+  var handleKD = useCallback(function(r, c, e) {
+    if (e.key==="Backspace" && !(user[r]&&user[r][c])) { e.preventDefault(); focusPrev(r,c); }
+    else if (e.key==="ArrowRight" && (grid[r]||[])[c+1]!==undefined && (grid[r]||[])[c+1]!=="") { if(refs.current[r+","+(c+1)]) refs.current[r+","+(c+1)].focus(); }
+    else if (e.key==="ArrowLeft" && (grid[r]||[])[c-1]!==undefined && (grid[r]||[])[c-1]!=="") { if(refs.current[r+","+(c-1)]) refs.current[r+","+(c-1)].focus(); }
+    else if (e.key==="ArrowDown" && (grid[r+1]||[])[c]!=="") { if(refs.current[(r+1)+","+c]) refs.current[(r+1)+","+c].focus(); }
+    else if (e.key==="ArrowUp" && (grid[r-1]||[])[c]!=="") { if(refs.current[(r-1)+","+c]) refs.current[(r-1)+","+c].focus(); }
+  }, [user, grid]);
+
+  function report(word, clue, uGrid, cnt) {
+    if (reported.current[word]) return;
+    var p = data.placed.find(function(pl){ return pl.word===word; });
+    if (!p) return;
+    var typed = "";
+    for (var i=0;i<word.length;i++){ var r2=p.dir==="H"?p.row:p.row+i,c2=p.dir==="H"?p.col+i:p.col; typed+=(uGrid[r2]&&uGrid[r2][c2])||""; }
+    reported.current[word] = true;
+    if (onWord) onWord({word:word,clue:clue,correct:typed===word,typedAnswer:typed,checkCount:cnt,chapId:chapId});
+  }
+
+  function check() { var n=cc+1; setCC(n); setChecked(true); [].concat(across,down).forEach(function(x){ report(x.word,x.clue,user,n); }); }
+  function finish() { [].concat(across,down).forEach(function(x){ report(x.word,x.clue,user,cc); }); }
+
+  var corr=0,tot=0;
+  if (checked) for(var r=0;r<rows;r++) for(var c=0;c<cols;c++) if((grid[r]||[])[c]!==""){tot++;if(user[r]&&user[r][c]===(grid[r]||[])[c])corr++;}
+  var CS = 26;
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:G600,textAlign:"center",marginBottom:8,padding:"4px 8px",background:"#f0f9ff",borderRadius:6,border:"1px solid #bae6fd"}}>
+        ℹ️ Monate → <strong>Großbuchstaben</strong> · alle anderen → <strong>Kleinbuchstaben</strong>
+      </div>
+      <div style={{overflowX:"auto",marginBottom:10}}>
+        <table style={{borderCollapse:"collapse",margin:"0 auto"}}>
+          <tbody>
+            {Array(rows).fill(0).map(function(_,r){
+              return (
+                <tr key={r}>
+                  {Array(cols).fill(0).map(function(_,c){
+                    var letter=(grid[r]||[])[c]||"",isB=letter==="";
+                    var num=nums[r+","+c],sol=solMap[r+","+c],uv=user[r]&&user[r][c]||"";
+                    var bg="white";
+                    if(!isB&&sol) bg="#fffbeb";
+                    if(checked&&!isB&&uv) bg=uv===letter?"#bbf7d0":"#fecaca";
+                    return (
+                      <td key={c} style={{width:CS,height:CS,padding:0,border:isB?"none":"1px solid #555",background:isB?"#18181b":bg,position:"relative"}}>
+                        {!isB && (
+                          <span>
+                            {num && <span style={{position:"absolute",top:1,left:2,fontSize:6,color:"#444",lineHeight:1,pointerEvents:"none",zIndex:3}}>{num}</span>}
+                            {sol && <span style={{position:"absolute",bottom:1,right:1,width:9,height:9,borderRadius:"50%",background:AM,color:"white",fontSize:5,fontWeight:"bold",display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:3}}>{sol.pos}</span>}
+                            <input
+                              ref={function(el){ if(el) refs.current[r+","+c]=el; else delete refs.current[r+","+c]; }}
+                              type="text" inputMode="text" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false" value={uv}
+                              onChange={function(e){ setCell(r,c,e.target.value); }}
+                              onKeyDown={function(e){ handleKD(r,c,e); }}
+                              style={{position:"absolute",inset:0,width:"100%",height:"100%",border:"none",outline:"none",background:"transparent",textAlign:"center",fontSize:12,fontWeight:"bold",color:"#111",paddingTop:num?5:0,boxSizing:"border-box",cursor:"text"}}
+                            />
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {solCells.length > 0 && (
+        <div style={{margin:"8px 0",padding:"8px 12px",background:solOk?"#fef9c3":"#f8fafc",border:"2px solid "+(solOk?AM:G200),borderRadius:8}}>
+          <div style={{fontSize:10,color:G400,marginBottom:5,fontWeight:"bold",textTransform:"uppercase",letterSpacing:1}}>🔑 Lösungswort</div>
+          <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+            {solCells.map(function(sc,i){
+              var r2=rev[i];
+              return (
+                <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                  <div style={{width:24,height:24,border:"2px solid "+(r2?AM:G200),borderRadius:4,background:r2?"#fef3c7":"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",color:G900}}>{r2||""}</div>
+                  <span style={{fontSize:7,color:AM,fontWeight:"bold"}}>{sc.pos}</span>
+                </div>
+              );
+            })}
+          </div>
+          {solOk && <div style={{marginTop:8,padding:"6px 10px",background:"#fef08a",borderRadius:6,fontSize:14,fontWeight:"bold",color:"#92400e",textAlign:"center"}}>{solMsg}</div>}
+        </div>
+      )}
+      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:8,flexWrap:"wrap"}}>
+        <button onClick={check} style={BtnStyle(T)}>✓ Prüfen</button>
+        <button onClick={function(){ setUser(function(){ var u=[]; for(var r=0;r<rows;r++){u.push([]);for(var c=0;c<cols;c++)u[r].push("");} return u; }); setChecked(false); }} style={BtnStyle(G400)}>↺ Reset</button>
+        <button onClick={finish} style={BtnStyle("#7c3aed")}>✅ Abschließen</button>
+      </div>
+      {checked && <div style={{textAlign:"center",marginBottom:8,padding:"6px 10px",borderRadius:6,fontWeight:"bold",fontSize:13,background:corr===tot?"#d1fae5":"#fee2e2",color:corr===tot?"#065f46":"#991b1b"}}>{corr}/{tot} richtig {corr===tot?"🎉 Perfekt!":""} · Prüfen: {cc}×</div>}
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:4}}>
+        {[["→ Waagerecht",across],["↓ Senkrecht",down]].map(function(pair){
+          var t=pair[0], clues=pair[1];
+          return (
+            <div key={t} style={{flex:"1 1 160px",minWidth:0}}>
+              <div style={{fontWeight:"bold",fontSize:12,color:T,borderBottom:"2px solid "+T,marginBottom:4,paddingBottom:2}}>{t}</div>
+              {clues.map(function(item){
+                return (
+                  <div key={item.n} style={{fontSize:11,marginBottom:2,display:"flex",gap:4,alignItems:"baseline"}}>
+                    <strong style={{minWidth:18,color:TD}}>{item.n}.</strong>
+                    <span style={{color:G600}}>{item.clue}</span>
+                    <span style={{marginLeft:"auto",fontSize:9,color:G400}}>({item.word.length})</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Word Selector ─────────────────────────────────────────────
+function WordSelector({ chapters, onStart, mode }) {
+  var [openCh, setOpenCh] = useState(null);
+  var [sel, setSel] = useState({});
+  var [filter, setFilter] = useState("all");
+
+  var total = Object.values(sel).reduce(function(s,set){ return s+set.size; }, 0);
+
+  function getFiltered(ch) { return filter==="important" ? ch.words.filter(function(w){return w.important;}) : ch.words; }
+
+  function togAll(ch) {
+    setSel(function(prev){
+      var n = Object.assign({}, prev);
+      var fi = getFiltered(ch);
+      var cur = n[ch.id] || new Set();
+      var allS = fi.every(function(w){ return cur.has(ch.words.indexOf(w)); });
+      var next = new Set(cur);
+      if (allS) fi.forEach(function(w){ next.delete(ch.words.indexOf(w)); });
+      else fi.forEach(function(w){ next.add(ch.words.indexOf(w)); });
+      n[ch.id] = next;
+      return n;
+    });
+  }
+
+  function togW(chId, idx) {
+    setSel(function(prev){
+      var n = Object.assign({}, prev);
+      var cur = new Set(n[chId] || []);
+      if (cur.has(idx)) cur.delete(idx); else cur.add(idx);
+      n[chId] = cur;
+      return n;
+    });
+  }
+
+  function getWords() {
+    var w = [];
+    chapters.forEach(function(ch){
+      var s = sel[ch.id] || new Set();
+      s.forEach(function(i){ if(ch.words[i]) w.push(Object.assign({},ch.words[i],{chapterId:ch.id})); });
+    });
+    return w;
+  }
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:12,padding:"8px 12px",background:G50,borderRadius:10,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:G600,fontWeight:"bold"}}>Anzeigen:</span>
+        {[["all","📚 Alle"],["important","⭐ Nur fett"]].map(function(pair){
+          return <button key={pair[0]} onClick={function(){ setFilter(pair[0]); }} style={{padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:"bold",background:filter===pair[0]?T:"white",color:filter===pair[0]?"white":G600,border:"1.5px solid "+(filter===pair[0]?T:G200),cursor:"pointer"}}>{pair[1]}</button>;
+        })}
+      </div>
+      <div style={{marginBottom:12,padding:"10px 14px",background:TL,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:13,color:T,fontWeight:"bold"}}>{total} Vokabeln gewählt</span>
+        <button onClick={function(){ if(total>=3) onStart(getWords()); }} disabled={total<3} style={BtnStyle(total>=3?T:G400,"#fff",{padding:"6px 14px",opacity:total<3?0.5:1})}>
+          {mode==="battle"?"⚔️ Rätsel-Duell":"🎯 Lernen starten"}
+        </button>
+      </div>
+      {total < 3 && <p style={{fontSize:11,color:G400,textAlign:"center",marginBottom:8}}>Mindestens 3 Vokabeln auswählen</p>}
+      {chapters.map(function(ch){
+        var s = sel[ch.id] || new Set();
+        var fi = getFiltered(ch);
+        var allS = fi.length>0 && fi.every(function(w){ return s.has(ch.words.indexOf(w)); });
+        var someS = fi.some(function(w){ return s.has(ch.words.indexOf(w)); }) && !allS;
+        var open = openCh === ch.id;
+        return (
+          <div key={ch.id} style={{marginBottom:8,border:"2px solid "+(s.size>0?ch.color:G200),borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:s.size>0?(ch.color+"15"):"white",cursor:"pointer"}} onClick={function(){ setOpenCh(open?null:ch.id); }}>
+              <span style={{fontSize:20}}>{ch.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:"bold",fontSize:13,color:ch.color}}>{ch.title}</div>
+                <div style={{fontSize:11,color:G400}}>{ch.words.length} gesamt · {ch.words.filter(function(w){return w.important;}).length} ⭐ · {s.size} gewählt</div>
+              </div>
+              <div onClick={function(e){ e.stopPropagation(); togAll(ch); }} style={{width:22,height:22,borderRadius:6,border:"2px solid "+(allS?ch.color:someS?ch.color:G200),background:allS?ch.color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}>
+                {allS && <span style={{color:"white",fontSize:13}}>✓</span>}
+                {someS && <span style={{color:ch.color,fontSize:13}}>–</span>}
+              </div>
+              <span style={{color:G400,fontSize:12}}>{open?"▲":"▼"}</span>
+            </div>
+            {open && (
+              <div style={{padding:"8px 14px 12px",background:"#fafafa",borderTop:"1px solid "+G200}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {fi.map(function(w){
+                    var ri = ch.words.indexOf(w);
+                    var isSel = s.has(ri);
+                    return (
+                      <div key={ri} onClick={function(){ togW(ch.id,ri); }} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:20,border:"1.5px solid "+(isSel?ch.color:G200),background:isSel?(ch.color+"15"):"white",cursor:"pointer"}}>
+                        {w.important && <span style={{fontSize:9}}>⭐</span>}
+                        <span style={{fontSize:12,fontWeight:w.important?"bold":"normal",color:isSel?ch.color:G600}}>{w.word}</span>
+                        <span style={{fontSize:10,color:G400}}>= {w.clue}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
+// ── Browse Chapter (with sentences) ──────────────────────────
+function BrowseChapter({ ch }) {
+  var [open, setOpen] = useState(false);
+  var [showSent, setShowSent] = useState(false);
+  var sentCount = (ch.sentences||[]).length;
+  return (
+    <div style={{marginBottom:8,border:'2px solid '+ch.color+'30',borderRadius:12,overflow:'hidden'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:ch.color+'10',cursor:'pointer'}} onClick={function(){setOpen(function(o){return !o;});}}>
+        <span style={{fontSize:20}}>{ch.icon}</span>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:'bold',fontSize:13,color:ch.color}}>{ch.title}</div>
+          <div style={{fontSize:11,color:G400}}>{ch.words.length} Vokabeln · {ch.words.filter(function(w){return w.important;}).length} ⭐{sentCount?' · '+sentCount+' Sätze':''}</div>
+        </div>
+        <span style={{color:G400,fontSize:12}}>{open?'▲':'▼'}</span>
+      </div>
+      {open&&(
+        <div style={{padding:'10px 14px',background:'#fafafa',borderTop:'1px solid '+G200}}>
+          {sentCount>0&&(
+            <div style={{display:'flex',gap:6,marginBottom:8}}>
+              <button onClick={function(){setShowSent(false);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?G200:ch.color),background:showSent?'white':ch.color+'15',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?G600:ch.color}}>📝 Vokabeln</button>
+              <button onClick={function(){setShowSent(true);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?ch.color:G200),background:showSent?ch.color+'15':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?ch.color:G600}}>💬 Sätze ({sentCount})</button>
+            </div>
+          )}
+          {!showSent&&ch.words.map(function(w,i){
+            return(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}>
+                <span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span>
+                <span style={{color:G400}}>{w.clue}</span>
+              </div>
+            );
+          })}
+          {showSent&&(ch.sentences||[]).map(function(s,i){
+            return(
+              <div key={i} style={{padding:'6px 0',borderBottom:'1px solid '+G100}}>
+                <div style={{fontSize:12,fontWeight:s.important?'bold':'normal'}}>{s.important?'⭐ ':''}{s.text}</div>
+                <div style={{fontSize:11,color:G400}}>{s.translation}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admin ─────────────────────────────────────────────────────
+function AdminDash({ chapters, setChapters, allUsers, setAllUsers }) {
+  var [tab, setTab] = useState('users');
+  var [players, setPlayers] = useState([]);
+  var [selP, setSelP] = useState(null);
+  var [results, setResults] = useState([]);
+  var [loading, setLoading] = useState(false);
+  var [imgLoading, setImgLoading] = useState(false);
+  var [imgMsg, setImgMsg] = useState('');
+  var [draft, setDraft] = useState(null); // {words:[], sentences:[], src:''}
+  var [dTitle, setDTitle] = useState('');
+  var [dColor, setDColor] = useState('#0f766e');
+  var [dIcon, setDIcon] = useState('📚');
+  var [chapterMode, setChapterMode] = useState('new'); // 'new' | 'existing'
+  var [targetChapter, setTargetChapter] = useState('');
+  var fileRef = useRef();
+
+  // Use allUsers from App state (loaded from Supabase on startup)
+  useEffect(function(){
+    var nonAdmins = Array.isArray(allUsers) ? allUsers.filter(function(u){ return !u.is_admin; }) : [];
+    setPlayers(nonAdmins);
+  }, [allUsers]);
+
+  function loadP(p) {
+    setSelP(p); setLoading(true);
+    sbGet('results','player_id=eq.'+p.id+'&order=completed_at.desc').then(function(r){
+      setResults(Array.isArray(r)?r:[]); setLoading(false);
+    });
+  }
+
+  var wStats = useMemo(function(){
+    var m={};
+    results.forEach(function(r){ if(!m[r.word])m[r.word]={word:r.word,clue:r.clue,c:0,w:0}; if(r.correct)m[r.word].c++;else m[r.word].w++; });
+    return Object.values(m).sort(function(a,b){return b.w-a.w;});
+  },[results]);
+
+  var chStats = useMemo(function(){
+    return chapters.map(function(ch){
+      var total=ch.words.length;
+      var corrSet=new Set(results.filter(function(r){return r.chapter_id===ch.id&&r.correct;}).map(function(r){return r.word;}));
+      var wrong=results.filter(function(r){return r.chapter_id===ch.id&&!r.correct;}).length;
+      var pct=total>0?Math.round(corrSet.size/total*100):0;
+      return Object.assign({},ch,{total:total,correct:corrSet.size,wrong:wrong,pct:pct});
+    });
+  },[chapters,results]);
+
+  var totalW=chapters.reduce(function(s,ch){return s+ch.words.length;},0);
+  var learnedW=selP?new Set(results.filter(function(r){return r.correct;}).map(function(r){return r.word;})).size:0;
+  var overallPct=selP?Math.round(learnedW/totalW*100):0;
+
+  function uploadImg(file) {
+    if(!file) return;
+    setImgLoading(true); setImgMsg('Bild wird analysiert…'); setDraft(null);
+    var reader=new FileReader();
+    reader.onload=function(){
+      var b64=reader.result.split(',')[1];
+      fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+          {type:'text',text:`Analysiere diese Schulbuch-Seite. Extrahiere GETRENNT:
+1. VOKABELN: Einzelne Wörter mit Übersetzung
+2. SÄTZE: Vollständige Beispielsätze (nicht einzelne Vokabeln)
+
+Regeln:
+- "important": true wenn das Wort/der Satz im Bild FETT gedruckt ist
+- Englische Wörter/Sätze in "text", deutsche Übersetzung in "translation"  
+- Monate großgeschrieben (January etc.), alles andere klein
+- Sätze haben subject+verb und sind vollständige Aussagen
+- Ignoriere Aussprache in /.../ und Seitenangaben
+
+NUR JSON antworten (kein Markdown):
+{"title":"Kurzer Seitentitel","words":[{"word":"birthday","clue":"Geburtstag","important":true}],"sentences":[{"text":"I want to buy a bag.","translation":"Ich möchte eine Tasche kaufen.","important":true}]}`}
+        ]}]})
+      }).then(function(resp){return resp.json();}).then(function(d){
+        var txt=d.content.map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+        var parsed=JSON.parse(txt);
+        setDraft({words:parsed.words||[],sentences:parsed.sentences||[],src:file.name});
+        setDTitle(parsed.title||file.name.replace(/\.[^.]+$/,''));
+        setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln · '+(parsed.sentences||[]).length+' Sätze erkannt · '+(parsed.words||[]).filter(function(w){return w.important;}).length+' ⭐ fett');
+      }).catch(function(e){setImgMsg('❌ '+e.message);}).finally(function(){setImgLoading(false);});
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function saveDraft() {
+    if(!draft) return;
+    if(chapterMode==='new') {
+      var id='ch_'+Date.now();
+      var ch={id:id,title:dTitle,color:dColor,icon:dIcon,words:draft.words,sentences:draft.sentences,is_builtin:false};
+      sbPost('chapters',Object.assign({},ch,{words:JSON.stringify(draft.words),sentences:JSON.stringify(draft.sentences)})).then(function(){
+        setChapters(function(prev){return prev.concat([ch]);});
+        setDraft(null); setImgMsg('✅ Neues Kapitel "'+dTitle+'" gespeichert!');
+      });
+    } else {
+      // Add to existing chapter - with dedup
+      var existingCh = chapters.find(function(c){return c.id===targetChapter;});
+      if(!existingCh){setImgMsg('❌ Kapitel nicht gefunden');return;}
+      var existingWords = new Set(existingCh.words.map(function(w){return w.word.toLowerCase();}));
+      var existingSentences = new Set((existingCh.sentences||[]).map(function(s){return s.text.toLowerCase().trim();}));
+      var newWords = draft.words.filter(function(w){return !existingWords.has(w.word.toLowerCase());});
+      var newSentences = draft.sentences.filter(function(s){return !existingSentences.has(s.text.toLowerCase().trim());});
+      var updatedWords = existingCh.words.concat(newWords);
+      var updatedSentences = (existingCh.sentences||[]).concat(newSentences);
+      sbPatch('chapters',{words:JSON.stringify(updatedWords),sentences:JSON.stringify(updatedSentences)},'id=eq.'+targetChapter).then(function(){
+        setChapters(function(prev){return prev.map(function(c){
+          return c.id===targetChapter?Object.assign({},c,{words:updatedWords,sentences:updatedSentences}):c;
+        });});
+        setDraft(null);
+        setImgMsg('✅ Hinzugefügt: '+newWords.length+' neue Vokabeln, '+newSentences.length+' neue Sätze ('+
+          (draft.words.length-newWords.length)+' Duplikate übersprungen)');
+      });
+    }
+  }
+
+  function delCh(ch) {
+    if(ch.is_builtin) return;
+    if(!confirm('"'+ch.title+'" löschen?')) return;
+    sbDel('chapters','id=eq.'+ch.id).then(function(){
+      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
+    });
+  }
+
+  return(
+    <div>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
+        {[['users','👤 Benutzer'],['chapters','📚 Kapitel & Upload']].map(function(pair){
+          return <button key={pair[0]} onClick={function(){setTab(pair[0]);}} style={BtnStyle(tab===pair[0]?T:G100,tab===pair[0]?'white':G600,{padding:'7px 16px'})}>{pair[1]}</button>;
+        })}
+      </div>
+
+      {/* USERS TAB */}
+      {tab==='users'&&(
+        <div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
+            {players.map(function(p){
+              return <button key={p.id} onClick={function(){loadP(p);}} style={{padding:'8px 12px',borderRadius:10,border:'2px solid '+(selP&&selP.id===p.id?T:G200),background:selP&&selP.id===p.id?TL:'white',cursor:'pointer',fontSize:13,fontWeight:'bold',color:selP&&selP.id===p.id?T:G600}}>{p.name} <span style={{fontSize:11,fontWeight:'normal',color:G400}}>{p.total_score||0}P</span></button>;
+            })}
+            {!players.length&&<div style={{color:G400,fontSize:13}}>
+            Keine Spieler gefunden.
+            <button onClick={function(){
+              sbGet('players','is_admin=eq.false&order=total_score.desc').then(function(rows){
+                if(Array.isArray(rows) && rows.length>0 && setAllUsers) setAllUsers(function(prev){
+                  var prevAdmins=prev.filter(function(u){return u.is_admin;});
+                  return prevAdmins.concat(rows);
+                });
+                setPlayers(Array.isArray(rows)?rows:[]);
+              });
+            }} style={{marginLeft:8,fontSize:11,padding:'3px 8px',borderRadius:6,border:'1px solid '+T,background:TL,cursor:'pointer',color:T}}>🔄 Neu laden</button>
+          </div>}
+          </div>
+          {loading&&<div style={{textAlign:'center',color:G400,padding:20}}>Lade…</div>}
+          {selP&&!loading&&(
+            <div>
+              <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:'16px 18px',marginBottom:14,color:'white'}}>
+                <div style={{fontWeight:'bold',fontSize:16,marginBottom:6}}>{selP.name}</div>
+                <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:8}}>
+                  {[['Punkte',selP.total_score||0],['Gelernt',learnedW+'/'+totalW],['Fortschritt',overallPct+'%']].map(function(x){
+                    return <div key={x[0]} style={{textAlign:'center',minWidth:60}}><div style={{fontSize:18,fontWeight:'bold'}}>{x[1]}</div><div style={{fontSize:10,opacity:.8}}>{x[0]}</div></div>;
+                  })}
+                </div>
+                <div style={{height:7,background:'rgba(255,255,255,0.2)',borderRadius:4,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:overallPct+'%',background:'white',borderRadius:4}}/>
+                </div>
+              </div>
+              {chStats.map(function(ch){
+                return(
+                  <div key={ch.id} style={{marginBottom:6,padding:'10px 12px',background:'white',border:'1px solid '+G200,borderRadius:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                      <span>{ch.icon}</span><span style={{fontWeight:'bold',fontSize:12,color:ch.color,flex:1}}>{ch.title}</span>
+                      <span style={{fontSize:12,fontWeight:'bold',color:ch.pct>=80?GR:ch.pct>=40?AM:G400}}>{ch.pct}%</span>
+                    </div>
+                    <div style={{height:5,background:G100,borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:ch.pct+'%',background:ch.pct>=80?GR:ch.pct>=40?AM:ch.color,borderRadius:3}}/>
+                    </div>
+                    <div style={{fontSize:10,color:G400,marginTop:3}}>{ch.correct}/{ch.total} Vokabeln · {ch.sentences&&ch.sentences.length?ch.sentences.length+' Sätze':''}</div>
+                  </div>
+                );
+              })}
+              {wStats.length>0&&(
+                <div>
+                  <div style={{fontWeight:'bold',fontSize:13,color:G900,margin:'12px 0 6px'}}>🔤 Vokabel-Details</div>
+                  {wStats.map(function(w,i){
+                    return(
+                      <div key={i} style={{display:'flex',gap:8,padding:'6px 10px',background:w.w>2?'#fef2f2':w.c>0?'#f0fdf4':'white',borderRadius:7,marginBottom:2,fontSize:12,border:'1px solid '+(w.w>2?'#fecaca':w.c>0?'#bbf7d0':G200)}}>
+                        <div style={{flex:1}}><span style={{fontWeight:'bold'}}>{w.word}</span><span style={{color:G400,marginLeft:6}}>{w.clue}</span></div>
+                        <span style={{color:GR,fontWeight:'bold',minWidth:20}}>{w.c}</span>
+                        <span style={{color:RE,fontWeight:'bold',minWidth:20}}>{w.w}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CHAPTERS TAB */}
+      {tab==='chapters'&&(
+        <div>
+          {/* Upload section */}
+          <div style={{marginBottom:14,padding:14,background:G50,borderRadius:12,border:'2px dashed '+G200}}>
+            <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:10}}>📷 Seite hochladen</div>
+
+            {/* Mode selection */}
+            <div style={{display:'flex',gap:6,marginBottom:10}}>
+              {[['new','➕ Neues Kapitel'],['existing','📂 Zu bestehendem hinzufügen']].map(function(pair){
+                return <button key={pair[0]} onClick={function(){setChapterMode(pair[0]);}} style={{flex:1,padding:'7px',borderRadius:8,border:'2px solid '+(chapterMode===pair[0]?T:G200),background:chapterMode===pair[0]?TL:'white',cursor:'pointer',fontSize:12,fontWeight:'bold',color:chapterMode===pair[0]?T:G600}}>{pair[1]}</button>;
+              })}
+            </div>
+
+            {chapterMode==='existing'&&(
+              <select value={targetChapter} onChange={function(e){setTargetChapter(e.target.value);}}
+                style={{width:'100%',padding:'8px 10px',fontSize:13,border:'1.5px solid '+T,borderRadius:8,outline:'none',marginBottom:8,background:'white'}}>
+                <option value=''>-- Kapitel auswählen --</option>
+                {chapters.filter(function(c){return !c.is_builtin;}).map(function(c){
+                  return <option key={c.id} value={c.id}>{c.icon} {c.title} ({c.words.length} Vokabeln, {(c.sentences||[]).length} Sätze)</option>;
+                })}
+              </select>
+            )}
+
+            <input ref={fileRef} type='file' accept='image/*' style={{display:'none'}} onChange={function(e){if(e.target.files[0])uploadImg(e.target.files[0]);}}/>
+            <button onClick={function(){fileRef.current&&fileRef.current.click();}} disabled={imgLoading||(!chapterMode)||(chapterMode==='existing'&&!targetChapter)}
+              style={BtnStyle(T,'#fff',{marginBottom:8,opacity:(imgLoading||(chapterMode==='existing'&&!targetChapter))?0.6:1})}>
+              {imgLoading?'⏳ Analysiere…':'📷 Bild hochladen'}
+            </button>
+
+            {imgMsg&&<div style={{fontSize:12,color:imgMsg.startsWith('✅')?'#065f46':imgMsg.startsWith('❌')?RE:G600,marginBottom:8,padding:'6px 10px',background:imgMsg.startsWith('✅')?'#d1fae5':imgMsg.startsWith('❌')?'#fef2f2':G100,borderRadius:6}}>{imgMsg}</div>}
+
+            {draft&&(
+              <div style={{borderTop:'1px solid '+G200,paddingTop:12,marginTop:8}}>
+                {chapterMode==='new'&&(
+                  <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+                    <input value={dTitle} onChange={function(e){setDTitle(e.target.value);}} placeholder='Kapitelname (z.B. Seite 45-47)…'
+                      style={{flex:2,minWidth:130,padding:'8px 10px',fontSize:13,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
+                    <input value={dIcon} onChange={function(e){setDIcon(e.target.value);}} placeholder='🎓'
+                      style={{width:48,padding:'8px',fontSize:16,border:'1.5px solid '+G200,borderRadius:8,outline:'none',textAlign:'center'}}/>
+                    <input type='color' value={dColor} onChange={function(e){setDColor(e.target.value);}}
+                      style={{width:42,height:36,border:'none',borderRadius:8,cursor:'pointer',padding:2}}/>
+                  </div>
+                )}
+                {/* Preview */}
+                <div style={{display:'flex',gap:12,marginBottom:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:4}}>📝 Vokabeln ({draft.words.length})</div>
+                    <div style={{maxHeight:120,overflowY:'auto',padding:6,background:'white',borderRadius:6,border:'1px solid '+G200}}>
+                      {draft.words.map(function(w,i){
+                        return <div key={i} style={{fontSize:11,padding:'2px 0',borderBottom:'1px solid '+G100,display:'flex',justifyContent:'space-between'}}>
+                          <span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span>
+                          <span style={{color:G400}}>{w.clue}</span>
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:4}}>💬 Sätze ({draft.sentences.length})</div>
+                    <div style={{maxHeight:120,overflowY:'auto',padding:6,background:'white',borderRadius:6,border:'1px solid '+G200}}>
+                      {draft.sentences.length===0&&<div style={{color:G400,fontSize:11}}>Keine Sätze erkannt</div>}
+                      {draft.sentences.map(function(s,i){
+                        return <div key={i} style={{fontSize:11,padding:'2px 0',borderBottom:'1px solid '+G100}}>
+                          <div style={{fontWeight:s.important?'bold':'normal'}}>{s.important?'⭐ ':''}{s.text}</div>
+                          <div style={{color:G400}}>{s.translation}</div>
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={saveDraft} disabled={chapterMode==='new'&&!dTitle} style={BtnStyle(T,'#fff',{flex:1,opacity:chapterMode==='new'&&!dTitle?0.5:1})}>✅ Speichern</button>
+                  <button onClick={function(){setDraft(null);setImgMsg('');}} style={BtnStyle(G400)}>✕</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Chapter list */}
+          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Alle Kapitel ({chapters.length})</div>
+          {chapters.map(function(ch){
+            var sentCnt=(ch.sentences||[]).length;
+            return(
+              <div key={ch.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,background:'white',border:'2px solid '+ch.color+'30',borderRadius:10}}>
+                <span style={{fontSize:18}}>{ch.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</div>
+                  <div style={{fontSize:10,color:G400}}>{ch.words.length} Vokabeln · {ch.words.filter(function(w){return w.important;}).length} ⭐ · {sentCnt} Sätze{ch.is_builtin?' · eingebaut':''}</div>
+                </div>
+                {!ch.is_builtin&&<button onClick={function(){delCh(ch);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:11})}>🗑</button>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+// ── Leaderboard ───────────────────────────────────────────────
+function Leaderboard({ me }) {
+  var [rows, setRows] = useState([]);
+  var load = useCallback(function() {
+    sbGet("players","is_admin=eq.false&order=total_score.desc&limit=20").then(function(d){
+      if(Array.isArray(d)) setRows(d.map(function(p,i){
+        var acc = p.total_correct+p.total_wrong > 0 ? Math.round(p.total_correct/(p.total_correct+p.total_wrong)*100) : 0;
+        return Object.assign({},p,{rank:i+1,acc:acc});
+      }));
+    });
+  }, []);
+  useEffect(function(){ load(); var t=setInterval(load,5000); return function(){clearInterval(t);}; }, [load]);
+  return (
+    <div>
+      <h3 style={{color:T,margin:"0 0 12px",fontSize:16}}>🏆 Rangliste</h3>
+      {rows.map(function(r,i){
+        var medalBg = i===0?"#fbbf24":i===1?"#9ca3af":i===2?"#cd7f32":G200;
+        var isCurrent = me && r.id===me.id;
+        return (
+          <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",marginBottom:6,background:isCurrent?TL:G50,borderRadius:10,border:"1px solid "+(isCurrent?T:G200)}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:medalBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",color:"white",flexShrink:0}}>{i+1}</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:"bold",fontSize:13,color:G900}}>{r.name}{isCurrent?" (Du)":""}</div>
+              <div style={{fontSize:11,color:G400}}>{r.acc}% korrekt</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:18,fontWeight:"bold",color:T}}>{r.total_score||0}</div>
+              <div style={{fontSize:10,color:G400}}>Punkte</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Stats ─────────────────────────────────────────────────────
+function Stats({ results, onRemedial, name }) {
+  var real = results.filter(function(r){return r.word!=="__done__";});
+  var wrong = real.filter(function(r){return !r.correct;});
+  var corr = real.filter(function(r){return r.correct;});
+  var tc = real.reduce(function(s,r){return s+(r.checkCount||0);},0);
+  var mail = encodeURIComponent("Auswertung – "+name+"\n"+new Date().toLocaleDateString("de-DE")+"\n\nRichtig: "+corr.length+"/"+real.length+"\nPrüfen: "+tc+"×\n\n"+(wrong.length?"Falsch:\n"+wrong.map(function(r){return "  "+r.clue+" → "+r.word;}).join("\n")+"\n\n":"Alle richtig! 🎉\n\n")+"Richtig:\n"+corr.map(function(r){return "  "+r.clue+" → "+r.word;}).join("\n"));
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        {[["Richtig",corr.length,GR,"#d1fae5"],["Falsch",wrong.length,RE,"#fee2e2"],["Prüfen",tc+"×",AM,"#fffbeb"]].map(function(x){
+          return <div key={x[0]} style={{flex:1,textAlign:"center",padding:"10px 6px",background:x[3],borderRadius:10}}><div style={{fontSize:22,fontWeight:"bold",color:x[2]}}>{x[1]}</div><div style={{fontSize:10,color:G400}}>{x[0]}</div></div>;
+        })}
+      </div>
+      {wrong.length > 0 && (
+        <div>
+          <div style={{fontWeight:"bold",fontSize:13,color:RE,marginBottom:6}}>❌ Falsch</div>
+          {wrong.map(function(r,i){
+            return <div key={i} style={{display:"flex",gap:8,padding:"8px 10px",background:"#fef2f2",borderRadius:8,marginBottom:4,fontSize:12,alignItems:"center"}}><span style={{color:G400,minWidth:100,flexShrink:0}}>{r.clue}</span><span style={{color:RE,textDecoration:"line-through"}}>{r.typedAnswer||"—"}</span><span style={{color:"#065f46",fontWeight:"bold",marginLeft:"auto"}}>→ {r.word}</span></div>;
+          })}
+          <button onClick={function(){onRemedial(wrong);}} style={BtnStyle(AM,"#92400e",{width:"100%",marginTop:12})}>🔁 Nachübungs-Rätsel</button>
+        </div>
+      )}
+      {!wrong.length && <div style={{textAlign:"center",padding:20,background:"#d1fae5",borderRadius:10,color:"#065f46",fontWeight:"bold",marginBottom:12}}>🎉 Alle richtig!</div>}
+      <a href={"mailto:?subject=Vokabel-Rätsel – "+name+"&body="+mail} style={Object.assign(BtnStyle(T,"#fff"),{display:"block",textAlign:"center",textDecoration:"none",marginTop:8})}>📬 Per E-Mail</a>
+    </div>
+  );
+}
+
+// ── Login / Register ──────────────────────────────────────────
+function LoginScreen({ onLogin, onGoRegister, users }) {
+  var [name, setName] = useState("");
+  var [pw, setPw] = useState("");
+  var [err, setErr] = useState("");
+  var [loading, setLoading] = useState(false);
+
+  function doLogin() {
+    var n = name.trim();
+    if (!n) { setErr("Bitte Namen eingeben"); return; }
+    if (!pw) { setErr("Bitte Passwort eingeben"); return; }
+    setLoading(true); setErr("");
+
+    // ADMIN SHORTCUT — always works, no Supabase needed
+    if (n.toLowerCase() === "admin" && pw === "Magda1982") {
+      setLoading(false);
+      onLogin({ id: "admin-local", name: "admin", is_admin: true, total_score: 0, total_correct: 0, total_wrong: 0 });
+      return;
+    }
+
+    var _hash = simpleHash(pw); // synchronous, never hangs
+
+    // Step 1: check in-memory users list (loaded from Supabase on startup)
+    var found = null;
+    if (Array.isArray(users)) {
+      found = users.find(function(u) { return u.name && u.name.toLowerCase() === n.toLowerCase(); });
+    }
+    if (found) {
+      if (found.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
+      setLoading(false);
+      onLogin(found);
+      return;
+    }
+
+    // Step 2: Supabase GET fallback
+    sbGet("players", "name=ilike." + encodeURIComponent(n) + "&select=*").then(function(rows) {
+      var sbFound = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+      if (sbFound) {
+        if (sbFound.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
+        setLoading(false); onLogin(sbFound); return;
+      }
+      // Step 3: Last resort — check KNOWN_USERS directly (works fully offline)
+      var knownFound = KNOWN_USERS.find(function(u){ return u.name.toLowerCase() === n.toLowerCase(); });
+      if (knownFound) {
+        if (knownFound.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
+        setLoading(false); onLogin(knownFound); return;
+      }
+      setLoading(false); setErr("Kein Account gefunden. Bitte zuerst registrieren.");
+    }).catch(function() {
+      // Network completely down — try KNOWN_USERS as last resort
+      var knownFound = KNOWN_USERS.find(function(u){ return u.name.toLowerCase() === n.toLowerCase(); });
+      if (knownFound) {
+        if (knownFound.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
+        setLoading(false); onLogin(knownFound); return;
+      }
+      setLoading(false); setErr("Verbindungsfehler – bitte nochmal versuchen");
+    });
+  }
+
+  var INP = {padding:"10px 14px",fontSize:16,border:"2px solid "+T,borderRadius:8,outline:"none",boxSizing:"border-box",width:"100%",marginBottom:8,display:"block"};
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,"+T+","+TD+")",display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",fontFamily:"system-ui,sans-serif",boxSizing:"border-box"}}>
+      <div style={{background:"white",borderRadius:20,padding:"28px 24px",maxWidth:360,width:"100%",boxShadow:"0 20px 50px rgba(0,0,0,.3)",textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:6}}>📚</div>
+        <h1 style={{fontSize:20,color:T,margin:"0 0 3px"}}>Vokabel-Rätsel</h1>
+        <p style={{color:G400,fontSize:13,margin:"0 0 16px"}}>Anmelden</p>
+        <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Name…" style={INP} />
+        <input type="password" value={pw} onChange={function(e){setPw(e.target.value);}} placeholder="Passwort…" onKeyDown={function(e){if(e.key==="Enter")doLogin();}} style={INP} />
+        {err && <div style={{color:RE,fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fef2f2",borderRadius:6}}>{err}</div>}
+        <button onClick={doLogin} disabled={loading} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"10px",marginBottom:12,opacity:loading?0.7:1})}>{loading?"…":"Anmelden →"}</button>
+        <div style={{borderTop:"1px solid "+G200,paddingTop:12}}>
+          <p style={{fontSize:12,color:G400,margin:"0 0 8px"}}>Noch kein Account?</p>
+          <button onClick={onGoRegister} style={BtnStyle(G100,T,{width:"100%",fontSize:13,border:"1px solid "+T})}>Neuen Account erstellen</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RegisterScreen({ onRegister, onGoLogin, users, onUserAdded }) {
+  var [name, setName] = useState("");
+  var [pw, setPw] = useState("");
+  var [pw2, setPw2] = useState("");
+  var [err, setErr] = useState("");
+  var [loading, setLoading] = useState(false);
+
+  function doReg() {
+    var n = name.trim();
+    if (!n) { setErr("Bitte Namen eingeben"); return; }
+    if (!pw) { setErr("Bitte Passwort eingeben"); return; }
+    if (pw !== pw2) { setErr("Passwörter stimmen nicht überein"); return; }
+    if (pw.length < 4) { setErr("Passwort mind. 4 Zeichen"); return; }
+    setLoading(true); setErr("");
+
+    var _hash = simpleHash(pw);
+
+    // Check in-memory list for name collision
+    var alreadyExists = Array.isArray(users) && users.some(function(u) {
+      return u.name && u.name.toLowerCase() === n.toLowerCase();
+    });
+    if (alreadyExists) { setLoading(false); setErr("Name bereits vergeben"); return; }
+
+    // Also check Supabase (silent)
+    sbGet("players", "name=ilike." + encodeURIComponent(n) + "&select=id").then(function(rows) {
+      if (Array.isArray(rows) && rows.length > 0) {
+        setLoading(false); setErr("Name bereits vergeben"); return;
+      }
+
+      // Create user object
+      var localId = "local_" + Date.now();
+      var newUser = { id: localId, name: n, password_hash: _hash, is_admin: false,
+        total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 };
+
+      // Add to in-memory list immediately (visible in Admin right away)
+      if (onUserAdded) onUserAdded(newUser);
+
+      // Try Supabase POST silently in background
+      try {
+        sbPost("players", { name: n, password_hash: _hash, is_admin: false,
+          total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 })
+          .catch(function() {}); // CORS error expected — ignore
+      } catch(e) {}
+
+      // Log in immediately
+      setLoading(false);
+      onRegister({ id: localId, name: n, is_admin: false, total_score: 0, total_correct: 0, total_wrong: 0 });
+    }).catch(function() {
+      // Supabase check failed — register anyway
+      var localId2 = "local_" + Date.now();
+      var newUser2 = { id: localId2, name: n, password_hash: _hash, is_admin: false,
+        total_score: 0, total_correct: 0, total_wrong: 0 };
+      if (onUserAdded) onUserAdded(newUser2);
+      try { sbPost("players", { name: n, password_hash: _hash, is_admin: false,
+        total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }).catch(function(){}); } catch(e) {}
+      setLoading(false);
+      onRegister({ id: localId2, name: n, is_admin: false, total_score: 0, total_correct: 0, total_wrong: 0 });
+    });
+  }
+
+  var INP = {padding:"10px 14px",fontSize:16,border:"2px solid "+T,borderRadius:8,outline:"none",boxSizing:"border-box",width:"100%",marginBottom:8,display:"block"};
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,"+T+","+TD+")",display:"flex",alignItems:"center",justifyContent:"center",padding:"16px",fontFamily:"system-ui,sans-serif",boxSizing:"border-box"}}>
+      <div style={{background:"white",borderRadius:20,padding:"28px 24px",maxWidth:360,width:"100%",boxShadow:"0 20px 50px rgba(0,0,0,.3)",textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:6}}>📚</div>
+        <h1 style={{fontSize:20,color:T,margin:"0 0 3px"}}>Vokabel-Rätsel</h1>
+        <p style={{color:G400,fontSize:13,margin:"0 0 16px"}}>Neuen Account erstellen</p>
+        <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Name…" style={INP} />
+        <input type="password" value={pw} onChange={function(e){setPw(e.target.value);}} placeholder="Passwort wählen…" style={INP} />
+        <input type="password" value={pw2} onChange={function(e){setPw2(e.target.value);}} placeholder="Passwort bestätigen…" onKeyDown={function(e){if(e.key==="Enter")doReg();}} style={Object.assign({},INP,{border:"2px solid "+AM})} />
+        {err && <div style={{color:RE,fontSize:12,marginBottom:8,padding:"6px 10px",background:"#fef2f2",borderRadius:6}}>{err}</div>}
+        <button onClick={doReg} disabled={loading} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"10px",marginBottom:12,opacity:loading?0.7:1})}>{loading?"…":"Account erstellen →"}</button>
+        <div style={{borderTop:"1px solid "+G200,paddingTop:12}}>
+          <button onClick={onGoLogin} style={BtnStyle(G100,T,{width:"100%",fontSize:13,border:"1px solid "+T})}>Bereits registriert? Zum Login</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Shell ─────────────────────────────────────────────────────
+function Shell({ children, showBack, onBack, title, rightBtn, player }) {
+  return (
+    <div style={{maxWidth:700,margin:"0 auto",padding:"12px 8px",fontFamily:"system-ui,sans-serif",overflowX:"hidden",WebkitTextSizeAdjust:"100%",MsTextSizeAdjust:"100%"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        {showBack && <button onClick={onBack} style={BtnStyle(G100,G600,{padding:"6px 10px"})}>←</button>}
+        <h2 style={{color:T,fontSize:17,margin:0,flex:1}}>{title||"📚 Vokabel-Rätsel"}</h2>
+        {rightBtn}
+        {player && <div style={{fontSize:12,color:G400,textAlign:"right",lineHeight:1.4}}>{player.name}{player.is_admin?" 👑":""}<br/><strong style={{color:T}}>{player.total_score||0} Pkt</strong></div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+
+// ── App ───────────────────────────────────────────────────────
+function App() {
+  var [screen, setScreen] = useState('login');
+  var [player, setPlayer] = useState(null);
+  var [chapters, setChapters] = useState(BUILTIN);
+  // Known users hardcoded — always available without network
+  var KNOWN_USERS = [
+    { id: "supabase-emma-d46d1397", name: "Emma", password_hash: "fb_63b25a920b81aad7", is_admin: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }
+  ];
+  var [allUsers, setAllUsers] = useState(KNOWN_USERS);
+  var [vocab, setVocab] = useState([]);
+  var [sessId, setSessId] = useState(null);
+  var [tab, setTab] = useState(0);
+  var [wordRes, setWordRes] = useState([]);
+  var [workoutWords, setWorkoutWords] = useState([]);
+  var [workoutProgress, setWorkoutProgress] = useState({});
+
+  // ── Viewport: prevent mobile zoom on input focus ──
+  useEffect(function() {
+    try {
+      var meta = document.querySelector('meta[name="viewport"]');
+      if (meta) {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+      } else {
+        var m = document.createElement('meta');
+        m.name = 'viewport';
+        m.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        document.head.appendChild(m);
+      }
+    } catch(e) {}
+  }, []);
+
+  // ── Load users from Supabase and merge with hardcoded known users ──
+  useEffect(function() {
+    sbGet('players', 'select=id,name,password_hash,is_admin,total_score,total_correct,total_wrong,puzzles_completed&order=created_at.asc')
+      .then(function(rows) {
+        if (Array.isArray(rows) && rows.length > 0) {
+          // Merge: Supabase rows take precedence, keep hardcoded users not in Supabase
+          var sbNames = new Set(rows.map(function(r){ return r.name.toLowerCase(); }));
+          var extraKnown = KNOWN_USERS.filter(function(u){ return !sbNames.has(u.name.toLowerCase()); });
+          setAllUsers(rows.concat(extraKnown));
+        }
+        // If sbGet returns empty (CORS/network fail), KNOWN_USERS are already in state
+      });
+  }, []);
+
+  // ── Migration: sync local-only users to Supabase on startup ──
+  useEffect(function() {
+    STORE.listUsers().then(function(localUsers) {
+      localUsers.forEach(function(u) {
+        if (!u.id || String(u.id).indexOf('local_') !== 0) return; // only local_ ids
+        if (!u.passwordHash) return;
+        // Check if already in Supabase
+        sbGet('players','name=ilike.'+encodeURIComponent(u.name)+'&select=id').then(function(rows) {
+          if (Array.isArray(rows) && rows.length > 0) {
+            // Already exists in Supabase — update cache with real ID
+            STORE.setUser(Object.assign({}, u, { id: rows[0].id }));
+          } else {
+            // Not in Supabase yet — try to sync
+            sbPost('players', { name: u.name, password_hash: u.passwordHash, is_admin: false,
+              total_score: u.total_score||0, total_correct: u.total_correct||0,
+              total_wrong: u.total_wrong||0, puzzles_completed: 0 })
+              .then(function() {
+                setTimeout(function() {
+                  sbGet('players','name=ilike.'+encodeURIComponent(u.name)+'&select=id').then(function(rows2) {
+                    if (Array.isArray(rows2) && rows2.length > 0) {
+                      STORE.setUser(Object.assign({}, u, { id: rows2[0].id }));
+                    }
+                  });
+                }, 600);
+              });
+          }
+        });
+      });
+    });
+  }, []);
+
+  useEffect(function() {
+    sbGet('chapters','order=created_at.asc').then(function(d){
+      if(Array.isArray(d)&&d.length>0){
+        var ext=d.filter(function(c){return !c.is_builtin;}).map(function(c){
+          var w=c.words, s=c.sentences;
+          if(typeof w==='string'){try{w=JSON.parse(w);}catch(e){w=[];}}
+          if(typeof s==='string'){try{s=JSON.parse(s);}catch(e){s=[];}}
+          return Object.assign({},c,{words:Array.isArray(w)?w:[],sentences:Array.isArray(s)?s:[]});
+        });
+        if(ext.length) setChapters(BUILTIN.concat(ext));
+      }
+    });
+  },[]);
+
+  var puzzles=useMemo(function(){
+    if(!vocab.length) return [];
+    var groups=[];for(var i=0;i<vocab.length;i+=20)groups.push(vocab.slice(i,i+20));
+    return groups.map(function(words,i){var sol=SOLS[i%SOLS.length];return{words:words,cw:buildCW(words,sol.phrase),sol:sol};});
+  },[vocab]);
+
+  function handleLogin(p){setPlayer(p);setScreen(p.is_admin?'admin':'menu');}
+  function handleRegister(p){setPlayer(p);setScreen('menu');}
+  function logout(){setPlayer(null);setScreen('login');setWordRes([]);setVocab([]);}
+  function goScreen(s){setScreen(s);}
+
+  function handleWord(r){
+    if(r.word==='__done__') return;
+    setWordRes(function(prev){var ex=prev.find(function(x){return x.word===r.word;});return ex?prev.map(function(x){return x.word===r.word?r:x;}):[].concat(prev,[r]);});
+    if(player&&player.id&&sessId){
+      sbPost('results',{player_id:player.id,session_id:sessId,word:r.word,clue:r.clue,chapter_id:r.chapId||null,correct:r.correct,typed_answer:r.typedAnswer,attempts:1,check_count:r.checkCount});
+      var u={total_score:(player.total_score||0)+(r.correct?10:0)};
+      if(r.correct)u.total_correct=(player.total_correct||0)+1;else u.total_wrong=(player.total_wrong||0)+1;
+      sbPatch('players',u,'id=eq.'+player.id);
+      setPlayer(function(p){return Object.assign({},p,u);});
+    }
+  }
+
+  function startSolo(words){
+    setVocab(words);setWordRes([]);setTab(0);
+    if(player&&player.id&&player.id!=='admin-local'){
+      sbPost('sessions',{image_name:'Auswahl',vocab_list:words,created_by:player.id}).then(function(res){setSessId(res&&res.id?res.id:null);});
+    }
+    setScreen('puzzles');
+  }
+
+  function remedial(wrong){setVocab(wrong);setWordRes([]);setTab(0);setScreen('puzzles');}
+
+  var hasWordRes=wordRes.filter(function(r){return r.word!=='__done__';}).length>0;
+  var logoutBtn=<button onClick={logout} style={BtnStyle(G100,G600,{padding:'6px 10px',fontSize:12})}>Abmelden</button>;
+
+  if(screen==='login') return <LoginScreen onLogin={handleLogin} onGoRegister={function(){setScreen('register');}} users={allUsers}/>;
+  if(screen==='register') return <RegisterScreen onRegister={handleRegister} onGoLogin={function(){setScreen('login');}} users={allUsers} onUserAdded={function(u){setAllUsers(function(prev){return prev.concat([u]);}); }}/>;
+
+  if(screen==='admin') return(
+    <Shell showBack={false} onBack={function(){}} title='👑 Admin' rightBtn={logoutBtn} player={player}>
+      <AdminDash chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers}/>
+    </Shell>
+  );
+
+  if(screen==='quizSolo') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='🧩 Quiz Solo' player={player}>
+      <QuizSolo chapters={chapters} onDone={function(){goScreen('menu');}}/>
+    </Shell>
+  );
+  if(screen==='quizDuel') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='⚔️ Quiz Duell' player={player}>
+      <QuizDuel chapters={chapters} player={player} onDone={function(){goScreen('menu');}}/>
+    </Shell>
+  );
+
+  // Vocabulary trainer — select chapter first
+  if(screen==='vocabSelect') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='✍️ Vokabeln lernen' player={player}>
+      <WordSelector chapters={chapters} onStart={function(words){setVocab(words);goScreen('vocabTrain');}} mode='vocab'/>
+    </Shell>
+  );
+  if(screen==='vocabTrain'&&vocab.length) return(
+    <Shell showBack={true} onBack={function(){goScreen('vocabSelect');}} title='✍️ Vokabeltrainer' player={player}>
+      <VokabelTrainer words={vocab} player={player} onDone={function(){goScreen('menu');}} title='Vokabeltrainer'/>
+    </Shell>
+  );
+
+  // Workout
+  if(screen==='workout') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='🏋️ Workout' player={player}>
+      <WorkoutSetup chapters={chapters} player={player} onStart={function(words,prog){setWorkoutWords(words);setWorkoutProgress(prog);goScreen('workoutSession');}}/>
+    </Shell>
+  );
+  if(screen==='workoutSession'&&workoutWords.length) return(
+    <Shell showBack={true} onBack={function(){goScreen('workout');}} title='🏋️ Workout' player={player}>
+      <WorkoutSession words={workoutWords} player={player} progressMap={workoutProgress} onDone={function(){goScreen('menu');}}/>
+    </Shell>
+  );
+
+  // Sentence learner
+  if(screen==='sentences') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='💬 Sätze lernen' player={player}>
+      <SentenceLearner chapters={chapters} player={player} onDone={function(){goScreen('menu');}}/>
+    </Shell>
+  );
+
+  // Progress stats
+  if(screen==='progress') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📈 Mein Fortschritt' player={player}>
+      <ProgressStats chapters={chapters} player={player}/>
+    </Shell>
+  );
+
+  if(screen==='menu') return(
+    <Shell showBack={false} onBack={function(){}} rightBtn={logoutBtn} player={player}>
+      <p style={{textAlign:'center',color:G400,fontSize:13,margin:'0 0 16px'}}>Willkommen, <strong style={{color:T}}>{player&&player.name}</strong>!</p>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+        {[
+          {icon:'✍️',label:'Vokabeltrainer',sub:'Tippe die Übersetzung',screen:'vocabSelect'},
+          {icon:'🏋️',label:'Workout',sub:'Gewichtet nach Fortschritt',screen:'workout',new2:true},
+          {icon:'✏️',label:'Kreuzworträtsel',sub:'Kapitel wählen & lösen',screen:'selectSolo'},
+          {icon:'🧩',label:'Quiz Solo',sub:'6 Runden · 4 Antworten',screen:'quizSolo'},
+          {icon:'⚔️',label:'Quiz Duell',sub:'Rundenbasiert gegen andere',screen:'quizDuel'},
+          {icon:'💬',label:'Sätze lernen',sub:'Fett gedruckte Sätze',screen:'sentences',new2:true},
+          {icon:'📈',label:'Mein Fortschritt',sub:'Grün · Gelb · Rot',screen:'progress',new2:true},
+          {icon:'🏆',label:'Rangliste',sub:'Punkte & Vergleich',screen:'leaderboard'},
+          {icon:'📊',label:'Auswertung',sub:'Fehler & Nachübung',screen:'stats',dis:!hasWordRes},
+          {icon:'📖',label:'Alle Kapitel',sub:'Vokabeln & Sätze',screen:'browse'},
+        ].map(function(item){
+          return(
+            <button key={item.label} onClick={function(){if(!item.dis)goScreen(item.screen);}} disabled={item.dis}
+              style={{padding:'13px 10px',background:item.dis?G50:'white',border:'2px solid '+(item.dis?G200:T),borderRadius:10,cursor:item.dis?'not-allowed':'pointer',textAlign:'left',opacity:item.dis?0.5:1,position:'relative'}}>
+              <div style={{fontSize:20,marginBottom:2}}>{item.icon}</div>
+              <div style={{fontWeight:'bold',fontSize:12,color:T}}>{item.label}</div>
+              <div style={{fontSize:10,color:G400,marginTop:1,lineHeight:1.3}}>{item.sub}</div>
+              {item.new2&&<span style={{position:'absolute',top:6,right:6,background:AM,color:'white',fontSize:8,padding:'1px 5px',borderRadius:8,fontWeight:'bold'}}>NEU</span>}
+            </button>
+          );
+        })}
+      </div>
+    </Shell>
+  );
+
+  if(screen==='browse') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📖 Alle Kapitel' player={player}>
+      {chapters.map(function(ch){return <BrowseChapter key={ch.id} ch={ch}/>;} )}
+    </Shell>
+  );
+  if(screen==='selectSolo') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='✏️ Vokabeln auswählen' player={player}>
+      <WordSelector chapters={chapters} onStart={startSolo} mode='solo'/>
+    </Shell>
+  );
+  if(screen==='puzzles'&&puzzles.length) return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📚 Rätsel' player={player}>
+      <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap',marginBottom:10}}>
+        {puzzles.map(function(_,i){return <button key={i} onClick={function(){setTab(i);}} style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:'bold',background:tab===i?T:G100,color:tab===i?'white':G600,border:'2px solid '+(tab===i?T:G200),cursor:'pointer'}}>Rätsel {i+1}</button>;})}
+        <button onClick={function(){goScreen('stats');}} style={{padding:'4px 12px',borderRadius:20,fontSize:12,fontWeight:'bold',background:AM,color:'white',border:'none',cursor:'pointer'}}>📊</button>
+      </div>
+      <div style={{background:TL,border:'1px solid #a7f3d0',borderRadius:8,padding:'7px 12px',marginBottom:10,fontSize:12,display:'flex',justifyContent:'space-between'}}>
+        <span><strong style={{color:T}}>Rätsel {tab+1}</strong><span style={{color:G400,marginLeft:8}}>({puzzles[tab].cw.placed.length}/{puzzles[tab].cw.total} Wörter)</span></span>
+        {wordRes.filter(function(r){return r.word!=='__done__';}).length>0&&<span><span style={{color:GR}}>✓ {wordRes.filter(function(r){return r.correct;}).length}</span> <span style={{color:RE}}>✗ {wordRes.filter(function(r){return !r.correct&&r.word!=='__done__';}).length}</span></span>}
+      </div>
+      <Puzzle key={'p_'+tab+'_'+vocab.length} data={puzzles[tab].cw} solPhrase={puzzles[tab].sol.phrase} solMsg={puzzles[tab].sol.msg} onWord={handleWord} chapId={vocab[0]&&vocab[0].chapterId}/>
+    </Shell>
+  );
+  if(screen==='leaderboard') return(<Shell showBack={true} onBack={function(){goScreen('menu');}} title='🏆 Rangliste' player={player}><Leaderboard me={player}/></Shell>);
+  if(screen==='stats') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📊 Auswertung' player={player}>
+      {!hasWordRes?<div style={{textAlign:'center',color:G400,padding:30}}>Noch keine Ergebnisse.</div>:<Stats results={wordRes} onRemedial={remedial} name={player&&player.name||''}/>}
+    </Shell>
+  );
+  return <div style={{textAlign:'center',padding:40,color:G400}}>Lade…</div>;
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
+</body>
+</html>
