@@ -1686,9 +1686,30 @@ function LeitersSpielCreate({ player, chapters, onCreated, onBack, isAdmin }) {
         style={{width:'100%',padding:'10px 12px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none',marginBottom:10}}/>
       {isAdmin && <div style={{padding:'6px 10px',background:'#fef3c7',borderRadius:8,fontSize:12,color:'#92400e',marginBottom:10}}>👑 Admin-Lauf: gilt für alle Spieler</div>}
 
-      <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:8}}>
-        Vokabeln wählen: <span style={{color:T}}>{selectedWords.length} gewählt</span>
-        <span style={{color:G400,marginLeft:8,fontWeight:'normal'}}>{selectedSents.length} Sätze</span>
+      <div style={{marginBottom:10,padding:'8px 10px',background:G50,borderRadius:8,border:'1px solid '+G200}}>
+        <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:6}}>
+          Vokabeln wählen: <span style={{color:T,fontSize:14}}>{selectedWords.length}</span>
+          <span style={{color:G400,marginLeft:6,fontWeight:'normal',fontSize:12}}> · {selectedSents.length} Sätze</span>
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <button onClick={function(){
+            var allImp=[];
+            chapters.forEach(function(ch){
+              ch.words.filter(function(w){return w.important;}).forEach(function(w){
+                var key=ch.id+':'+w.word;
+                if(!selectedWords.find(function(x){return x.key===key;}))
+                  allImp.push({key:key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title});
+              });
+            });
+            setSelectedWords(selectedWords.concat(allImp));
+          }} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11,touchAction:'manipulation'})}>
+            ⭐ Alle wichtigen (alle Kapitel)
+          </button>
+          <button onClick={function(){setSelectedWords([]);setSelectedSents([]);}}
+            style={BtnStyle(G100,RE,{padding:'5px 10px',fontSize:11,touchAction:'manipulation'})}>
+            ✗ Auswahl leeren
+          </button>
+        </div>
       </div>
 
       {chapters.map(function(ch) {
@@ -1711,10 +1732,30 @@ function LeitersSpielCreate({ player, chapters, onCreated, onBack, isAdmin }) {
             </div>
             {isOpen&&(
               <div style={{padding:'8px 10px',background:'#fafafa',borderTop:'1px solid '+G200}}>
-                <div style={{display:'flex',gap:6,marginBottom:8}}>
-                  <button onClick={function(){toggleAllChWords(ch);}} style={BtnStyle(chWordCount===chWords.length?ch.color:G100,chWordCount===chWords.length?'white':G600,{flex:1,padding:'5px',fontSize:11})}>
-                    {chWordCount===chWords.length?'Alle abwählen':'Alle Vokabeln'}
+                <div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap'}}>
+                  {/* Alle Vokabeln */}
+                  <button onClick={function(){toggleAllChWords(ch);}}
+                    style={BtnStyle(chWordCount===chWords.length?ch.color:G100,chWordCount===chWords.length?'white':G600,{flex:1,padding:'5px',fontSize:10,minWidth:70})}>
+                    {chWordCount===chWords.length?'✗ Alle ab':'✓ Alle'}
                   </button>
+                  {/* Nur fett/wichtige Vokabeln */}
+                  {(function(){
+                    var impWords=chWords.filter(function(w){return w.important;});
+                    if(!impWords.length) return null;
+                    var impKeys=impWords.map(function(w){return ch.id+':'+w.word;});
+                    var allImpSel=impKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
+                    return <button onClick={function(){
+                      if(allImpSel) setSelectedWords(selectedWords.filter(function(x){return !impKeys.includes(x.key);}));
+                      else {
+                        var toAdd=impWords.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});})
+                          .map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});
+                        setSelectedWords(selectedWords.concat(toAdd));
+                      }
+                    }} style={BtnStyle(allImpSel?ch.color:G50,allImpSel?'white':ch.color,{flex:1,padding:'5px',fontSize:10,minWidth:70,border:'1.5px solid '+ch.color})}>
+                      {allImpSel?'✗ ⭐ ab':'⭐ Wichtige'}
+                    </button>;
+                  })()}
+                  {/* Alle Sätze */}
                   {chSents.length>0&&<button onClick={function(){
                     var allKeys=chSents.map(function(s,i){return ch.id+':s'+i;});
                     var allSel=allKeys.every(function(k){return selectedSents.find(function(x){return x.key===k;});});
@@ -1724,8 +1765,8 @@ function LeitersSpielCreate({ player, chapters, onCreated, onBack, isAdmin }) {
                         .map(function(s,i){return{key:ch.id+':s'+i,text:s.text,translation:s.translation,chapId:ch.id};});
                       setSelectedSents(selectedSents.concat(toAdd));
                     }
-                  }} style={BtnStyle(chSentCount>0?'#7c3aed':G100,chSentCount>0?'white':G600,{flex:1,padding:'5px',fontSize:11})}>
-                    Alle Sätze
+                  }} style={BtnStyle(chSentCount>0?'#7c3aed':G100,chSentCount>0?'white':G600,{flex:1,padding:'5px',fontSize:10,minWidth:60})}>
+                    {chSentCount>0?'✗ Sätze':'💬 Sätze'}
                   </button>}
                 </div>
                 {chWords.map(function(w,i){
