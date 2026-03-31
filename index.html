@@ -1505,6 +1505,9 @@ function lsGetRuns() {
   return sbGet('ls_runs', 'select=*&order=created_at.desc');
 }
 function lsGetProgress(playerId, runId) {
+  var isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(playerId);
+  var isRealRunUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(runId);
+  if (!isRealUUID || !isRealRunUUID) return Promise.resolve([]); // no DB for local IDs
   var q = 'player_id=eq.' + playerId + '&run_id=eq.' + runId + '&select=*';
   return sbGet('ls_progress', q);
 }
@@ -1512,6 +1515,9 @@ function lsSaveProgress(playerId, runId, data, existingId) {
   if (existingId) {
     return sbPatch('ls_progress', { data: JSON.stringify(data), updated_at: new Date().toISOString() }, 'id=eq.' + existingId);
   }
+  var isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(playerId);
+  var isRealRunUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(runId);
+  if (!isRealUUID || !isRealRunUUID) return Promise.resolve({ _ok: true }); // skip for non-UUID ids
   return sbPost('ls_progress', { player_id: playerId, run_id: runId, data: JSON.stringify(data), updated_at: new Date().toISOString() });
 }
 
@@ -1663,9 +1669,10 @@ function LeitersSpielCreate({ player, chapters, onCreated, onBack, isAdmin }) {
     if (!runName.trim()) { setErr('Bitte einen Namen eingeben'); return; }
     if (selectedWords.length < 4) { setErr('Mindestens 4 Vokabeln auswählen'); return; }
     setLoading(true); setErr('');
+    // Only pass player_id if it's a real UUID (not "admin-local" or "local_...")
+    var isRealUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(player.id);
     var runData = {
       name: runName.trim(),
-      player_id: player.id,
       is_admin_run: isAdmin ? true : false,
       word_count: selectedWords.length,
       sentence_count: selectedSents.length,
@@ -1673,6 +1680,7 @@ function LeitersSpielCreate({ player, chapters, onCreated, onBack, isAdmin }) {
       sentences: JSON.stringify(selectedSents),
       created_at: new Date().toISOString()
     };
+    if (isRealUUID) runData.player_id = player.id;
     sbPost('ls_runs', runData).then(function(res) {
       setLoading(false);
       if (res && res._err) { setErr('Fehler: ' + res.msg); return; }
