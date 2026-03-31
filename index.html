@@ -2047,9 +2047,8 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
                 {wp.split('').map(function(_,li){
                   var charIdx=wordParts.slice(0,wi).join('').length+li;
                   var typedChar=typeInput[charIdx]||'';
-                  var isCorrectChar=typedChar.toLowerCase()===wp[li].toLowerCase();
-                  return <div key={li} style={{width:boxW,height:34,borderBottom:'2px solid '+(typedChar?isCorrectChar?GR:RE:AM),display:'flex',alignItems:'flex-end',justifyContent:'center',paddingBottom:2}}>
-                    <span style={{fontSize:15,fontWeight:'bold',color:typedChar?isCorrectChar?GR:RE:G400}}>{typedChar.toUpperCase()||''}</span>
+                  return <div key={li} style={{width:boxW,height:34,borderBottom:'2px solid '+AM,display:'flex',alignItems:'flex-end',justifyContent:'center',paddingBottom:2}}>
+                    <span style={{fontSize:15,fontWeight:'bold',color:G600}}>{typedChar.toUpperCase()||''}</span>
                   </div>;
                 })}
               </div>;
@@ -3226,20 +3225,30 @@ function RegisterScreen({ onRegister, onGoLogin, users, onUserAdded }) {
     sbGet("players", "name=ilike." + encodeURIComponent(n) + "&select=id").then(function(rows) {
       if (Array.isArray(rows) && rows.length > 0) { setLoading(false); setErr("Name bereits vergeben"); return; }
       sbPost("players", { name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }).then(function(res) {
+        if (res && res._err) {
+          setLoading(false);
+          setErr("Registrierung fehlgeschlagen: " + (res.msg || "Datenbankfehler") + " — bitte erneut versuchen.");
+          return;
+        }
         var u = (res && res.id) ? res : { id: "local_" + Date.now(), name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0 };
         u.is_active = false;
         if (onUserAdded) onUserAdded(u);
         setLoading(false); setPending(true);
       }).catch(function() {
-        var u = { id: "local_" + Date.now(), name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0 };
-        if (onUserAdded) onUserAdded(u);
-        setLoading(false); setPending(true);
-      });
-    }).catch(function() {
-      var u = { id: "local_" + Date.now(), name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0 };
-      if (onUserAdded) onUserAdded(u);
-      setLoading(false); setPending(true);
-    });
+        setErr("Verbindungsfehler — wird erneut versucht…");
+        setTimeout(function() {
+          sbPost("players", { name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }).then(function(res2) {
+            if (res2 && res2._err) { setLoading(false); setErr("Registrierung fehlgeschlagen. Bitte Verbindung prüfen."); return; }
+            var u2 = (res2 && res2.id) ? res2 : { id: "local_" + Date.now(), name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0 };
+            u2.is_active = false;
+            if (onUserAdded) onUserAdded(u2);
+            setLoading(false); setPending(true);
+          }).catch(function() {
+            setLoading(false);
+            setErr("Keine Verbindung zur Datenbank. Account wurde nicht angelegt — bitte Internetverbindung prüfen.");
+          });
+        }, 2000);
+    });;
   }
 
   var INP = {padding:"10px 14px",fontSize:16,border:"2px solid "+T,borderRadius:8,outline:"none",boxSizing:"border-box",width:"100%",marginBottom:8,display:"block"};
