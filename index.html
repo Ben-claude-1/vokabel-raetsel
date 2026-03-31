@@ -111,51 +111,52 @@ function hashPw(pw) {
 // ── Built-in Chapters ─────────────────────────────────────────
 const BUILTIN = [
   { id: "c1", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
-    { word: "birthday", clue: "Geburtstag", important: true }, { word: "calendar", clue: "Kalender", important: true },
-    { word: "sing", clue: "singen", important: false }, { word: "month", clue: "Monat", important: true },
-    { word: "celebrate", clue: "feiern", important: true }, { word: "enjoy", clue: "genießen", important: true },
-    { word: "take", clue: "(mit)nehmen", important: true }, { word: "balloon", clue: "Luftballon", important: false },
-    { word: "bring", clue: "(mit)bringen", important: true }, { word: "spring", clue: "Frühling", important: true },
-    { word: "summer", clue: "Sommer", important: true }, { word: "autumn", clue: "Herbst", important: true },
-    { word: "winter", clue: "Winter", important: true }, { word: "date", clue: "Datum", important: true },
-    { word: "first", clue: "erste(r,s)", important: true }, { word: "second", clue: "zweite(r,s)", important: true },
-    { word: "third", clue: "dritte(r,s)", important: true }, { word: "dream", clue: "Traum", important: true },
-    { word: "something", clue: "etwas", important: true }, { word: "ride", clue: "reiten, fahren", important: false },
+    { word: "birthday", clue: "Geburtstag", important: true, topic: "c1" }, { word: "calendar", clue: "Kalender", important: true, topic: "c1" },
+    { word: "sing", clue: "singen", important: false, topic: "c1" }, { word: "month", clue: "Monat", important: true, topic: "c1" },
+    { word: "celebrate", clue: "feiern", important: true, topic: "c1" }, { word: "enjoy", clue: "genießen", important: true, topic: "c1" },
+    { word: "take", clue: "(mit)nehmen", important: true, topic: "c1" }, { word: "balloon", clue: "Luftballon", important: false, topic: "c1" },
+    { word: "bring", clue: "(mit)bringen", important: true, topic: "c1" }, { word: "spring", clue: "Frühling", important: true, topic: "c1" },
+    { word: "summer", clue: "Sommer", important: true, topic: "c1" }, { word: "autumn", clue: "Herbst", important: true, topic: "c1" },
+    { word: "winter", clue: "Winter", important: true, topic: "c1" }, { word: "date", clue: "Datum", important: true, topic: "c1" },
+    { word: "first", clue: "erste(r,s)", important: true, topic: "c1" }, { word: "second", clue: "zweite(r,s)", important: true, topic: "c1" },
+    { word: "third", clue: "dritte(r,s)", important: true, topic: "c1" }, { word: "dream", clue: "Traum", important: true, topic: "c1" },
+    { word: "something", clue: "etwas", important: true, topic: "c1" }, { word: "ride", clue: "reiten, fahren", important: false, topic: "c1" },
   ]},
   { id: "c2", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
-    { word: "fireworks", clue: "Feuerwerk", important: true }, { word: "present", clue: "Geschenk", important: true },
-    { word: "drink", clue: "Getränk", important: false }, { word: "ice", clue: "Eis", important: false },
-    { word: "wonderful", clue: "wunderbar", important: true }, { word: "price", clue: "Preis", important: true },
-    { word: "free", clue: "frei, gratis", important: true }, { word: "guest", clue: "Gast", important: false },
-    { word: "lemonade", clue: "Limonade", important: true }, { word: "juice", clue: "Saft", important: true },
-    { word: "invitation", clue: "Einladung", important: true }, { word: "card", clue: "Karte", important: true },
-    { word: "lazy", clue: "faul, träge", important: true }, { word: "sleep", clue: "schlafen", important: true },
-    { word: "buffet", clue: "Büfett", important: false }, { word: "coffee", clue: "Kaffee", important: false },
+    { word: "fireworks", clue: "Feuerwerk", important: true, topic: "c2" }, { word: "present", clue: "Geschenk", important: true, topic: "c2" },
+    { word: "drink", clue: "Getränk", important: false, topic: "c2" }, { word: "ice", clue: "Eis", important: false, topic: "c2" },
+    { word: "wonderful", clue: "wunderbar", important: true, topic: "c2" }, { word: "price", clue: "Preis", important: true, topic: "c2" },
+    { word: "free", clue: "frei, gratis", important: true, topic: "c2" }, { word: "guest", clue: "Gast", important: false, topic: "c2" },
+    { word: "lemonade", clue: "Limonade", important: true, topic: "c2" }, { word: "juice", clue: "Saft", important: true, topic: "c2" },
+    { word: "invitation", clue: "Einladung", important: true, topic: "c2" }, { word: "card", clue: "Karte", important: true, topic: "c2" },
+    { word: "lazy", clue: "faul, träge", important: true, topic: "c2" }, { word: "sleep", clue: "schlafen", important: true, topic: "c2" },
+    { word: "buffet", clue: "Büfett", important: false, topic: "c2" }, { word: "coffee", clue: "Kaffee", important: false, topic: "c2" },
   ]},
   { id: "c3", title: "Monate", color: "#b45309", icon: "📅", is_builtin: true, sentences: [], words: [
-    { word: "January", clue: "Januar", important: true }, { word: "February", clue: "Februar", important: true },
-    { word: "March", clue: "März", important: true }, { word: "April", clue: "April", important: true },
-    { word: "May", clue: "Mai", important: true }, { word: "June", clue: "Juni", important: true },
-    { word: "July", clue: "Juli", important: true }, { word: "August", clue: "August", important: true },
-    { word: "September", clue: "September", important: true }, { word: "October", clue: "Oktober", important: true },
-    { word: "November", clue: "November", important: true }, { word: "December", clue: "Dezember", important: true },
+    { word: "January", clue: "Januar", important: true, topic: "c3" }, { word: "February", clue: "Februar", important: true, topic: "c3" },
+    { word: "March", clue: "März", important: true, topic: "c3" }, { word: "April", clue: "April", important: true, topic: "c3" },
+    { word: "May", clue: "Mai", important: true, topic: "c3" }, { word: "June", clue: "Juni", important: true, topic: "c3" },
+    { word: "July", clue: "Juli", important: true, topic: "c3" }, { word: "August", clue: "August", important: true, topic: "c3" },
+    { word: "September", clue: "September", important: true, topic: "c3" }, { word: "October", clue: "Oktober", important: true, topic: "c3" },
+    { word: "November", clue: "November", important: true, topic: "c3" }, { word: "December", clue: "Dezember", important: true, topic: "c3" },
   ]},
   { id: "c4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
-    { word: "holiday", clue: "Urlaub, Ferien", important: true }, { word: "text", clue: "SMS senden", important: true },
-    { word: "shop", clue: "einkaufen", important: true }, { word: "score", clue: "Tor schießen", important: true },
-    { word: "goal", clue: "Ziel, Tor", important: true }, { word: "collect", clue: "(ein)sammeln", important: true },
-    { word: "close", clue: "schließen", important: true }, { word: "bag", clue: "Tasche", important: true },
-    { word: "case", clue: "Hülle", important: true }, { word: "train", clue: "trainieren", important: true },
-    { word: "plan", clue: "planen", important: true }, { word: "field", clue: "Spielfeld", important: false },
-    { word: "fun", clue: "Spaß", important: false }, { word: "gym", clue: "Turnhalle", important: false },
+    { word: "holiday", clue: "Urlaub, Ferien", important: true, topic: "c4" }, { word: "text", clue: "SMS senden", important: true, topic: "c4" },
+    { word: "shop", clue: "einkaufen", important: true, topic: "c4" }, { word: "score", clue: "Tor schießen", important: true, topic: "c4" },
+    { word: "goal", clue: "Ziel, Tor", important: true, topic: "c4" }, { word: "collect", clue: "(ein)sammeln", important: true, topic: "c4" },
+    { word: "close", clue: "schließen", important: true, topic: "c4" }, { word: "bag", clue: "Tasche", important: true, topic: "c4" },
+    { word: "case", clue: "Hülle", important: true, topic: "c4" }, { word: "train", clue: "trainieren", important: true, topic: "c4" },
+    { word: "plan", clue: "planen", important: true, topic: "c4" }, { word: "field", clue: "Spielfeld", important: false, topic: "c4" },
+    { word: "fun", clue: "Spaß", important: false, topic: "c4" }, { word: "gym", clue: "Turnhalle", important: false, topic: "c4" },
   ]},
   { id: "c5", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
-    { word: "cheap", clue: "billig, preiswert", important: true }, { word: "expensive", clue: "teuer", important: true },
-    { word: "customer", clue: "Kunde/Kundin", important: true }, { word: "any", clue: "(irgend)ein(e)", important: true },
-    { word: "somebody", clue: "(irgend)jemand", important: true }, { word: "just", clue: "nur, gerade", important: true },
-    { word: "home", clue: "zu Hause", important: true }, { word: "have", clue: "haben, trinken", important: true },
-    { word: "put", clue: "setzen, legen", important: false }, { word: "everything", clue: "alles", important: false },
+    { word: "cheap", clue: "billig, preiswert", important: true, topic: "c5" }, { word: "expensive", clue: "teuer", important: true, topic: "c5" },
+    { word: "customer", clue: "Kunde/Kundin", important: true, topic: "c5" }, { word: "any", clue: "(irgend)ein(e)", important: true, topic: "c5" },
+    { word: "somebody", clue: "(irgend)jemand", important: true, topic: "c5" }, { word: "just", clue: "nur, gerade", important: true, topic: "c5" },
+    { word: "home", clue: "zu Hause", important: true, topic: "c5" }, { word: "have", clue: "haben, trinken", important: true, topic: "c5" },
+    { word: "put", clue: "setzen, legen", important: false, topic: "c5" }, { word: "everything", clue: "alles", important: false, topic: "c5" },
   ]},
+  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: null, sentences: [], words: [] },
 ];
 
 // ── Colors ────────────────────────────────────────────────────
@@ -2587,62 +2588,83 @@ function VocabSearch({ chapters }) {
 // ══════════════════════════════════════════════════════════════
 // CHAPTER TREE — collapsible Kapitel → Themenbereich → Vokabeln
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// CHAPTER TREE — Kapitel → Themenbereich → Vokabeln
+// Architecture: words stored in sub-chapters (c1-c5), each word
+// has topic field = sub-chapter id. "allgemein" = fallback.
+// ══════════════════════════════════════════════════════════════
 function ChapterTree({ chapters, setChapters }) {
-  var [openKap,setOpenKap]=useState({});     // kapId → bool
-  var [openTopic,setOpenTopic]=useState({}); // topicId → bool
-  var [editingWord,setEditingWord]=useState(null); // {topicId, wordIdx}
-  var [topicRename,setTopicRename]=useState(null); // id being renamed
+  var [openKap,setOpenKap]=useState({});
+  var [openTopic,setOpenTopic]=useState({});
+  var [movingWord,setMovingWord]=useState(null); // {topicId, wordIdx}
+  var [moveFilter,setMoveFilter]=useState('');
+  var [renaming,setRenaming]=useState(null); // id being renamed
   var [renameVal,setRenameVal]=useState('');
 
-  var topLevel=chapters.filter(function(c){return !c.parent_id;});
-  var topics=chapters.filter(function(c){return !!c.parent_id;});
-
-  // Make setChapters available to VocabSearch via window
   useEffect(function(){ window._adminSetChapters=setChapters; },[setChapters]);
 
-  function toggleKap(id){ setOpenKap(function(p){return Object.assign({},p,{[id]:!p[id]});}); }
-  function toggleTopic(id){ setOpenTopic(function(p){return Object.assign({},p,{[id]:!p[id]});}); }
+  // Partition chapters
+  var topLevel=chapters.filter(function(c){return !c.parent_id&&c.id!=='allgemein';});
+  var getTopics=function(kapId){ return chapters.filter(function(c){return c.parent_id===kapId;}); };
 
-  function saveWordChange(topicId,wordIdx,newWord){
+  // Get all words from a Kapitel's topics
+  function getAllTopicWords(kapId){
+    var allW=[];
+    getTopics(kapId).forEach(function(t){
+      (t.words||[]).forEach(function(w,wi){
+        allW.push({word:w,topicId:t.id,wordIdx:wi,topic:t});
+      });
+    });
+    // Also get "allgemein" words that reference this kapitel
+    var allg=chapters.find(function(c){return c.id==='allgemein';});
+    if(allg){
+      (allg.words||[]).filter(function(w){return w.kapitelId===kapId;}).forEach(function(w,wi){
+        allW.push({word:w,topicId:'allgemein',wordIdx:wi,topic:allg});
+      });
+    }
+    return allW;
+  }
+
+  function saveWordImportant(topicId,wordIdx,important){
     var ch=chapters.find(function(c){return c.id===topicId;});
     if(!ch) return;
-    var newWords=ch.words.map(function(w,i){return i===wordIdx?Object.assign({},w,newWord):w;});
+    var newWords=ch.words.map(function(w,i){return i===wordIdx?Object.assign({},w,{important:important}):w;});
     var newChapters=chapters.map(function(c){return c.id===topicId?Object.assign({},c,{words:newWords}):c;});
     setChapters(newChapters);
     sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+topicId);
-    setEditingWord(null);
   }
 
-  function moveWordToTopic(topicId,wordIdx,newTopicId){
-    if(newTopicId===topicId) return;
-    var srcCh=chapters.find(function(c){return c.id===topicId;});
-    var dstCh=chapters.find(function(c){return c.id===newTopicId;});
-    if(!srcCh||!dstCh) return;
-    var wordObj=srcCh.words[wordIdx];
+  function moveWordToTopic(fromTopicId,wordIdx,toTopicId){
+    if(fromTopicId===toTopicId) return;
+    var fromCh=chapters.find(function(c){return c.id===fromTopicId;});
+    var toCh=chapters.find(function(c){return c.id===toTopicId;});
+    if(!fromCh||!toCh) return;
+    var wordObj=fromCh.words[wordIdx];
     if(!wordObj) return;
-    if(dstCh.words.find(function(w){return w.word.toLowerCase()===wordObj.word.toLowerCase();})){
-      alert('Vokabel "'+wordObj.word+'" ist in "'+dstCh.title+'" bereits vorhanden.'); return;
+    // Check duplicate in target
+    if((toCh.words||[]).find(function(w){return w.word.toLowerCase()===wordObj.word.toLowerCase();})){
+      alert('"'+wordObj.word+'" ist in "'+toCh.title+'" bereits vorhanden.'); return;
     }
-    var newSrcWords=srcCh.words.filter(function(_,i){return i!==wordIdx;});
-    // If src becomes empty, add to "Allgemein" fallback — but we just move it
-    var newDstWords=(dstCh.words||[]).concat([wordObj]);
+    var movedWord=Object.assign({},wordObj,{topic:toTopicId});
+    var newFromWords=fromCh.words.filter(function(_,i){return i!==wordIdx;});
+    var newToWords=(toCh.words||[]).concat([movedWord]);
     var newChapters=chapters.map(function(c){
-      if(c.id===topicId) return Object.assign({},c,{words:newSrcWords});
-      if(c.id===newTopicId) return Object.assign({},c,{words:newDstWords});
+      if(c.id===fromTopicId) return Object.assign({},c,{words:newFromWords});
+      if(c.id===toTopicId)   return Object.assign({},c,{words:newToWords});
       return c;
     });
     setChapters(newChapters);
-    sbPatch('chapters',{words:JSON.stringify(newSrcWords)},'id=eq.'+topicId);
-    sbPatch('chapters',{words:JSON.stringify(newDstWords)},'id=eq.'+newTopicId);
-    setEditingWord(null);
+    sbPatch('chapters',{words:JSON.stringify(newFromWords)},'id=eq.'+fromTopicId);
+    sbPatch('chapters',{words:JSON.stringify(newToWords)},'id=eq.'+toTopicId);
+    setMovingWord(null); setMoveFilter('');
   }
 
-  function renameTopic(id,val){
+  function renameChapter(id,val){
     if(!val.trim()) return;
     sbPatch('chapters',{title:val.trim()},'id=eq.'+id).then(function(){
       setChapters(function(prev){return prev.map(function(c){return c.id===id?Object.assign({},c,{title:val.trim()}):c;});});
     });
-    setTopicRename(null);
+    setRenaming(null);
   }
 
   function setInactive(ch){
@@ -2657,136 +2679,188 @@ function ChapterTree({ chapters, setChapters }) {
     });
   }
   function finalDelete(ch){
-    if(!confirm('"'+ch.title+'" endgültig löschen?')) return;
+    if(!confirm('"'+ch.title+'" endgültig löschen? Alle Vokabeln werden nach Allgemein verschoben.')) return;
+    // Move words to allgemein first
+    var allg=chapters.find(function(c){return c.id==='allgemein';});
+    if(allg&&ch.words&&ch.words.length>0){
+      var movedWords=(allg.words||[]).concat(ch.words.map(function(w){return Object.assign({},w,{topic:'allgemein'});}));
+      sbPatch('chapters',{words:JSON.stringify(movedWords)},'id=eq.allgemein');
+    }
     sbDel('chapters','id=eq.'+ch.id).then(function(){
       setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
     });
   }
 
-  return <div>
-    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>
-      📚 Kapitel ({topLevel.length}) · {topics.length} Themenbereiche
-    </div>
-    {topLevel.map(function(kap){
-      var kapTopics=topics.filter(function(t){return t.parent_id===kap.id;});
-      var totalW=kapTopics.reduce(function(s,t){return s+t.words.length;},0);
-      var totalI=kapTopics.reduce(function(s,t){return s+t.words.filter(function(w){return w.important;}).length;},0);
-      var isOpen=!!openKap[kap.id];
-      var isInactive=!!kap.is_inactive;
-      return <div key={kap.id} style={{marginBottom:10,border:'2px solid '+(isInactive?G200:kap.color+'50'),borderRadius:12,overflow:'hidden',opacity:isInactive?0.55:1}}>
-        {/* Kapitel header — clickable to expand */}
-        <div onClick={function(){if(!isInactive)toggleKap(kap.id);}}
-          style={{background:isInactive?G100:kap.color+'20',padding:'10px 12px',display:'flex',alignItems:'center',gap:8,cursor:isInactive?'default':'pointer'}}>
-          <span style={{fontSize:18,transition:'transform 0.2s',display:'inline-block',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-          <span style={{fontSize:18}}>{kap.icon}</span>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:kap.color}}>
-              {kap.title}
-              {isInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 6px',borderRadius:8}}>inaktiv</span>}
-            </div>
-            <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
-          </div>
-          <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-            {isInactive
-              ? <button onClick={function(){setActive(kap);}} style={BtnStyle(GR,'white',{padding:'3px 8px',fontSize:10})}>▶ Aktivieren</button>
-              : <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+kap.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===kap.id?Object.assign({},c,{title:n.trim()}):c;});});});}} style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
-            }
-            {!kap.is_builtin&&(isInactive
-              ? <button onClick={function(){finalDelete(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑 Löschen</button>
-              : <button onClick={function(){setInactive(kap);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'3px 8px',fontSize:10})}>⏸ Inaktiv</button>
-            )}
-          </div>
+  // Move filter panel
+  function renderMoveFilter(fromTopicId,wordIdx,kapColor){
+    var ql=moveFilter.toLowerCase();
+    var allTopicChapters=chapters.filter(function(c){return !!c.parent_id||c.id==='allgemein';});
+    var filtered=allTopicChapters.filter(function(c){
+      if(c.id===fromTopicId||c.is_inactive) return false;
+      if(!ql) return true;
+      return c.title.toLowerCase().includes(ql);
+    });
+    return (
+      <div style={{background:'white',border:'1.5px solid '+kapColor,borderRadius:10,padding:10,marginTop:4,width:'100%',boxSizing:'border-box'}}>
+        <div style={{fontSize:11,color:G400,marginBottom:6}}>Themenbereich wechseln:</div>
+        <div style={{position:'relative',marginBottom:6}}>
+          <input value={moveFilter} onChange={function(e){setMoveFilter(e.target.value);}}
+            placeholder="Themenbereich suchen…" autoFocus
+            style={{width:'100%',padding:'7px 28px 7px 10px',fontSize:14,border:'1.5px solid '+kapColor,borderRadius:7,outline:'none',boxSizing:'border-box'}}/>
+          {moveFilter&&<button onClick={function(){setMoveFilter('');}}
+            style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:14}}>✕</button>}
         </div>
-
-        {/* Themenbereiche — shown when Kapitel expanded */}
-        {isOpen&&<div>
-          {kapTopics.length===0&&<div style={{padding:'10px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche.</div>}
-          {kapTopics.map(function(t){
-            var isTopicOpen=!!openTopic[t.id];
-            var isTopicInactive=!!t.is_inactive;
-            return <div key={t.id} style={{borderTop:'1px solid '+G100,background:isTopicInactive?G50:'white',opacity:isTopicInactive?0.6:1}}>
-              {/* Topic row — clickable to expand words */}
-              <div onClick={function(){if(!isTopicInactive)toggleTopic(t.id);}}
-                style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 28px',cursor:isTopicInactive?'default':'pointer',
-                  background:isTopicOpen?kap.color+'08':'transparent'}}>
-                <span style={{fontSize:13,transition:'transform 0.2s',display:'inline-block',transform:isTopicOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                <span style={{fontSize:14}}>{t.icon}</span>
-                <div style={{flex:1}}>
-                  {topicRename===t.id
-                    ? <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-                        <input value={renameVal} onChange={function(e){setRenameVal(e.target.value);}}
-                          onKeyDown={function(e){if(e.key==='Enter')renameTopic(t.id,renameVal);if(e.key==='Escape')setTopicRename(null);}}
-                          autoFocus style={{flex:1,padding:'3px 6px',fontSize:13,border:'1.5px solid '+T,borderRadius:6,outline:'none'}}/>
-                        <button onClick={function(){renameTopic(t.id,renameVal);}} style={BtnStyle(T,'white',{padding:'3px 8px',fontSize:11})}>✓</button>
-                        <button onClick={function(){setTopicRename(null);}} style={BtnStyle(G100,G600,{padding:'3px 6px',fontSize:11})}>✕</button>
-                      </div>
-                    : <div style={{fontSize:12,fontWeight:'bold',color:isTopicInactive?G400:G600}}>{t.title}
-                        {isTopicInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 5px',borderRadius:8}}>inaktiv</span>}
-                      </div>
-                  }
-                  <div style={{fontSize:10,color:G400}}>{t.words.length}V · {t.words.filter(function(w){return w.important;}).length}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
-                </div>
-                <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-                  {isTopicInactive
-                    ? <button onClick={function(){setActive(t);}} style={BtnStyle(GR,'white',{padding:'2px 6px',fontSize:10})}>▶ Aktiv</button>
-                    : <button onClick={function(){setTopicRename(t.id);setRenameVal(t.title);}} style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
-                  }
-                  {!t.is_builtin&&(isTopicInactive
-                    ? <button onClick={function(){finalDelete(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>
-                    : <button onClick={function(){setInactive(t);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'2px 6px',fontSize:10})}>⏸</button>
-                  )}
-                </div>
+        <div style={{maxHeight:200,overflowY:'auto'}}>
+          {filtered.length===0&&<div style={{fontSize:12,color:G400,padding:6}}>Kein Themenbereich gefunden.</div>}
+          {filtered.map(function(c){
+            var par=chapters.find(function(p){return p.id===c.parent_id;});
+            return <div key={c.id} onClick={function(){moveWordToTopic(fromTopicId,wordIdx,c.id);}}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,cursor:'pointer',marginBottom:2}}
+              onMouseOver={function(e){e.currentTarget.style.background=G50;}}
+              onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
+              <span style={{fontSize:14}}>{c.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,color:G900}}>{c.title}</div>
+                <div style={{fontSize:10,color:G400}}>{(c.words||[]).length} Vokabeln{par?' · '+par.icon+' '+par.title:''}</div>
               </div>
-
-              {/* Vokabeln — shown when topic expanded */}
-              {isTopicOpen&&<div style={{padding:'6px 12px 10px 48px',background:kap.color+'05'}}>
-                {t.words.length===0&&<div style={{color:G400,fontSize:11,padding:'6px 0'}}>Keine Vokabeln.</div>}
-                {t.words.map(function(w,wi){
-                  var ekey=t.id+':'+wi;
-                  var isEditing=editingWord&&editingWord.key===ekey;
-                  return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',
-                    borderBottom:'1px solid '+G50,background:isEditing?kap.color+'10':'transparent',
-                    borderRadius:isEditing?6:0,paddingLeft:isEditing?6:0}}>
-                    {/* Important toggle */}
-                    <button onClick={function(){saveWordChange(t.id,wi,{important:!w.important});}}
-                      title={w.important?'Normal markieren':'Als wichtig/fett markieren'}
-                      style={{width:22,height:22,borderRadius:4,border:'1.5px solid '+(w.important?AM:G200),
-                        background:w.important?AM:'white',cursor:'pointer',flexShrink:0,
-                        display:'flex',alignItems:'center',justifyContent:'center',fontSize:11}}>
-                      {w.important?'⭐':'☆'}
-                    </button>
-                    <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1,color:G900}}>{w.word}</span>
-                    <span style={{fontSize:11,color:G400,minWidth:60}}>{w.clue}</span>
-                    {/* Edit button — move to other topic */}
-                    <button onClick={function(){setEditingWord(isEditing?null:{key:ekey,topicId:t.id,wordIdx:wi,word:w});}}
-                      style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+(isEditing?T:G200),
-                        background:isEditing?TL:'transparent',cursor:'pointer',color:isEditing?T:G400,flexShrink:0}}>
-                      {isEditing?'✕':'↔'}
-                    </button>
-                    {isEditing&&<div style={{position:'absolute',left:48,right:8,marginTop:28,background:'white',
-                      border:'1.5px solid '+T,borderRadius:8,padding:8,zIndex:10,boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
-                      <div style={{fontSize:11,color:G600,marginBottom:5}}>Verschieben nach Themenbereich:</div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-                        {topics.filter(function(tp){return tp.id!==t.id;}).map(function(tp){
-                          var par2=chapters.find(function(p){return p.id===tp.parent_id;});
-                          return <button key={tp.id} onClick={function(){moveWordToTopic(t.id,wi,tp.id);}}
-                            style={{padding:'3px 8px',borderRadius:7,border:'1.5px solid '+(par2?par2.color:G200),
-                              background:(par2?par2.color:G200)+'15',cursor:'pointer',fontSize:11,color:par2?par2.color:G600}}>
-                            {tp.icon} {tp.title}
-                          </button>;
-                        })}
-                      </div>
-                    </div>}
-                  </div>;
-                })}
-              </div>}
             </div>;
           })}
-        </div>}
-      </div>;
-    })}
-    {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel.</div>}
-  </div>;
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>
+        📚 Kapitel ({topLevel.length}) · {chapters.filter(function(c){return !!c.parent_id;}).length} Themenbereiche
+      </div>
+      {topLevel.map(function(kap){
+        var kapTopics=getTopics(kap.id);
+        var totalW=kapTopics.reduce(function(s,t){return s+(t.words||[]).length;},0);
+        var totalI=kapTopics.reduce(function(s,t){return s+(t.words||[]).filter(function(w){return w.important;}).length;},0);
+        var isOpen=!!openKap[kap.id];
+        var isInactive=!!kap.is_inactive;
+        return (
+          <div key={kap.id} style={{marginBottom:10,border:'1.5px solid '+(isInactive?G200:kap.color+'60'),borderRadius:12,overflow:'visible',opacity:isInactive?0.55:1}}>
+            {/* Kapitel header */}
+            <div onClick={function(){if(!isInactive) setOpenKap(function(p){return Object.assign({},p,{[kap.id]:!p[kap.id]});});}}
+              style={{background:isInactive?G100:kap.color+'18',padding:'11px 12px',display:'flex',alignItems:'center',gap:8,cursor:isInactive?'default':'pointer',borderRadius:isOpen?'10px 10px 0 0':'10px'}}>
+              <span style={{fontSize:12,transition:'transform 0.15s',display:'inline-block',transform:isOpen&&!isInactive?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+              <span style={{fontSize:16}}>{kap.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:kap.color}}>
+                  {kap.title}
+                  {isInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 6px',borderRadius:8}}>inaktiv</span>}
+                </div>
+                <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
+              </div>
+              <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+                {isInactive
+                  ? <button onClick={function(){setActive(kap);}} style={BtnStyle(GR,'white',{padding:'3px 8px',fontSize:10})}>▶ Aktiv</button>
+                  : <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(n&&n.trim())renameChapter(kap.id,n);}} style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
+                }
+                {!kap.is_builtin&&(isInactive
+                  ? <button onClick={function(){finalDelete(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑</button>
+                  : <button onClick={function(){setInactive(kap);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'3px 8px',fontSize:10})}>⏸</button>
+                )}
+              </div>
+            </div>
+
+            {/* Themenbereiche */}
+            {isOpen&&!isInactive&&(
+              <div>
+                {kapTopics.length===0&&<div style={{padding:'10px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche. Bild hochladen!</div>}
+                {kapTopics.map(function(topic){
+                  var tKey=kap.id+':'+topic.id;
+                  var isTopicOpen=!!openTopic[tKey];
+                  var isTopicInactive=!!topic.is_inactive;
+                  var impCount=(topic.words||[]).filter(function(w){return w.important;}).length;
+                  return (
+                    <div key={topic.id} style={{borderTop:'1px solid '+G100,background:isTopicInactive?G50:'white',opacity:isTopicInactive?0.6:1}}>
+                      {/* Topic header */}
+                      <div onClick={function(){if(!isTopicInactive) setOpenTopic(function(p){return Object.assign({},p,{[tKey]:!p[tKey]});});}}
+                        style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 28px',cursor:isTopicInactive?'default':'pointer',
+                          background:isTopicOpen&&!isTopicInactive?kap.color+'06':'transparent'}}>
+                        <span style={{fontSize:11,transition:'transform 0.15s',display:'inline-block',transform:isTopicOpen&&!isTopicInactive?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                        <span style={{fontSize:14}}>{topic.icon}</span>
+                        <div style={{flex:1}}>
+                          {renaming===topic.id
+                            ? <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+                                <input value={renameVal} onChange={function(e){setRenameVal(e.target.value);}}
+                                  onKeyDown={function(e){if(e.key==='Enter')renameChapter(topic.id,renameVal);if(e.key==='Escape')setRenaming(null);}}
+                                  autoFocus style={{flex:1,padding:'3px 8px',fontSize:13,border:'1.5px solid '+kap.color,borderRadius:6,outline:'none'}}/>
+                                <button onClick={function(){renameChapter(topic.id,renameVal);}} style={BtnStyle(kap.color,'white',{padding:'3px 8px',fontSize:11})}>✓</button>
+                                <button onClick={function(){setRenaming(null);}} style={BtnStyle(G100,G600,{padding:'3px 6px',fontSize:11})}>✕</button>
+                              </div>
+                            : <div style={{fontSize:13,fontWeight:'bold',color:isTopicInactive?G400:G600}}>
+                                {topic.title}
+                                {isTopicInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 5px',borderRadius:8}}>inaktiv</span>}
+                              </div>
+                          }
+                          <div style={{fontSize:10,color:G400}}>{(topic.words||[]).length} Vokabeln · {impCount} ⭐</div>
+                        </div>
+                        <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+                          {isTopicInactive
+                            ? <button onClick={function(){setActive(topic);}} style={BtnStyle(GR,'white',{padding:'2px 6px',fontSize:10})}>▶ Aktiv</button>
+                            : <button onClick={function(){setRenaming(topic.id);setRenameVal(topic.title);}} style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
+                          }
+                          {!topic.is_builtin&&(isTopicInactive
+                            ? <button onClick={function(){finalDelete(topic);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>
+                            : <button onClick={function(){setInactive(topic);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'2px 6px',fontSize:10})}>⏸</button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Vokabeln */}
+                      {isTopicOpen&&!isTopicInactive&&(
+                        <div style={{padding:'4px 12px 8px 52px',background:kap.color+'04'}}>
+                          {(topic.words||[]).length===0&&<div style={{color:G400,fontSize:11,padding:'6px 0'}}>Keine Vokabeln.</div>}
+                          {(topic.words||[]).map(function(w,wi){
+                            var mkey=topic.id+':'+wi;
+                            var isMoving=movingWord===mkey;
+                            return (
+                              <div key={wi}>
+                                <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderBottom:'1px solid '+G50,background:isMoving?kap.color+'08':'transparent'}}>
+                                  {/* Importance toggle */}
+                                  <button onClick={function(){saveWordImportant(topic.id,wi,!w.important);}}
+                                    title={w.important?'Als normal markieren':'Als wichtig/fett markieren'}
+                                    style={{width:22,height:22,borderRadius:4,border:'1.5px solid '+(w.important?AM:G200),
+                                      background:w.important?AM:'white',cursor:'pointer',flexShrink:0,
+                                      display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,touchAction:'manipulation'}}>
+                                    <span style={{color:w.important?'white':G200}}>{w.important?'★':'☆'}</span>
+                                  </button>
+                                  <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1,color:G900}}>{w.word}</span>
+                                  <span style={{fontSize:11,color:G400,minWidth:70,textAlign:'right'}}>{w.clue}</span>
+                                  {/* Move button */}
+                                  <button onClick={function(){
+                                    setMovingWord(isMoving?null:mkey);
+                                    setMoveFilter('');
+                                  }} style={{fontSize:10,padding:'2px 7px',borderRadius:5,
+                                    border:'1px solid '+(isMoving?kap.color:G200),
+                                    background:isMoving?kap.color+'15':'transparent',
+                                    cursor:'pointer',color:isMoving?kap.color:G400,
+                                    flexShrink:0,touchAction:'manipulation'}}>
+                                    {isMoving?'✕':'↔'}
+                                  </button>
+                                </div>
+                                {isMoving&&renderMoveFilter(topic.id,wi,kap.color)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel.</div>}
+    </div>
+  );
 }
 
 
@@ -2890,8 +2964,10 @@ NUR JSON antworten (kein Markdown):
       if(!targetChapter){setImgMsg('❌ Übergeordnetes Kapitel auswählen');return;}
       if(!dTitle.trim()){setImgMsg('❌ Themenbereich-Name eingeben');return;}
       var id='ch_'+Date.now();
-      var ch={id,title:dTitle.trim(),color:dColor,icon:dIcon,words:w,sentences:s,is_builtin:false,parent_id:targetChapter};
-      sbPost('chapters',Object.assign({},ch,{words:JSON.stringify(w),sentences:JSON.stringify(s),parent_id:targetChapter})).then(function(){
+      // Add topic field to all words
+      var wWithTopic=w.map(function(word){return Object.assign({},word,{topic:id});});
+      var ch={id,title:dTitle.trim(),color:dColor,icon:dIcon,words:wWithTopic,sentences:s,is_builtin:false,parent_id:targetChapter};
+      sbPost('chapters',Object.assign({},ch,{words:JSON.stringify(wWithTopic),sentences:JSON.stringify(s),parent_id:targetChapter})).then(function(){
         setChapters(function(prev){return prev.concat([ch]);});
         setDraft(null); setImgMsg('✅ "'+dTitle+'" gespeichert mit '+w.length+' Vokabeln, '+s.length+' Sätzen!');
       });
@@ -2900,7 +2976,8 @@ NUR JSON antworten (kein Markdown):
       if(!existingCh){setImgMsg('❌ Themenbereich nicht gefunden');return;}
       var existW=new Set(existingCh.words.map(function(x){return x.word.toLowerCase();}));
       var existS=new Set((existingCh.sentences||[]).map(function(x){return x.text.toLowerCase().trim();}));
-      var newW=w.filter(function(x){return !existW.has(x.word.toLowerCase());});
+      var newW=w.filter(function(x){return !existW.has(x.word.toLowerCase());})
+        .map(function(x){return Object.assign({},x,{topic:targetChapter});});
       var newS=s.filter(function(x){return !existS.has(x.text.toLowerCase().trim());});
       var updW=existingCh.words.concat(newW);
       var updS=(existingCh.sentences||[]).concat(newS);
@@ -3465,11 +3542,22 @@ function App() {
       var merged = parsed.map(function(c) {
         var b = BUILTIN.find(function(x){ return x.id === c.id; });
         if (b && (!c.words || c.words.length === 0)) return Object.assign({}, c, { words: b.words, sentences: b.sentences||[] });
-        return c;
+        // Ensure all words have topic field = their chapter id
+        var fixedWords=(c.words||[]).map(function(w){return w.topic?w:Object.assign({},w,{topic:c.id});});
+        return Object.assign({},c,{words:fixedWords});
       });
-      // Add any BUILTIN not yet in DB
+      // Add any BUILTIN not yet in DB (includes Allgemein)
       var dbIds = new Set(merged.map(function(c){ return c.id; }));
-      BUILTIN.forEach(function(b) { if (!dbIds.has(b.id)) merged.push(b); });
+      BUILTIN.forEach(function(b) {
+        if (!dbIds.has(b.id)) {
+          if (b.id === 'allgemein') {
+            var topKap=merged.find(function(c){return !c.parent_id&&c.id!=='allgemein';});
+            merged.push(Object.assign({},b,{parent_id:topKap?topKap.id:null}));
+          } else {
+            merged.push(b);
+          }
+        }
+      });
       setChapters(merged);
     });
   },[]);
