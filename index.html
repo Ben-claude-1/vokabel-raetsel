@@ -2436,110 +2436,356 @@ function UploadPreview({ draft, onSave, onCancel, chapters, chapterMode, targetC
 // ══════════════════════════════════════════════════════════════
 // KATEGORIE-SYSTEM & VOKABEL-SUCHE
 // ══════════════════════════════════════════════════════════════
-function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
+// ══════════════════════════════════════════════════════════════
+// VOKABEL-SUCHE (Themenbereich = topics, nicht categories table)
+// ══════════════════════════════════════════════════════════════
+function VocabSearch({ chapters }) {
   var [query,setQuery]=useState('');
+  var [filterTopic,setFilterTopic]=useState(''); // filter by topic chapter id
   var [results,setResults]=useState([]);
-  var [editingWord,setEditingWord]=useState(null);
-  var [newCatName,setNewCatName]=useState('');
-  var [showCatForm,setShowCatForm]=useState(false);
-  var [viewCat,setViewCat]=useState(null); // category id to view
-  var [localCats,setLocalCats]=useState(allCategories||[]);
+  var [editingKey,setEditingKey]=useState(null);
 
-  useEffect(function(){setLocalCats(allCategories||[]);},[allCategories]);
+  var topicChapters=chapters.filter(function(c){return !!c.parent_id;});
 
-  function search(q){
-    if(!q||q.trim().length<2){setResults([]);return;}
-    var ql=q.toLowerCase();
+  function doSearch(q,topicId){
+    var ql=(q||'').toLowerCase().trim();
     var found=[];
     chapters.forEach(function(ch){
-      if(!ch.parent_id) return; // skip top-level, only topic chapters
+      if(!ch.parent_id) return;
+      if(topicId&&ch.id!==topicId) return;
+      var parent=chapters.find(function(p){return p.id===ch.parent_id;});
       (ch.words||[]).forEach(function(w){
-        if(w.word.toLowerCase().includes(ql)||w.clue.toLowerCase().includes(ql)){
-          var parent=chapters.find(function(p){return p.id===ch.parent_id;});
-          found.push({word:w.word,clue:w.clue,important:w.important,chapterId:ch.id,chapterTitle:ch.title,chapterIcon:ch.icon,parentTitle:parent?parent.title:'',color:ch.color});
+        if(!ql||w.word.toLowerCase().includes(ql)||w.clue.toLowerCase().includes(ql)){
+          found.push({word:w.word,clue:w.clue,important:w.important,
+            topicId:ch.id,topicTitle:ch.title,topicIcon:ch.icon,topicColor:ch.color,
+            kapitelTitle:parent?parent.title:'',kapitelIcon:parent?parent.icon:'📗'});
         }
       });
     });
     setResults(found);
   }
 
-  function createCategory(){
-    if(!newCatName.trim()) return;
-    sbPost('categories',{name:newCatName.trim(),color:'#6366f1'}).then(function(res){
-      if(res&&!res._err){
-        var newCat=res.id?res:{id:'local_'+Date.now(),name:newCatName.trim(),color:'#6366f1'};
-        setLocalCats(function(prev){return prev.concat([newCat]);});
-        if(onCategoryChange) onCategoryChange();
-        setNewCatName('');setShowCatForm(false);
-      }
+  function toggleImportant(r){
+    // Update in-memory chapters
+    var newChapters=chapters.map(function(ch){
+      if(ch.id!==r.topicId) return ch;
+      var newWords=ch.words.map(function(w){
+        return w.word===r.word?Object.assign({},w,{important:!w.important}):w;
+      });
+      return Object.assign({},ch,{words:newWords});
     });
+    // Trigger parent update via setChapters if available — we pass it down
+    if(window._adminSetChapters) window._adminSetChapters(newChapters);
+    // Persist to Supabase
+    var updCh=newChapters.find(function(c){return c.id===r.topicId;});
+    if(updCh) sbPatch('chapters',{words:JSON.stringify(updCh.words)},'id=eq.'+r.topicId);
+    // Re-search to reflect change
+    setTimeout(function(){doSearch(query,filterTopic);},50);
   }
 
-  function assignCategory(word,chapterId,catId){
-    // Upsert into word_categories
-    sbPost('word_categories',{word:word,chapter_id:chapterId,category_id:catId||null,is_important:results.find(function(r){return r.word===word&&r.chapterId===chapterId;})?.important||false})
-      .then(function(){if(onCategoryChange) onCategoryChange();});
+  function moveTopic(r,newTopicId){
+    if(!newTopicId||newTopicId===r.topicId) return;
+    // Remove from old topic
+    var srcCh=chapters.find(function(c){return c.id===r.topicId;});
+    var dstCh=chapters.find(function(c){return c.id===newTopicId;});
+    if(!srcCh||!dstCh) return;
+    var wordObj=srcCh.words.find(function(w){return w.word===r.word;});
+    if(!wordObj) return;
+    var newSrcWords=srcCh.words.filter(function(w){return w.word!==r.word;});
+    var dstWords=(dstCh.words||[]).concat([wordObj]);
+    // Check duplicate
+    if(dstCh.words.find(function(w){return w.word.toLowerCase()===r.word.toLowerCase()})){
+      alert('Diese Vokabel ist im Ziel-Themenbereich bereits vorhanden.'); return;
+    }
+    var newChapters=chapters.map(function(ch){
+      if(ch.id===r.topicId) return Object.assign({},ch,{words:newSrcWords});
+      if(ch.id===newTopicId) return Object.assign({},ch,{words:dstWords});
+      return ch;
+    });
+    if(window._adminSetChapters) window._adminSetChapters(newChapters);
+    sbPatch('chapters',{words:JSON.stringify(newSrcWords)},'id=eq.'+r.topicId);
+    sbPatch('chapters',{words:JSON.stringify(dstWords)},'id=eq.'+newTopicId);
+    setEditingKey(null);
+    setTimeout(function(){doSearch(query,filterTopic);},100);
   }
-
-  var viewCatData=viewCat?localCats.find(function(c){return c.id===viewCat;}):null;
-  var catWords=viewCat?results.filter(function(r){return r.categoryId===viewCat;}):[];
 
   return <div>
-    {/* Category chips */}
-    <div style={{marginBottom:12}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-        <div style={{fontWeight:'bold',fontSize:13,color:G900}}>🏷️ Kategorien ({localCats.length})</div>
-        <button onClick={function(){setShowCatForm(!showCatForm);}} style={BtnStyle(T,'white',{padding:'4px 10px',fontSize:11})}>+ Neu</button>
+    {/* Search bar */}
+    <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+      <div style={{position:'relative',flex:2,minWidth:150}}>
+        <input value={query} onChange={function(e){setQuery(e.target.value);doSearch(e.target.value,filterTopic);}}
+          placeholder="Vokabel suchen (DE oder EN)…"
+          style={{width:'100%',padding:'9px 32px 9px 12px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
+        {query&&<button onClick={function(){setQuery('');doSearch('',filterTopic);}}
+          style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>✕</button>}
       </div>
-      {showCatForm&&<div style={{display:'flex',gap:6,marginBottom:8}}>
-        <input value={newCatName} onChange={function(e){setNewCatName(e.target.value);}} placeholder="Kategoriename…"
-          onKeyDown={function(e){if(e.key==='Enter')createCategory();}}
-          style={{flex:1,padding:'6px 10px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
-        <button onClick={createCategory} style={BtnStyle(T,'white',{padding:'6px 12px'})}>✓</button>
-      </div>}
-      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-        {localCats.map(function(cat){return <button key={cat.id} onClick={function(){setViewCat(viewCat===cat.id?null:cat.id);}}
-          style={{padding:'4px 10px',borderRadius:99,border:'1.5px solid '+(viewCat===cat.id?cat.color:G200),background:viewCat===cat.id?cat.color+'20':'white',cursor:'pointer',fontSize:12,color:viewCat===cat.id?cat.color:G600}}>
-          {cat.name}
-        </button>;})}
-      </div>
+      <select value={filterTopic} onChange={function(e){setFilterTopic(e.target.value);doSearch(query,e.target.value);}}
+        style={{flex:1,minWidth:120,padding:'8px 10px',fontSize:13,border:'1.5px solid '+G200,borderRadius:8,outline:'none',background:'white'}}>
+        <option value=''>Alle Themenbereiche</option>
+        {topicChapters.map(function(c){
+          var par=chapters.find(function(p){return p.id===c.parent_id;});
+          return <option key={c.id} value={c.id}>{par?par.icon+' '+par.title+' → ':''}{c.icon} {c.title}</option>;
+        })}
+      </select>
     </div>
 
-    {/* Search */}
-    <div style={{position:'relative',marginBottom:10}}>
-      <input value={query} onChange={function(e){setQuery(e.target.value);search(e.target.value);}}
-        placeholder="Vokabel suchen (Deutsch oder Englisch)…"
-        style={{width:'100%',padding:'10px 36px 10px 12px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
-      {query&&<button onClick={function(){setQuery('');setResults([]);}} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:18}}>✕</button>}
-    </div>
+    {/* Hint if nothing searched */}
+    {!query&&!filterTopic&&<div style={{textAlign:'center',color:G400,padding:12,fontSize:13}}>Suchbegriff eingeben oder Themenbereich auswählen</div>}
 
-    {/* Results */}
+    {/* Results count */}
+    {results.length>0&&<div style={{fontSize:11,color:G400,marginBottom:8}}>{results.length} Vokabeln gefunden</div>}
+
+    {/* Result rows */}
     {results.map(function(r,i){
-      var isEditing=editingWord===r.word+r.chapterId;
-      return <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,background:'white',border:'1px solid '+(r.important?AM:G200)}}>
-        <div style={{display:'flex',alignItems:'center',gap:6}}>
-          {r.important&&<span style={{fontSize:10,color:AM}}>⭐</span>}
-          <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{r.word}</span>
+      var key=r.word+':'+r.topicId;
+      var isEditing=editingKey===key;
+      return <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,
+        background:r.important?'#fef9ee':'white',
+        border:'1px solid '+(r.important?AM:G200)}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          {/* Important toggle */}
+          <button onClick={function(){toggleImportant(r);}}
+            title={r.important?'Als normal markieren':'Als wichtig/fett markieren'}
+            style={{width:26,height:26,borderRadius:5,border:'2px solid '+(r.important?AM:G200),
+              background:r.important?AM:'white',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
+            {r.important?'⭐':'☆'}
+          </button>
+          <span style={{fontWeight:r.important?'bold':'normal',fontSize:13,color:G900}}>{r.word}</span>
           <span style={{color:G400,fontSize:12}}>= {r.clue}</span>
-          <span style={{marginLeft:'auto',fontSize:10,color:G400}}>{r.chapterIcon} {r.chapterTitle}</span>
-          {r.parentTitle&&<span style={{fontSize:10,color:G400}}>· {r.parentTitle}</span>}
-          <button onClick={function(){setEditingWord(isEditing?null:r.word+r.chapterId);}}
-            style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>🏷️</button>
+          <span style={{marginLeft:'auto',fontSize:10,color:G400,display:'flex',alignItems:'center',gap:3}}>
+            <span>{r.topicIcon}</span><span>{r.topicTitle}</span>
+            <span style={{color:G200}}>·</span>
+            <span>{r.kapitelIcon}</span><span>{r.kapitelTitle}</span>
+          </span>
+          <button onClick={function(){setEditingKey(isEditing?null:key);}}
+            style={{fontSize:10,padding:'2px 7px',borderRadius:5,border:'1px solid '+(isEditing?T:G200),
+              background:isEditing?TL:'white',cursor:'pointer',color:isEditing?T:G600,flexShrink:0}}>
+            {isEditing?'✕':'✏️ verschieben'}
+          </button>
         </div>
-        {isEditing&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px solid '+G100}}>
-          <div style={{fontSize:11,color:G600,marginBottom:4}}>Kategorie zuweisen:</div>
-          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-            <button onClick={function(){assignCategory(r.word,r.chapterId,null);setEditingWord(null);}}
-              style={{padding:'3px 8px',borderRadius:99,border:'1px solid '+G200,background:G50,cursor:'pointer',fontSize:11,color:G600}}>Keine</button>
-            {localCats.map(function(cat){return <button key={cat.id} onClick={function(){assignCategory(r.word,r.chapterId,cat.id);setEditingWord(null);}}
-              style={{padding:'3px 8px',borderRadius:99,border:'1.5px solid '+cat.color,background:cat.color+'15',cursor:'pointer',fontSize:11,color:cat.color}}>
-              {cat.name}
-            </button>;})}
+        {isEditing&&<div style={{marginTop:8,paddingTop:8,borderTop:'1px solid '+G100}}>
+          <div style={{fontSize:11,color:G600,marginBottom:5}}>Themenbereich wechseln:</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {topicChapters.filter(function(c){return c.id!==r.topicId;}).map(function(c){
+              var par=chapters.find(function(p){return p.id===c.parent_id;});
+              return <button key={c.id} onClick={function(){moveTopic(r,c.id);}}
+                style={{padding:'4px 10px',borderRadius:8,border:'1.5px solid '+c.color,background:c.color+'15',
+                  cursor:'pointer',fontSize:11,color:c.color}}>
+                {par?par.icon+' '+par.title+' → ':''}{c.icon} {c.title}
+              </button>;
+            })}
           </div>
         </div>}
       </div>;
     })}
-    {query.length>=2&&results.length===0&&<div style={{textAlign:'center',color:G400,padding:16,fontSize:13}}>Keine Vokabeln gefunden.</div>}
+    {(query.length>=2||filterTopic)&&results.length===0&&
+      <div style={{textAlign:'center',color:G400,padding:16,fontSize:13}}>Keine Vokabeln gefunden.</div>}
+  </div>;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// CHAPTER TREE — collapsible Kapitel → Themenbereich → Vokabeln
+// ══════════════════════════════════════════════════════════════
+function ChapterTree({ chapters, setChapters }) {
+  var [openKap,setOpenKap]=useState({});     // kapId → bool
+  var [openTopic,setOpenTopic]=useState({}); // topicId → bool
+  var [editingWord,setEditingWord]=useState(null); // {topicId, wordIdx}
+  var [topicRename,setTopicRename]=useState(null); // id being renamed
+  var [renameVal,setRenameVal]=useState('');
+
+  var topLevel=chapters.filter(function(c){return !c.parent_id;});
+  var topics=chapters.filter(function(c){return !!c.parent_id;});
+
+  // Make setChapters available to VocabSearch via window
+  useEffect(function(){ window._adminSetChapters=setChapters; },[setChapters]);
+
+  function toggleKap(id){ setOpenKap(function(p){return Object.assign({},p,{[id]:!p[id]});}); }
+  function toggleTopic(id){ setOpenTopic(function(p){return Object.assign({},p,{[id]:!p[id]});}); }
+
+  function saveWordChange(topicId,wordIdx,newWord){
+    var ch=chapters.find(function(c){return c.id===topicId;});
+    if(!ch) return;
+    var newWords=ch.words.map(function(w,i){return i===wordIdx?Object.assign({},w,newWord):w;});
+    var newChapters=chapters.map(function(c){return c.id===topicId?Object.assign({},c,{words:newWords}):c;});
+    setChapters(newChapters);
+    sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+topicId);
+    setEditingWord(null);
+  }
+
+  function moveWordToTopic(topicId,wordIdx,newTopicId){
+    if(newTopicId===topicId) return;
+    var srcCh=chapters.find(function(c){return c.id===topicId;});
+    var dstCh=chapters.find(function(c){return c.id===newTopicId;});
+    if(!srcCh||!dstCh) return;
+    var wordObj=srcCh.words[wordIdx];
+    if(!wordObj) return;
+    if(dstCh.words.find(function(w){return w.word.toLowerCase()===wordObj.word.toLowerCase();})){
+      alert('Vokabel "'+wordObj.word+'" ist in "'+dstCh.title+'" bereits vorhanden.'); return;
+    }
+    var newSrcWords=srcCh.words.filter(function(_,i){return i!==wordIdx;});
+    // If src becomes empty, add to "Allgemein" fallback — but we just move it
+    var newDstWords=(dstCh.words||[]).concat([wordObj]);
+    var newChapters=chapters.map(function(c){
+      if(c.id===topicId) return Object.assign({},c,{words:newSrcWords});
+      if(c.id===newTopicId) return Object.assign({},c,{words:newDstWords});
+      return c;
+    });
+    setChapters(newChapters);
+    sbPatch('chapters',{words:JSON.stringify(newSrcWords)},'id=eq.'+topicId);
+    sbPatch('chapters',{words:JSON.stringify(newDstWords)},'id=eq.'+newTopicId);
+    setEditingWord(null);
+  }
+
+  function renameTopic(id,val){
+    if(!val.trim()) return;
+    sbPatch('chapters',{title:val.trim()},'id=eq.'+id).then(function(){
+      setChapters(function(prev){return prev.map(function(c){return c.id===id?Object.assign({},c,{title:val.trim()}):c;});});
+    });
+    setTopicRename(null);
+  }
+
+  function setInactive(ch){
+    if(!confirm('"'+ch.title+'" inaktiv setzen?')) return;
+    sbPatch('chapters',{is_inactive:true},'id=eq.'+ch.id).then(function(){
+      setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:true}):c;});});
+    });
+  }
+  function setActive(ch){
+    sbPatch('chapters',{is_inactive:false},'id=eq.'+ch.id).then(function(){
+      setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:false}):c;});});
+    });
+  }
+  function finalDelete(ch){
+    if(!confirm('"'+ch.title+'" endgültig löschen?')) return;
+    sbDel('chapters','id=eq.'+ch.id).then(function(){
+      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
+    });
+  }
+
+  return <div>
+    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>
+      📚 Kapitel ({topLevel.length}) · {topics.length} Themenbereiche
+    </div>
+    {topLevel.map(function(kap){
+      var kapTopics=topics.filter(function(t){return t.parent_id===kap.id;});
+      var totalW=kapTopics.reduce(function(s,t){return s+t.words.length;},0);
+      var totalI=kapTopics.reduce(function(s,t){return s+t.words.filter(function(w){return w.important;}).length;},0);
+      var isOpen=!!openKap[kap.id];
+      var isInactive=!!kap.is_inactive;
+      return <div key={kap.id} style={{marginBottom:10,border:'2px solid '+(isInactive?G200:kap.color+'50'),borderRadius:12,overflow:'hidden',opacity:isInactive?0.55:1}}>
+        {/* Kapitel header — clickable to expand */}
+        <div onClick={function(){if(!isInactive)toggleKap(kap.id);}}
+          style={{background:isInactive?G100:kap.color+'20',padding:'10px 12px',display:'flex',alignItems:'center',gap:8,cursor:isInactive?'default':'pointer'}}>
+          <span style={{fontSize:18,transition:'transform 0.2s',display:'inline-block',transform:isOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+          <span style={{fontSize:18}}>{kap.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:kap.color}}>
+              {kap.title}
+              {isInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 6px',borderRadius:8}}>inaktiv</span>}
+            </div>
+            <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
+          </div>
+          <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+            {isInactive
+              ? <button onClick={function(){setActive(kap);}} style={BtnStyle(GR,'white',{padding:'3px 8px',fontSize:10})}>▶ Aktivieren</button>
+              : <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+kap.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===kap.id?Object.assign({},c,{title:n.trim()}):c;});});});}} style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
+            }
+            {!kap.is_builtin&&(isInactive
+              ? <button onClick={function(){finalDelete(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑 Löschen</button>
+              : <button onClick={function(){setInactive(kap);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'3px 8px',fontSize:10})}>⏸ Inaktiv</button>
+            )}
+          </div>
+        </div>
+
+        {/* Themenbereiche — shown when Kapitel expanded */}
+        {isOpen&&<div>
+          {kapTopics.length===0&&<div style={{padding:'10px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche.</div>}
+          {kapTopics.map(function(t){
+            var isTopicOpen=!!openTopic[t.id];
+            var isTopicInactive=!!t.is_inactive;
+            return <div key={t.id} style={{borderTop:'1px solid '+G100,background:isTopicInactive?G50:'white',opacity:isTopicInactive?0.6:1}}>
+              {/* Topic row — clickable to expand words */}
+              <div onClick={function(){if(!isTopicInactive)toggleTopic(t.id);}}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 28px',cursor:isTopicInactive?'default':'pointer',
+                  background:isTopicOpen?kap.color+'08':'transparent'}}>
+                <span style={{fontSize:13,transition:'transform 0.2s',display:'inline-block',transform:isTopicOpen?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
+                <span style={{fontSize:14}}>{t.icon}</span>
+                <div style={{flex:1}}>
+                  {topicRename===t.id
+                    ? <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+                        <input value={renameVal} onChange={function(e){setRenameVal(e.target.value);}}
+                          onKeyDown={function(e){if(e.key==='Enter')renameTopic(t.id,renameVal);if(e.key==='Escape')setTopicRename(null);}}
+                          autoFocus style={{flex:1,padding:'3px 6px',fontSize:13,border:'1.5px solid '+T,borderRadius:6,outline:'none'}}/>
+                        <button onClick={function(){renameTopic(t.id,renameVal);}} style={BtnStyle(T,'white',{padding:'3px 8px',fontSize:11})}>✓</button>
+                        <button onClick={function(){setTopicRename(null);}} style={BtnStyle(G100,G600,{padding:'3px 6px',fontSize:11})}>✕</button>
+                      </div>
+                    : <div style={{fontSize:12,fontWeight:'bold',color:isTopicInactive?G400:G600}}>{t.title}
+                        {isTopicInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 5px',borderRadius:8}}>inaktiv</span>}
+                      </div>
+                  }
+                  <div style={{fontSize:10,color:G400}}>{t.words.length}V · {t.words.filter(function(w){return w.important;}).length}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
+                </div>
+                <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
+                  {isTopicInactive
+                    ? <button onClick={function(){setActive(t);}} style={BtnStyle(GR,'white',{padding:'2px 6px',fontSize:10})}>▶ Aktiv</button>
+                    : <button onClick={function(){setTopicRename(t.id);setRenameVal(t.title);}} style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
+                  }
+                  {!t.is_builtin&&(isTopicInactive
+                    ? <button onClick={function(){finalDelete(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>
+                    : <button onClick={function(){setInactive(t);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'2px 6px',fontSize:10})}>⏸</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Vokabeln — shown when topic expanded */}
+              {isTopicOpen&&<div style={{padding:'6px 12px 10px 48px',background:kap.color+'05'}}>
+                {t.words.length===0&&<div style={{color:G400,fontSize:11,padding:'6px 0'}}>Keine Vokabeln.</div>}
+                {t.words.map(function(w,wi){
+                  var ekey=t.id+':'+wi;
+                  var isEditing=editingWord&&editingWord.key===ekey;
+                  return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',
+                    borderBottom:'1px solid '+G50,background:isEditing?kap.color+'10':'transparent',
+                    borderRadius:isEditing?6:0,paddingLeft:isEditing?6:0}}>
+                    {/* Important toggle */}
+                    <button onClick={function(){saveWordChange(t.id,wi,{important:!w.important});}}
+                      title={w.important?'Normal markieren':'Als wichtig/fett markieren'}
+                      style={{width:22,height:22,borderRadius:4,border:'1.5px solid '+(w.important?AM:G200),
+                        background:w.important?AM:'white',cursor:'pointer',flexShrink:0,
+                        display:'flex',alignItems:'center',justifyContent:'center',fontSize:11}}>
+                      {w.important?'⭐':'☆'}
+                    </button>
+                    <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1,color:G900}}>{w.word}</span>
+                    <span style={{fontSize:11,color:G400,minWidth:60}}>{w.clue}</span>
+                    {/* Edit button — move to other topic */}
+                    <button onClick={function(){setEditingWord(isEditing?null:{key:ekey,topicId:t.id,wordIdx:wi,word:w});}}
+                      style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+(isEditing?T:G200),
+                        background:isEditing?TL:'transparent',cursor:'pointer',color:isEditing?T:G400,flexShrink:0}}>
+                      {isEditing?'✕':'↔'}
+                    </button>
+                    {isEditing&&<div style={{position:'absolute',left:48,right:8,marginTop:28,background:'white',
+                      border:'1.5px solid '+T,borderRadius:8,padding:8,zIndex:10,boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
+                      <div style={{fontSize:11,color:G600,marginBottom:5}}>Verschieben nach Themenbereich:</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                        {topics.filter(function(tp){return tp.id!==t.id;}).map(function(tp){
+                          var par2=chapters.find(function(p){return p.id===tp.parent_id;});
+                          return <button key={tp.id} onClick={function(){moveWordToTopic(t.id,wi,tp.id);}}
+                            style={{padding:'3px 8px',borderRadius:7,border:'1.5px solid '+(par2?par2.color:G200),
+                              background:(par2?par2.color:G200)+'15',cursor:'pointer',fontSize:11,color:par2?par2.color:G600}}>
+                            {tp.icon} {tp.title}
+                          </button>;
+                        })}
+                      </div>
+                    </div>}
+                  </div>;
+                })}
+              </div>}
+            </div>;
+          })}
+        </div>}
+      </div>;
+    })}
+    {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel.</div>}
   </div>;
 }
 
@@ -2668,10 +2914,18 @@ NUR JSON antworten (kein Markdown):
 
   function delCh(ch) {
     if(ch.is_builtin) return;
-    if(!confirm('"'+ch.title+'" löschen?')) return;
-    sbDel('chapters','id=eq.'+ch.id).then(function(){
-      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
-    });
+    // Soft-delete: set inactive first; only final-delete if already inactive
+    if(ch.is_inactive) {
+      if(!confirm('"'+ch.title+'" endgültig löschen? Das kann nicht rückgängig gemacht werden!')) return;
+      sbDel('chapters','id=eq.'+ch.id).then(function(){
+        setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
+      });
+    } else {
+      if(!confirm('"'+ch.title+'" inaktiv setzen? Es kann später wieder aktiviert werden.')) return;
+      sbPatch('chapters',{is_inactive:true},'id=eq.'+ch.id).then(function(){
+        setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:true}):c;});});
+      });
+    }
   }
 
   return(
@@ -2683,7 +2937,7 @@ NUR JSON antworten (kein Markdown):
           ['users', pendingCount>0?'👤 Benutzer ('+pendingCount+' ⏳)':'👤 Benutzer'],
           ['chapters','📚 Kapitel & Upload'],
           ['leiterspiel','🎯 Leiterspiel'],
-          ['search','🔍 Vokabel-Suche']
+          ['search','🔍 Suche & Verwaltung']
         ];
         return tabList.map(function(pair){
           return <button key={pair[0]} onClick={function(){setTab(pair[0]);}} style={BtnStyle(tab===pair[0]?T:G100,tab===pair[0]?'white':G600,{padding:'7px 14px',fontSize:12})}>{pair[1]}</button>;
@@ -2799,8 +3053,7 @@ NUR JSON antworten (kein Markdown):
 
       {/* SEARCH TAB */}
       {tab==='search'&&(
-        <VocabSearch chapters={chapters} player={player} allCategories={allCategories}
-          onCategoryChange={function(){sbGet('categories','select=*').then(function(cats){if(Array.isArray(cats)&&cats.length) setAllCategories(cats);});}}/>
+        <VocabSearch chapters={chapters}/>
       )}
 
       {/* CHAPTERS TAB */}
@@ -2877,44 +3130,7 @@ NUR JSON antworten (kein Markdown):
           </div>
 
           {/* Chapter list */}
-          {(function(){
-            var topLevel=chapters.filter(function(c){return !c.parent_id;});
-            var topics=chapters.filter(function(c){return !!c.parent_id;});
-            return <div>
-              <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>📚 Kapitel ({topLevel.length}) · {topics.length} Themenbereiche</div>
-              {topLevel.map(function(kap){
-                var kapTopics=topics.filter(function(t){return t.parent_id===kap.id;});
-                var totalW=kapTopics.reduce(function(s,t){return s+t.words.length;},0);
-                var totalI=kapTopics.reduce(function(s,t){return s+t.words.filter(function(w){return w.important;}).length;},0);
-                return <div key={kap.id} style={{marginBottom:10,border:'2px solid '+kap.color+'50',borderRadius:12,overflow:'hidden'}}>
-                  <div style={{background:kap.color+'20',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:20}}>{kap.icon}</span>
-                    <div style={{flex:1}}>
-                      <div style={{fontWeight:'bold',fontSize:14,color:kap.color}}>{kap.title}</div>
-                      <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
-                    </div>
-                    <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+kap.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===kap.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
-                      style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
-                    {!kap.is_builtin&&<button onClick={function(){delCh(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑</button>}
-                  </div>
-                  {kapTopics.map(function(t){
-                    return <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 24px',borderTop:'1px solid '+G100,background:'white'}}>
-                      <span>{t.icon}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12,fontWeight:'bold',color:G600}}>{t.title}</div>
-                        <div style={{fontSize:10,color:G400}}>{t.words.length}V · {t.words.filter(function(w){return w.important;}).length}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
-                      </div>
-                      <button onClick={function(){var n=prompt('Neuer Name:',t.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+t.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===t.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
-                        style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
-                      {!t.is_builtin&&<button onClick={function(){delCh(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>}
-                    </div>;
-                  })}
-                  {kapTopics.length===0&&<div style={{padding:'8px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche.</div>}
-                </div>;
-              })}
-              {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel. Oben "Neues Kapitel" erstellen.</div>}
-            </div>;
-          })()}
+          <ChapterTree chapters={chapters} setChapters={setChapters}/>
         </div>
       )}
     </div>
@@ -3237,7 +3453,7 @@ function App() {
   }, []);
 
   useEffect(function() {
-    sbGet('chapters','select=id,title,color,icon,is_builtin,parent_id,words,sentences&order=created_at.asc').then(function(rows){
+    sbGet('chapters','select=id,title,color,icon,is_builtin,is_inactive,parent_id,words,sentences&order=created_at.asc').then(function(rows){
       if (!Array.isArray(rows) || rows.length === 0) return;
       var parsed = rows.map(function(c) {
         var w = c.words, s = c.sentences;
