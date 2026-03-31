@@ -110,7 +110,8 @@ function hashPw(pw) {
 
 // ── Built-in Chapters ─────────────────────────────────────────
 const BUILTIN = [
-  { id: "c1", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
+  { id: "ch_kapitel4", parent_id: null, title: "Kapitel 4", color: "#0369a1", icon: "📗", is_builtin: false, sentences: [], words: [] },
+  { id: "c1", parent_id: "ch_kapitel4", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
     { word: "birthday", clue: "Geburtstag", important: true, topic: "c1" }, { word: "calendar", clue: "Kalender", important: true, topic: "c1" },
     { word: "sing", clue: "singen", important: false, topic: "c1" }, { word: "month", clue: "Monat", important: true, topic: "c1" },
     { word: "celebrate", clue: "feiern", important: true, topic: "c1" }, { word: "enjoy", clue: "genießen", important: true, topic: "c1" },
@@ -122,7 +123,7 @@ const BUILTIN = [
     { word: "third", clue: "dritte(r,s)", important: true, topic: "c1" }, { word: "dream", clue: "Traum", important: true, topic: "c1" },
     { word: "something", clue: "etwas", important: true, topic: "c1" }, { word: "ride", clue: "reiten, fahren", important: false, topic: "c1" },
   ]},
-  { id: "c2", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
+  { id: "c2", parent_id: "ch_kapitel4", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
     { word: "fireworks", clue: "Feuerwerk", important: true, topic: "c2" }, { word: "present", clue: "Geschenk", important: true, topic: "c2" },
     { word: "drink", clue: "Getränk", important: false, topic: "c2" }, { word: "ice", clue: "Eis", important: false, topic: "c2" },
     { word: "wonderful", clue: "wunderbar", important: true, topic: "c2" }, { word: "price", clue: "Preis", important: true, topic: "c2" },
@@ -132,7 +133,7 @@ const BUILTIN = [
     { word: "lazy", clue: "faul, träge", important: true, topic: "c2" }, { word: "sleep", clue: "schlafen", important: true, topic: "c2" },
     { word: "buffet", clue: "Büfett", important: false, topic: "c2" }, { word: "coffee", clue: "Kaffee", important: false, topic: "c2" },
   ]},
-  { id: "c3", title: "Monate", color: "#b45309", icon: "📅", is_builtin: true, sentences: [], words: [
+  { id: "c3", parent_id: "ch_kapitel4", title: "Monate", color: "#b45309", icon: "📅", is_builtin: true, sentences: [], words: [
     { word: "January", clue: "Januar", important: true, topic: "c3" }, { word: "February", clue: "Februar", important: true, topic: "c3" },
     { word: "March", clue: "März", important: true, topic: "c3" }, { word: "April", clue: "April", important: true, topic: "c3" },
     { word: "May", clue: "Mai", important: true, topic: "c3" }, { word: "June", clue: "Juni", important: true, topic: "c3" },
@@ -140,7 +141,7 @@ const BUILTIN = [
     { word: "September", clue: "September", important: true, topic: "c3" }, { word: "October", clue: "Oktober", important: true, topic: "c3" },
     { word: "November", clue: "November", important: true, topic: "c3" }, { word: "December", clue: "Dezember", important: true, topic: "c3" },
   ]},
-  { id: "c4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
+  { id: "c4", parent_id: "ch_kapitel4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
     { word: "holiday", clue: "Urlaub, Ferien", important: true, topic: "c4" }, { word: "text", clue: "SMS senden", important: true, topic: "c4" },
     { word: "shop", clue: "einkaufen", important: true, topic: "c4" }, { word: "score", clue: "Tor schießen", important: true, topic: "c4" },
     { word: "goal", clue: "Ziel, Tor", important: true, topic: "c4" }, { word: "collect", clue: "(ein)sammeln", important: true, topic: "c4" },
@@ -149,14 +150,14 @@ const BUILTIN = [
     { word: "plan", clue: "planen", important: true, topic: "c4" }, { word: "field", clue: "Spielfeld", important: false, topic: "c4" },
     { word: "fun", clue: "Spaß", important: false, topic: "c4" }, { word: "gym", clue: "Turnhalle", important: false, topic: "c4" },
   ]},
-  { id: "c5", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
+  { id: "c5", parent_id: "ch_kapitel4", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
     { word: "cheap", clue: "billig, preiswert", important: true, topic: "c5" }, { word: "expensive", clue: "teuer", important: true, topic: "c5" },
     { word: "customer", clue: "Kunde/Kundin", important: true, topic: "c5" }, { word: "any", clue: "(irgend)ein(e)", important: true, topic: "c5" },
     { word: "somebody", clue: "(irgend)jemand", important: true, topic: "c5" }, { word: "just", clue: "nur, gerade", important: true, topic: "c5" },
     { word: "home", clue: "zu Hause", important: true, topic: "c5" }, { word: "have", clue: "haben, trinken", important: true, topic: "c5" },
     { word: "put", clue: "setzen, legen", important: false, topic: "c5" }, { word: "everything", clue: "alles", important: false, topic: "c5" },
   ]},
-  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: null, sentences: [], words: [] },
+  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: "ch_kapitel4", sentences: [], words: [] },
 ];
 
 // ── Colors ────────────────────────────────────────────────────
@@ -3550,12 +3551,7 @@ function App() {
       var dbIds = new Set(merged.map(function(c){ return c.id; }));
       BUILTIN.forEach(function(b) {
         if (!dbIds.has(b.id)) {
-          if (b.id === 'allgemein') {
-            var topKap=merged.find(function(c){return !c.parent_id&&c.id!=='allgemein';});
-            merged.push(Object.assign({},b,{parent_id:topKap?topKap.id:null}));
-          } else {
-            merged.push(b);
-          }
+          merged.push(b); // already has parent_id set in BUILTIN
         }
       });
       setChapters(merged);
