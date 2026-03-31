@@ -924,7 +924,7 @@ function QuizSolo({ chapters, onDone }) {
   );
 }
 
-// ── Quiz Duel (turn-based) ─────────────────────────────────────
+// ── Quiz Duel (async, turn-based) ─────────────────────────────
 function QuizDuel({ chapters, player, onDone }) {
   var [phase, setPhase] = useState("setup"); // setup | invite | waiting | playing | roundResult | finalResult
   var [myCode, setMyCode] = useState("");
@@ -1501,7 +1501,8 @@ function BrowseChapter({ ch }) {
 // ── Admin ─────────────────────────────────────────────────────
 
 // ══════════════════════════════════════════════════════════════
-// LEITERSPIEL — 5-Topf System
+// LEITERSPIEL — Persistentes Speichern + 5-Topf-System
+// REGEL: Nach jeder Antwort sofort mit Supabase synchronisieren
 // ══════════════════════════════════════════════════════════════
 
 var DEFAULT_STREAK = {
@@ -1509,23 +1510,24 @@ var DEFAULT_STREAK = {
   downThresholds: {1:0, 2:1, 3:1, 4:1}
 };
 
-function lsGetRuns()                  { return sbGet('ls_runs','select=*&order=created_at.desc'); }
-function lsGetProgress(pid, rid)      {
-  var ok=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if(!ok.test(pid)||!ok.test(rid)) return Promise.resolve([]);
+function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
+function lsGetProgress(pid, rid) {
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]);
   return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*');
 }
-function lsSaveProgress(pid,rid,data,eid) {
-  var ok=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if(!ok.test(pid)||!ok.test(rid)) return Promise.resolve({_ok:true});
-  if(eid) return sbPatch('ls_progress',{data:JSON.stringify(data),updated_at:new Date().toISOString()},'id=eq.'+eid);
-  return sbPost('ls_progress',{player_id:pid,run_id:rid,data:JSON.stringify(data),updated_at:new Date().toISOString()});
+function lsSaveProgress(pid, rid, data, eid) {
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true});
+  var payload = {data: JSON.stringify(data), updated_at: new Date().toISOString()};
+  if(eid) return sbPatch('ls_progress', payload, 'id=eq.'+eid);
+  return sbPost('ls_progress', Object.assign({player_id:pid, run_id:rid}, payload));
 }
 
 function lsInitProgress(words, sentences) {
   return {
     pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[]},
-    sentences:sentences.map(function(s){return{text:s.text,translation:s.translation,streak:0};}),
+    sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),
     bonusStarted:false, history:[], lastWord:null, streak:0
   };
 }
@@ -1545,8 +1547,8 @@ function lsPercent(progress, gs) {
 
 function lsGrade(pct, gs) {
   if(!gs||!gs.grades) return null;
-  var correct=Math.round(pct/100*gs.testSize);
-  var errors=gs.testSize-correct;
+  var correct=Math.round(pct/100*(gs.testSize||20));
+  var errors=(gs.testSize||20)-correct;
   var sorted=(gs.grades||[]).slice().sort(function(a,b){return a.maxErrors-b.maxErrors;});
   for(var i=0;i<sorted.length;i++) if(errors<=sorted[i].maxErrors) return sorted[i].grade;
   return sorted.length?sorted[sorted.length-1].grade+1:null;
@@ -1562,13 +1564,12 @@ function lsPickWord(progress, lastWord) {
   if(cands.length===0&&lastWord){
     [1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push({word:w,pot:pot});});});
   }
-  if(cands.length===0) return null;
-  return shuffleArr(cands)[0];
+  return cands.length?shuffleArr(cands)[0]:null;
 }
 
-// ── T2LetterField: click to add, drag to reorder ─────────────
+// ── T2LetterField: Buchstaben antippen oder drag & drop ───────
 function T2LetterField({ word, onCorrect, onWrong }) {
-  var initLetters = useMemo(function(){
+  var initLetters=useMemo(function(){
     return shuffleArr(word.split('').map(function(l,i){return{l:l,id:'t2_'+i};}));
   },[word]);
 
@@ -1579,44 +1580,33 @@ function T2LetterField({ word, onCorrect, onWrong }) {
   var [overZone,setOverZone]=useState(null);
   var [overIdx,setOverIdx]=useState(null);
   var [checked,setChecked]=useState(false);
-  var [isCorrect,setIsCorrect]=useState(null);
+  var [correct,setCorrect]=useState(null);
 
   useEffect(function(){
-    var nl=shuffleArr(word.split('').map(function(l,i){return{l:l,id:'t2_'+i};}));
-    setSource(nl);setAnswer([]);setChecked(false);setIsCorrect(null);
+    setSource(shuffleArr(word.split('').map(function(l,i){return{l:l,id:'t2_'+i};})));
+    setAnswer([]); setChecked(false); setCorrect(null);
   },[word]);
 
   function getTile(id){return source.find(function(t){return t.id===id;})||answer.find(function(t){return t.id===id;});}
-
-  function clickFromSource(tile){
+  function moveToAnswer(tile,idx){
     setSource(function(s){return s.filter(function(t){return t.id!==tile.id;});});
-    setAnswer(function(a){return a.concat([tile]);});
+    setAnswer(function(a){var na=a.filter(function(t){return t.id!==tile.id;});if(typeof idx==='number')na.splice(idx,0,tile);else na.push(tile);return na;});
   }
-  function clickFromAnswer(tile){
-    setAnswer(function(a){return a.filter(function(t){return t.id!==tile.id;});});
-    setSource(function(s){return s.concat([tile]);});
-  }
-
-  function moveSourceToAnswer(tile,idx){
-    setSource(function(s){return s.filter(function(t){return t.id!==tile.id;});});
-    setAnswer(function(a){var na=a.slice();if(typeof idx==='number')na.splice(idx,0,tile);else na.push(tile);return na;});
-  }
-  function moveAnswerToSource(tile){
+  function moveToSource(tile){
     setAnswer(function(a){return a.filter(function(t){return t.id!==tile.id;});});
     setSource(function(s){return s.concat([tile]);});
   }
   function reorderAnswer(tile,idx){
     setAnswer(function(a){var na=a.filter(function(t){return t.id!==tile.id;});if(typeof idx==='number')na.splice(idx,0,tile);else na.push(tile);return na;});
   }
-
   function check(){
     var typed=answer.map(function(t){return t.l;}).join('');
     var ok=typed===word;
-    setChecked(true);setIsCorrect(ok);
+    setChecked(true); setCorrect(ok);
     if(ok) onCorrect(); else onWrong();
   }
-
   var complete=answer.length===word.length;
+
   var tileBase={display:'inline-flex',alignItems:'center',justifyContent:'center',width:38,height:38,borderRadius:6,fontSize:18,fontWeight:'bold',cursor:checked?'default':'pointer',userSelect:'none',touchAction:'none',flexShrink:0,transition:'border-color 0.1s'};
 
   function dropOnAnswer(e,insertIdx){
@@ -1624,7 +1614,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
     if(!dragId) return;
     var tile=getTile(dragId);
     if(!tile) return;
-    if(dragFrom==='source') moveSourceToAnswer(tile,insertIdx);
+    if(dragFrom==='source') moveToAnswer(tile,insertIdx);
     else reorderAnswer(tile,insertIdx);
     setDragId(null);setDragFrom(null);setOverZone(null);setOverIdx(null);
   }
@@ -1634,7 +1624,6 @@ function T2LetterField({ word, onCorrect, onWrong }) {
       {/* Answer zone */}
       <div onDragOver={function(e){e.preventDefault();setOverZone('answer');}}
         onDrop={function(e){dropOnAnswer(e,answer.length);}}
-        onDragLeave={function(e){if(!e.currentTarget.contains(e.relatedTarget)){setOverZone(null);setOverIdx(null);}}}
         style={{display:'flex',flexWrap:'wrap',gap:5,minHeight:54,padding:8,borderRadius:8,border:'2px solid '+(overZone==='answer'?'#0369a1':'#93c5fd'),background:overZone==='answer'?'#eff6ff':'#f0f9ff',marginBottom:8,alignItems:'center',justifyContent:'center',position:'relative'}}>
         <div style={{position:'absolute',top:3,left:8,fontSize:10,color:'#93c5fd'}}>Antwortfeld</div>
         {answer.length===0&&<span style={{color:G400,fontSize:12,marginTop:8}}>Antippen oder hierher ziehen</span>}
@@ -1649,7 +1638,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
               <div draggable={!checked}
                 onDragStart={function(){if(!checked){setDragId(tile.id);setDragFrom('answer');}}}
                 onDragEnd={function(){setDragId(null);setOverZone(null);setOverIdx(null);}}
-                onClick={function(){if(!checked)clickFromAnswer(tile);}}
+                onClick={function(){if(!checked)moveToSource(tile);}}
                 style={Object.assign({},tileBase,
                   {border:'1.5px solid '+(dragId===tile.id?'#93c5fd':corr?'#22c55e':wrng?'#ef4444':'#0369a1'),
                   background:dragId===tile.id?'#dbeafe':corr?'#dcfce7':wrng?'#fee2e2':'#eff6ff',
@@ -1663,10 +1652,9 @@ function T2LetterField({ word, onCorrect, onWrong }) {
           onDrop={function(e){dropOnAnswer(e,answer.length);}}
           style={{width:overIdx===answer.length?4:6,height:38,background:overIdx===answer.length?'#0369a1':'transparent',borderRadius:2,transition:'width 0.12s'}}/>}
       </div>
-
       {/* Source zone */}
       <div onDragOver={function(e){e.preventDefault();setOverZone('source');}}
-        onDrop={function(e){e.preventDefault();if(!dragId||dragFrom!=='answer')return;var t=getTile(dragId);if(t)moveAnswerToSource(t);setDragId(null);setDragFrom(null);setOverZone(null);}}
+        onDrop={function(e){e.preventDefault();if(!dragId||dragFrom!=='answer')return;var t=getTile(dragId);if(t)moveToSource(t);setDragId(null);setDragFrom(null);setOverZone(null);}}
         style={{display:'flex',flexWrap:'wrap',gap:5,minHeight:46,padding:'6px 8px',borderRadius:8,border:'1px dashed '+(overZone==='source'?'#0369a1':G200),background:overZone==='source'?'#eff6ff':G50,alignItems:'center',justifyContent:'center',marginBottom:10}}>
         <div style={{fontSize:10,color:G400,width:'100%',textAlign:'center'}}>Vorrat — antippen oder ziehen</div>
         {source.length===0&&<span style={{color:G400,fontSize:11}}>Alle eingesetzt</span>}
@@ -1674,13 +1662,12 @@ function T2LetterField({ word, onCorrect, onWrong }) {
           return <div key={tile.id} draggable={!checked}
             onDragStart={function(){if(!checked){setDragId(tile.id);setDragFrom('source');}}}
             onDragEnd={function(){setDragId(null);setOverZone(null);}}
-            onClick={function(){if(!checked)clickFromSource(tile);}}
+            onClick={function(){if(!checked)moveToAnswer(tile);}}
             style={Object.assign({},tileBase,{border:'1.5px solid '+(dragId===tile.id?'#93c5fd':G200),background:dragId===tile.id?'#dbeafe':G50,color:G900,opacity:dragId===tile.id?0.4:1})}>
             {tile.l.toUpperCase()}
           </div>;
         })}
       </div>
-
       {!checked&&<button onClick={check} disabled={!complete}
         style={BtnStyle(complete?'#f97316':G400,'white',{width:'100%',padding:'12px',opacity:complete?1:0.6,touchAction:'manipulation'})}>
         {complete?'✓ Prüfen':'Alle Buchstaben einsetzen'}
@@ -1689,16 +1676,15 @@ function T2LetterField({ word, onCorrect, onWrong }) {
   );
 }
 
-// ── GradeDisplay ─────────────────────────────────────────────
+// ── GradeDisplay + CelebrationPopup ──────────────────────────
 function GradeDisplay({ grade, size }) {
   if(!grade) return null;
   var colors={1:'#22c55e',2:'#84cc16',3:'#f59e0b',4:'#f97316',5:'#ef4444',6:'#dc2626'};
   return <span style={{fontWeight:'bold',fontSize:size||28,color:colors[grade]||G400}}>{grade}</span>;
 }
 
-// ── CelebrationPopup ─────────────────────────────────────────
 function CelebrationPopup({ newGrade, onClose }) {
-  var msgs={1:'🏆 Note 1 — Perfekt!',2:'🥈 Note 2 — Sehr gut!',3:'💪 Note 3 — Gut!',4:'👍 Note 4 — Weiter so!'};
+  var msgs={1:'🏆 Note 1 — Perfekt!',2:'🥈 Note 2 — Sehr gut!',3:'💪 Note 3 — Gut!',4:'👍 Weiter so!'};
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:20}}>
       <div style={{background:'white',borderRadius:20,padding:30,textAlign:'center',maxWidth:300,width:'100%'}}>
@@ -1712,7 +1698,7 @@ function CelebrationPopup({ newGrade, onClose }) {
   );
 }
 
-// ── LeitersSpielSession — 5-Topf ─────────────────────────────
+// ── LeitersSpielSession — 5-Topf mit persistentem Speichern ──
 function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBack }) {
   var ss=streakSettings||DEFAULT_STREAK;
   var [progress,setProgress]=useState(null);
@@ -1721,8 +1707,10 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var [result,setResult]=useState(null);
   var [loading,setLoading]=useState(true);
   var [saving,setSaving]=useState(false);
+  var [saveErr,setSaveErr]=useState(false);
   var [celebration,setCelebration]=useState(null);
-  var [view,setView]=useState('learn');
+  var [view,setView]=useState('learn'); // 'learn'|'pots'
+  var [openPot,setOpenPot]=useState(null); // which pot is expanded
   var [quizAnswers,setQuizAnswers]=useState([]);
   var [typeInput,setTypeInput]=useState('');
   var [sentInput,setSentInput]=useState('');
@@ -1732,13 +1720,14 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var words=useMemo(function(){try{return JSON.parse(run.words||'[]');}catch(e){return[];}});
   var sentences=useMemo(function(){try{return JSON.parse(run.sentences||'[]');}catch(e){return[];}});
 
+  // Load or init
   useEffect(function(){
     if(!player) return;
     lsGetProgress(player.id,run.id).then(function(rows){
       if(Array.isArray(rows)&&rows.length>0){
         var row=rows[0]; setProgressId(row.id);
         var data=JSON.parse(row.data||'{}');
-        // Migration: 4→5 pots
+        // Migrate 4→5 pots
         if(data.pots&&data.pots[4]&&!data.pots[5]){
           data.pots[5]=data.pots[4]; data.pots[4]=data.pots[3];
           data.pots[3]=data.pots[2]; data.pots[2]=[];
@@ -1753,29 +1742,48 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     });
   },[]);
 
+  // Build quiz answers for pot 1
+  // REGEL: Deutsches Wort zeigen → 4 englische Optionen
+  // Ähnlichkeiten: Verben bei Verben, etc. (einfache Heuristik via Suffix)
   useEffect(function(){
     if(!currentItem||currentItem.pot!==1||!progress) return;
     var correct=currentItem.word;
-    var distractors=shuffleArr(words.filter(function(w){return w.word!==correct.word;})).slice(0,3);
+    // Try to find similar-type words as distractors
+    var allWords=words.filter(function(w){return w.word!==correct.word;});
+    // Heuristic: group by word ending / type
+    function getType(w){
+      var word=w.word.toLowerCase();
+      if(['ing','ed','ate','ise','ize','ify'].some(function(s){return word.endsWith(s);})) return 'verb';
+      if(['ful','less','ous','ive','ent','ant','al','tic'].some(function(s){return word.endsWith(s);})) return 'adj';
+      if(['tion','ment','ness','ity','ance','ence','er','or','ist'].some(function(s){return word.endsWith(s);})) return 'noun';
+      return 'other';
+    }
+    var cType=getType(correct);
+    var similar=allWords.filter(function(w){return getType(w)===cType;});
+    var pool=similar.length>=3?similar:allWords;
+    var distractors=shuffleArr(pool).slice(0,3);
     setQuizAnswers(shuffleArr([correct].concat(distractors)));
   },[currentItem]);
 
+  // Focus type input
   useEffect(function(){
     if(!currentItem||currentItem.pot<3||result) return;
     setTypeInput('');
     setTimeout(function(){if(typeInputRef.current)typeInputRef.current.focus();},100);
   },[currentItem,result]);
 
-  function saveProgress(np){
+  // ── Persistent save: called after EVERY answer ──
+  function saveProgress(np) {
     if(!player||!run.id) return;
-    setSaving(true);
+    setSaving(true); setSaveErr(false);
     lsSaveProgress(player.id,run.id,np,progressId).then(function(res){
       setSaving(false);
+      if(res&&res._err){ setSaveErr(true); return; }
       if(res&&res.id&&!progressId) setProgressId(res.id);
-    });
+    }).catch(function(){ setSaving(false); setSaveErr(true); });
   }
 
-  function handleAnswer(isCorrect){
+  function handleAnswer(isCorrect) {
     if(!currentItem||result) return;
     var np=JSON.parse(JSON.stringify(progress));
     var pot=currentItem.pot;
@@ -1791,9 +1799,8 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
       if(upT>0&&word.streak>=upT){
         np.pots[pot].splice(widx,1); word.streak=0; word.wrongStreak=0;
         var nextPot=Math.min(pot+1,5); np.pots[nextPot].push(word);
-        var newPct=lsPercent(np,gradeSettings);
+        var newGr=lsGrade(lsPercent(np,gradeSettings),gradeSettings);
         var oldGr=lsGrade(lsPercent(progress,gradeSettings),gradeSettings);
-        var newGr=lsGrade(newPct,gradeSettings);
         if(newGr&&oldGr&&newGr<oldGr) setCelebration(newGr);
         if(!np.bonusStarted&&np.pots[1].length===0&&np.pots[2].length===0&&np.pots[3].length===0&&np.pots[4].length===0&&np.sentences.length>0) np.bonusStarted=true;
       }
@@ -1806,11 +1813,15 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     }
     np.lastWord=currentItem.word.word;
     np.history=(np.history||[]).concat([{date:new Date().toISOString(),grade:lsGrade(lsPercent(np,gradeSettings),gradeSettings),percent:lsPercent(np,gradeSettings)}]).slice(-100);
-    setProgress(np); setResult({correct:isCorrect}); saveProgress(np);
+
+    setProgress(np);
+    setResult({correct:isCorrect, typed:typeInput, expected:currentItem.pot===2?currentItem.word.word:currentItem.word.clue});
+    // ← SOFORT in Supabase speichern
+    saveProgress(np);
   }
 
   function next(){
-    setResult(null);setTypeInput('');
+    setResult(null); setTypeInput('');
     var ni=lsPickWord(progress,currentItem&&currentItem.word?currentItem.word.word:null);
     setCurrentItem(ni);
   }
@@ -1823,35 +1834,54 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var allVocabDone=(progress.pots[1]||[]).length===0&&(progress.pots[2]||[]).length===0&&(progress.pots[3]||[]).length===0&&(progress.pots[4]||[]).length===0;
   var bonusAllDone=allVocabDone&&progress.sentences.every(function(s){return s.streak>=2;});
 
-  // POTS VIEW
+  // ── POTS VIEW — klick auf Topf zeigt Vokabeln ──
+  var potLabels={1:'Topf 1 — Quiz (DE→EN)',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE→EN Tippen',4:'Topf 4 — EN→DE Tippen',5:'✅ Gelernt'};
+  var potColors={1:RE,2:'#f97316',3:AM,4:T,5:GR};
+
   if(view==='pots'){
-    var potLabels={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE→EN (Hinweis)',4:'Topf 4 — EN→DE',5:'✅ Gelernt'};
-    var potColors2={1:RE,2:'#f97316',3:AM,4:T,5:GR};
-    return <div>
-      <button onClick={function(){setView('learn');}} style={BtnStyle(G100,G600,{marginBottom:12,fontSize:12})}>← Zurück</button>
-      {[1,2,3,4,5].map(function(pot){
-        var color=potColors2[pot];
-        return <div key={pot} style={{marginBottom:8,border:'2px solid '+color+'40',borderRadius:10,overflow:'hidden'}}>
-          <div style={{background:color+'15',padding:'8px 12px',fontWeight:'bold',fontSize:12,color:color,display:'flex',justifyContent:'space-between'}}>
-            <span>{potLabels[pot]}</span><span>{(progress.pots[pot]||[]).length} Vokabeln</span>
-          </div>
-          <div style={{padding:'6px 10px'}}>
-            {(progress.pots[pot]||[]).length===0&&<div style={{color:G400,fontSize:11}}>Leer</div>}
-            {(progress.pots[pot]||[]).map(function(w,i){
-              return <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'3px 0',borderBottom:'1px solid '+G100,fontSize:11}}>
-                <span style={{fontWeight:'bold'}}>{w.word}</span><span style={{color:G400}}>{w.clue}</span>
-              </div>;
-            })}
-          </div>
-        </div>;
-      })}
-    </div>;
+    return (
+      <div>
+        <button onClick={function(){setView('learn');setOpenPot(null);}} style={BtnStyle(G100,G600,{marginBottom:12,fontSize:12})}>← Zurück</button>
+        {[1,2,3,4,5].map(function(pot){
+          var pWords=progress.pots[pot]||[];
+          var isOpen=openPot===pot;
+          return (
+            <div key={pot} style={{marginBottom:8,border:'2px solid '+potColors[pot]+'40',borderRadius:10,overflow:'hidden'}}>
+              <div onClick={function(){setOpenPot(isOpen?null:pot);}}
+                style={{background:potColors[pot]+'15',padding:'10px 12px',fontWeight:'bold',fontSize:12,color:potColors[pot],display:'flex',justifyContent:'space-between',cursor:'pointer',alignItems:'center'}}>
+                <span>{potLabels[pot]}</span>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{background:potColors[pot],color:'white',borderRadius:99,padding:'2px 8px',fontSize:12}}>{pWords.length}</span>
+                  <span style={{fontSize:12}}>{isOpen?'▲':'▼'}</span>
+                </div>
+              </div>
+              {isOpen&&<div style={{padding:'6px 10px',maxHeight:300,overflowY:'auto'}}>
+                {pWords.length===0&&<div style={{color:G400,fontSize:11,padding:'4px 0'}}>Leer</div>}
+                {pWords.map(function(w,i){
+                  return <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:'1px solid '+G50,fontSize:12}}>
+                    <div>
+                      <span style={{fontWeight:'bold',color:G900}}>{w.word}</span>
+                      <span style={{color:G400,marginLeft:8}}>{w.clue}</span>
+                    </div>
+                    <div style={{display:'flex',gap:4}}>
+                      {(w.streak||0)>0&&<span style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5}}>✓{w.streak}</span>}
+                      {(w.wrongStreak||0)>0&&<span style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5}}>✗{w.wrongStreak}</span>}
+                    </div>
+                  </div>;
+                })}
+              </div>}
+            </div>
+          );
+        })}
+      </div>
+    );
   }
 
-  // HEADER
+  // ── HEADER ──
   var p=progress.pots;
   var header=(
     <div style={{marginBottom:10}}>
+      {saveErr&&<div style={{fontSize:10,color:RE,background:'#fef2f2',padding:'3px 8px',borderRadius:5,marginBottom:4}}>⚠️ Speichern fehlgeschlagen — wird erneut versucht</div>}
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
         <div style={{flex:1}}>
           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:G400,marginBottom:3}}>
@@ -1862,11 +1892,11 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
             <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:3,transition:'width 0.5s'}}/>
           </div>
         </div>
-        <button onClick={function(){setView('pots');}} style={{fontSize:10,padding:'3px 7px',borderRadius:6,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600,flexShrink:0}}>📊</button>
+        <button onClick={function(){setView('pots');}} style={{fontSize:10,padding:'3px 7px',borderRadius:6,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600,flexShrink:0}}>📊 Töpfe</button>
       </div>
       <div style={{display:'flex',gap:3,justifyContent:'center'}}>
         {[{n:(p[1]||[]).length,c:RE,l:'T1'},{n:(p[2]||[]).length,c:'#f97316',l:'T2'},{n:(p[3]||[]).length,c:AM,l:'T3'},{n:(p[4]||[]).length,c:T,l:'T4'},{n:(p[5]||[]).length,c:GR,l:'✓'}].map(function(x,i){
-          return <div key={i} style={{textAlign:'center',padding:'2px 6px',borderRadius:5,background:x.c+'15',minWidth:34}}>
+          return <div key={i} onClick={function(){setView('pots');setOpenPot(i+1);}} style={{textAlign:'center',padding:'2px 6px',borderRadius:5,background:x.c+'15',minWidth:34,cursor:'pointer'}}>
             <div style={{fontSize:13,fontWeight:'bold',color:x.c}}>{x.n}</div>
             <div style={{fontSize:9,color:G400}}>{x.l}</div>
           </div>;
@@ -1879,6 +1909,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     </div>
   );
 
+  // Done states
   if(allVocabDone&&!progress.bonusStarted&&progress.sentences.length>0){
     return <div style={{padding:8}}>{header}
       <div style={{textAlign:'center',padding:24,background:'#d1fae5',borderRadius:14}}>
@@ -1897,17 +1928,23 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     </div>
   </div>;
 
-  // BONUS
+  // Bonus sentences
   if(progress.bonusStarted){
     var activeSent=progress.sentences.find(function(s){return s.streak<2;});
-    if(!activeSent) return <div style={{padding:8}}>{header}<div style={{textAlign:'center',padding:20,background:'#d1fae5',borderRadius:14}}><div style={{fontSize:40}}>🏆</div><div style={{fontWeight:'bold',color:'#065f46'}}>Bonusrunde fertig!</div></div></div>;
+    if(!activeSent) return <div style={{padding:8}}>{header}<div style={{textAlign:'center',padding:20,background:'#d1fae5',borderRadius:14}}><div style={{fontSize:40}}>🏆</div></div></div>;
     return <div style={{padding:8}}>
       {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
       {header}
       <div style={{background:'#7c3aed15',borderRadius:14,padding:14,marginBottom:10,textAlign:'center',border:'2px solid '+(result?result.correct?GR:RE:'#7c3aed')}}>
         <div style={{fontSize:11,color:'#7c3aed',marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>💬 Übersetze ins Deutsche:</div>
         <div style={{fontSize:17,fontWeight:'bold',color:G900,lineHeight:1.4}}>{activeSent.text}</div>
-        {result&&<div style={{marginTop:8,fontSize:13,color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Richtig: '+activeSent.translation}</div>}
+        {result&&<div style={{marginTop:8}}>
+          <div style={{fontSize:13,color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+          {!result.correct&&<div style={{marginTop:4,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+            <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {sentInput}</div>
+            <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {activeSent.translation}</div>
+          </div>}
+        </div>}
       </div>
       {!result&&<div style={{display:'flex',gap:8,marginBottom:8}}>
         <input ref={sentInputRef} value={sentInput} onChange={function(e){setSentInput(e.target.value);}}
@@ -1916,7 +1953,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
             var np=JSON.parse(JSON.stringify(progress));
             var idx=np.sentences.findIndex(function(x){return x.text===activeSent.text;});
             if(idx>=0){if(ok)np.sentences[idx].streak=Math.min((np.sentences[idx].streak||0)+1,2);else np.sentences[idx].streak=0;}
-            setProgress(np);setResult({correct:ok});saveProgress(np);setSentInput('');
+            setProgress(np); setResult({correct:ok}); saveProgress(np); setSentInput('');
           }}}
           placeholder="Deutsche Übersetzung…"
           style={{flex:1,padding:'10px 12px',fontSize:16,border:'2px solid #7c3aed',borderRadius:8,outline:'none'}}/>
@@ -1925,7 +1962,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
           var np=JSON.parse(JSON.stringify(progress));
           var idx=np.sentences.findIndex(function(x){return x.text===activeSent.text;});
           if(idx>=0){if(ok)np.sentences[idx].streak=Math.min((np.sentences[idx].streak||0)+1,2);else np.sentences[idx].streak=0;}
-          setProgress(np);setResult({correct:ok});saveProgress(np);setSentInput('');
+          setProgress(np); setResult({correct:ok}); saveProgress(np); setSentInput('');
         }} style={BtnStyle('#7c3aed','white',{padding:'10px 16px'})}>✓</button>
       </div>}
       {result&&<button onClick={function(){setResult(null);setSentInput('');}} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
@@ -1935,98 +1972,125 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   if(!currentItem) return <div style={{padding:8}}>{header}<div style={{textAlign:'center',color:G400,padding:20}}>Keine Vokabeln.</div></div>;
 
   var word=currentItem.word; var pot=currentItem.pot;
-  var potColors3={1:RE,2:'#f97316',3:AM,4:T};
-  var potLabels2={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE → EN',4:'Topf 4 — EN → DE'};
-  var potColor=potColors3[pot]||T;
+  var potColors2={1:RE,2:'#f97316',3:AM,4:T};
+  var potLabel2={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE → EN',4:'Topf 4 — EN → DE'};
 
-  // POT 1: Quiz
+  // ── POT 1: Quiz — Deutsches Wort → 4 englische Optionen ──
   if(pot===1) return <div style={{padding:8}}>
     {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
     {header}
-    <div style={{textAlign:'center',fontSize:10,color:RE,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabels2[1]}</div>
+    <div style={{textAlign:'center',fontSize:10,color:RE,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[1]}</div>
     <div style={{textAlign:'center',padding:'18px 14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
-      <div style={{fontSize:11,color:G400,marginBottom:4}}>Was bedeutet:</div>
-      <div style={{fontSize:26,fontWeight:'bold',color:G900}}>{word.word}</div>
-      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.clue}</div>}
+      <div style={{fontSize:11,color:G400,marginBottom:4}}>Was bedeutet auf Englisch:</div>
+      <div style={{fontSize:26,fontWeight:'bold',color:G900}}>{word.clue}</div>
+      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.word}</div>}
     </div>
     {!result&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
       {quizAnswers.map(function(a,i){
         return <button key={i} onClick={function(){handleAnswer(a.word===word.word);}}
-          style={BtnStyle(G50,G900,{padding:'10px',fontSize:13,border:'2px solid '+G200,textAlign:'center',touchAction:'manipulation'})}>{a.clue}</button>;
+          style={BtnStyle(G50,G900,{padding:'10px',fontSize:13,border:'2px solid '+G200,textAlign:'center',touchAction:'manipulation'})}>{a.word}</button>;
       })}
     </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>→ Weiter</button>}
   </div>;
 
-  // POT 2: Letter puzzle
+  // ── POT 2: Buchstaben-Puzzle ──
   if(pot===2) return <div style={{padding:8}}>
     {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
     {header}
-    <div style={{textAlign:'center',fontSize:10,color:'#f97316',textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabels2[2]}</div>
+    <div style={{textAlign:'center',fontSize:10,color:'#f97316',textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[2]}</div>
     <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
       <div style={{fontSize:11,color:G400,marginBottom:4}}>Schreibe auf Englisch:</div>
       <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.clue}</div>
-      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.word}</div>}
+      {result&&<div style={{marginTop:8}}>
+        <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+        {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+          <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {result.typed||'?'}</div>
+          <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {word.word}</div>
+        </div>}
+      </div>}
     </div>
     {!result&&<T2LetterField word={word.word} onCorrect={function(){handleAnswer(true);}} onWrong={function(){handleAnswer(false);}}/>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
   </div>;
 
-  // POT 3: DE→EN with hint boxes
+  // ── POT 3: DE→EN tippen mit Kästchen direkt als Input ──
   if(pot===3){
     var wordParts=word.word.split(' ');
+    var boxW=Math.max(22,Math.min(36,180/word.word.length));
     return <div style={{padding:8}}>
       {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
       {header}
-      <div style={{textAlign:'center',fontSize:10,color:AM,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabels2[3]}</div>
+      <div style={{textAlign:'center',fontSize:10,color:AM,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[3]}</div>
       <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
         <div style={{fontSize:11,color:G400,marginBottom:4}}>Schreibe auf Englisch:</div>
         <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.clue}</div>
-        {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.word}</div>}
+        {result&&<div style={{marginTop:8}}>
+          <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+          {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+            <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {result.typed}</div>
+            <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {word.word}</div>
+          </div>}
+        </div>}
       </div>
       {!result&&<div>
+        {/* Kästchen-Anzeige mit Längenhinweis */}
         <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:6}}>
           {wordParts.length===1?wordParts[0].length+' Buchstaben':wordParts.length+' Wörter: '+wordParts.map(function(w){return w.length;}).join(' + ')+' Buchstaben'}
         </div>
-        <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap',marginBottom:10}}>
-          {wordParts.map(function(wp,wi){
-            return <div key={wi} style={{display:'flex',gap:3,alignItems:'flex-end'}}>
-              {wi>0&&<span style={{color:G400,fontSize:16,paddingBottom:2}}>·</span>}
-              {wp.split('').map(function(_,li){
-                return <div key={li} style={{width:Math.max(20,Math.min(32,180/word.word.length)),height:28,borderBottom:'2px solid '+AM,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:G400}}>_</div>;
-              })}
-            </div>;
-          })}
-        </div>
-        <div style={{display:'flex',gap:8,marginBottom:8}}>
+        {/* Input DIREKT über den Strichen — transparenter Input mit Strich-Visualisierung */}
+        <div style={{position:'relative',marginBottom:12}}>
+          <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap',pointerEvents:'none',userSelect:'none',padding:'0 4px'}}>
+            {wordParts.map(function(wp,wi){
+              return <div key={wi} style={{display:'flex',gap:3,alignItems:'flex-end'}}>
+                {wi>0&&<span style={{color:G400,fontSize:16,paddingBottom:6,lineHeight:'1'}}>·</span>}
+                {wp.split('').map(function(_,li){
+                  var charIdx=wordParts.slice(0,wi).join('').length+li;
+                  var typedChar=typeInput[charIdx]||'';
+                  var isCorrectChar=typedChar.toLowerCase()===wp[li].toLowerCase();
+                  return <div key={li} style={{width:boxW,height:34,borderBottom:'2px solid '+(typedChar?isCorrectChar?GR:RE:AM),display:'flex',alignItems:'flex-end',justifyContent:'center',paddingBottom:2}}>
+                    <span style={{fontSize:15,fontWeight:'bold',color:typedChar?isCorrectChar?GR:RE:G400}}>{typedChar.toUpperCase()||''}</span>
+                  </div>;
+                })}
+              </div>;
+            })}
+          </div>
           <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);setTypeInput('');}}}
+            onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);}}}
             autoCapitalize="none" autoCorrect="off" spellCheck="false"
-            placeholder="Antwort…" style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+AM,borderRadius:8,outline:'none'}}/>
-          <button onClick={function(){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);setTypeInput('');}}
-            style={BtnStyle(AM,'white',{padding:'12px 16px'})}>✓</button>
+            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',opacity:0,fontSize:16,cursor:'text'}}/>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={function(){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);}}
+            style={BtnStyle(AM,'white',{flex:1,padding:'12px'})}>✓ Prüfen</button>
         </div>
       </div>}
-      {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
+      {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>→ Weiter</button>}
     </div>;
   }
 
-  // POT 4: EN→DE
+  // ── POT 4: EN→DE tippen ──
   return <div style={{padding:8}}>
     {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
     {header}
-    <div style={{textAlign:'center',fontSize:10,color:T,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabels2[4]}</div>
+    <div style={{textAlign:'center',fontSize:10,color:T,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[4]}</div>
     <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
       <div style={{fontSize:11,color:G400,marginBottom:4}}>Schreibe auf Deutsch:</div>
       <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.word}</div>
-      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.clue}</div>}
+      {result&&<div style={{marginTop:8}}>
+        <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+        {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+          <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {result.typed}</div>
+          <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {word.clue}</div>
+        </div>}
+      </div>}
     </div>
     {!result&&<div style={{display:'flex',gap:8,marginBottom:8}}>
       <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-        onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);setTypeInput('');}}}
+        onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);}}}
         autoCapitalize="none" autoCorrect="off" spellCheck="false"
         placeholder="Deutsche Übersetzung…" style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-      <button onClick={function(){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);setTypeInput('');}}
+      <button onClick={function(){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);}}
         style={BtnStyle(T,'white',{padding:'12px 16px'})}>✓</button>
     </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
@@ -2034,9 +2098,9 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
 }
 
 // ── LeitersSpielMenu ──────────────────────────────────────────
-function LeitersSpielMenu({ player, chapters, onStart, onCreateOwn, onBack }) {
+function LeitersSpielMenu({ player, chapters, onStart, onCreateOwn }) {
   var [runs,setRuns]=useState([]); var [loading,setLoading]=useState(true);
-  useEffect(function(){lsGetRuns().then(function(d){setRuns(Array.isArray(d)?d:[]);setLoading(false);});});
+  useEffect(function(){lsGetRuns().then(function(d){setRuns(Array.isArray(d)?d:[]);setLoading(false);});},[]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Läufe…</div>;
   var adminRuns=runs.filter(function(r){return r.is_admin_run;});
   var myRuns=runs.filter(function(r){return !r.is_admin_run;});
@@ -2071,97 +2135,81 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
     var key=ch.id+':'+w.word;
     var ex=selectedWords.find(function(x){return x.key===key;});
     if(ex) setSelectedWords(selectedWords.filter(function(x){return x.key!==key;}));
-    else setSelectedWords(selectedWords.concat([{key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title}]));
-  }
-  function toggleAllImp(ch){
-    var imp=ch.words.filter(function(w){return w.important;});
-    var impKeys=imp.map(function(w){return ch.id+':'+w.word;});
-    var allSel=impKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
-    if(allSel) setSelectedWords(selectedWords.filter(function(x){return !impKeys.includes(x.key);}));
-    else {
-      var toAdd=imp.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});})
-        .map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});
-      setSelectedWords(selectedWords.concat(toAdd));
-    }
+    else setSelectedWords(selectedWords.concat([{key:key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title}]));
   }
 
   function createRun(){
     if(!runName.trim()){setErr('Bitte Namen eingeben');return;}
     if(selectedWords.length<4){setErr('Mind. 4 Vokabeln auswählen');return;}
     setLoading(true);setErr('');
-    var isRealUUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(player.id);
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     var runData={name:runName.trim(),is_admin_run:isAdmin?true:false,word_count:selectedWords.length,sentence_count:selectedSents.length,words:JSON.stringify(selectedWords),sentences:JSON.stringify(selectedSents),created_at:new Date().toISOString()};
-    if(isRealUUID) runData.player_id=player.id;
+    if(UUID.test(player.id)) runData.player_id=player.id;
     sbPost('ls_runs',runData).then(function(res){
       setLoading(false);
-      if(res&&res._err){setErr('Fehler');return;}
+      if(res&&res._err){setErr('Fehler: '+res.msg);return;}
       onCreated(res&&res.id?res:Object.assign({id:'local_'+Date.now()},runData));
     }).catch(function(){setLoading(false);setErr('Verbindungsfehler');});
   }
 
-  var topicChapters=chapters.filter(function(c){return !!c.parent_id;});
+  var topicChs=chapters.filter(function(c){return !!c.parent_id;});
   return <div>
-    <input value={runName} onChange={function(e){setRunName(e.target.value);}} placeholder="Name des Laufs (z.B. Kapitel 4 - Test)…"
+    <input value={runName} onChange={function(e){setRunName(e.target.value);}} placeholder="Name des Laufs…"
       style={{width:'100%',padding:'10px 12px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none',marginBottom:10}}/>
-
     <div style={{padding:'8px 10px',background:G50,borderRadius:8,border:'1px solid '+G200,marginBottom:10}}>
-      <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:6}}>
-        Vokabeln: <span style={{color:T}}>{selectedWords.length}</span>
-        <span style={{color:G400,marginLeft:6,fontWeight:'normal',fontSize:11}}>{selectedSents.length} Sätze</span>
-      </div>
+      <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:6}}>Vokabeln: <span style={{color:T}}>{selectedWords.length}</span></div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={function(){
           var allImp=[];
-          topicChapters.forEach(function(ch){
+          topicChs.forEach(function(ch){
             ch.words.filter(function(w){return w.important;}).forEach(function(w){
               var key=ch.id+':'+w.word;
               if(!selectedWords.find(function(x){return x.key===key;}))
-                allImp.push({key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title});
+                allImp.push({key:key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title});
             });
           });
           setSelectedWords(selectedWords.concat(allImp));
         }} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>⭐ Alle wichtigen</button>
-        <button onClick={function(){setSelectedWords([]);setSelectedSents([]);}}
-          style={BtnStyle(G100,RE,{padding:'5px 10px',fontSize:11})}>✗ Leeren</button>
+        <button onClick={function(){setSelectedWords([]);setSelectedSents([]);}} style={BtnStyle(G100,RE,{padding:'5px 10px',fontSize:11})}>✗ Leeren</button>
       </div>
     </div>
-
-    {topicChapters.map(function(ch){
+    {topicChs.map(function(ch){
       var isOpen=expandedCh===ch.id;
-      var selCount=selectedWords.filter(function(w){return w.chapterId===ch.id;}).length;
-      var parent=chapters.find(function(p){return p.id===ch.parent_id;});
-      return <div key={ch.id} style={{marginBottom:6,border:'1.5px solid '+(selCount>0?ch.color:G200),borderRadius:10,overflow:'hidden'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:selCount>0?ch.color+'15':'white',cursor:'pointer'}}
+      var sel=selectedWords.filter(function(w){return w.chapterId===ch.id;}).length;
+      var par=chapters.find(function(p){return p.id===ch.parent_id;});
+      return <div key={ch.id} style={{marginBottom:6,border:'1.5px solid '+(sel>0?ch.color:G200),borderRadius:10,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:sel>0?ch.color+'15':'white',cursor:'pointer'}}
           onClick={function(){setExpandedCh(isOpen?null:ch.id);}}>
           <span style={{fontSize:16}}>{ch.icon}</span>
           <div style={{flex:1}}>
             <div style={{fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</div>
-            <div style={{fontSize:10,color:G400}}>{parent?parent.title+' · ':''}{ch.words.length} Vokabeln</div>
+            <div style={{fontSize:10,color:G400}}>{par?par.title+' · ':''}{ch.words.length} Vokabeln</div>
           </div>
-          {selCount>0&&<span style={{background:ch.color,color:'white',fontSize:11,padding:'2px 7px',borderRadius:10,fontWeight:'bold'}}>{selCount}</span>}
+          {sel>0&&<span style={{background:ch.color,color:'white',fontSize:11,padding:'2px 7px',borderRadius:10,fontWeight:'bold'}}>{sel}</span>}
           <span style={{color:G400,fontSize:12}}>{isOpen?'▲':'▼'}</span>
         </div>
         {isOpen&&<div style={{padding:'8px 10px',background:'#fafafa',borderTop:'1px solid '+G200}}>
           <div style={{display:'flex',gap:6,marginBottom:8}}>
-            <button onClick={function(){toggleAllImp(ch);}} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>⭐ Wichtige</button>
+            <button onClick={function(){
+              var imp=ch.words.filter(function(w){return w.important;});
+              var impKeys=imp.map(function(w){return ch.id+':'+w.word;});
+              var allSel=impKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
+              if(allSel) setSelectedWords(selectedWords.filter(function(x){return !impKeys.includes(x.key);}));
+              else {var toAdd=imp.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd));}
+            }} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>⭐ Wichtige</button>
             <button onClick={function(){
               var allKeys=ch.words.map(function(w){return ch.id+':'+w.word;});
               var allSel=allKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
               if(allSel) setSelectedWords(selectedWords.filter(function(x){return !allKeys.includes(x.key);}));
-              else {
-                var toAdd=ch.words.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});})
-                  .map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});
-                setSelectedWords(selectedWords.concat(toAdd));
-              }
+              else {var toAdd2=ch.words.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd2));}
             }} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>Alle</button>
           </div>
           {ch.words.map(function(w,i){
-            var key=ch.id+':'+w.word;
-            var sel=!!selectedWords.find(function(x){return x.key===key;});
+            var key=ch.id+':'+w.word; var sel2=!!selectedWords.find(function(x){return x.key===key;});
             return <div key={i} onClick={function(){toggleWord(ch,w);}}
-              style={{display:'flex',alignItems:'center',gap:8,padding:'5px 4px',borderBottom:'1px solid '+G100,cursor:'pointer',background:sel?ch.color+'10':'white'}}>
-              <div style={{width:18,height:18,borderRadius:4,border:'2px solid '+(sel?ch.color:G200),background:sel?ch.color:'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                {sel&&<span style={{color:'white',fontSize:12}}>✓</span>}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'5px 4px',borderBottom:'1px solid '+G100,cursor:'pointer',background:sel2?ch.color+'10':'white'}}>
+              <div style={{width:18,height:18,borderRadius:4,border:'2px solid '+(sel2?ch.color:G200),background:sel2?ch.color:'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {sel2&&<span style={{color:'white',fontSize:12}}>✓</span>}
               </div>
               <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1}}>{w.important?'⭐ ':''}{w.word}</span>
               <span style={{fontSize:11,color:G400}}>{w.clue}</span>
@@ -2170,7 +2218,6 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
         </div>}
       </div>;
     })}
-
     {err&&<div style={{color:RE,fontSize:12,padding:'6px 10px',background:'#fef2f2',borderRadius:6,marginTop:8}}>{err}</div>}
     <button onClick={createRun} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:12,fontSize:15,opacity:loading?0.6:1})}>
       {loading?'…':'🚀 Lauf erstellen'}
@@ -2178,13 +2225,13 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
   </div>;
 }
 
-// ── KapitelProgress — Fortschritt im Spielermenü ─────────────
+// ── KapitelProgress ───────────────────────────────────────────
 function KapitelProgress({ chapters, player, allRuns, gradeSettings }) {
   var [progressMap,setProgressMap]=useState({});
   useEffect(function(){
     if(!player||!allRuns||!allRuns.length) return;
-    var ok=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if(!ok.test(player.id)) return;
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!UUID.test(player.id)) return;
     Promise.all(allRuns.map(function(r){
       return lsGetProgress(player.id,r.id).then(function(rows){
         if(Array.isArray(rows)&&rows.length>0){try{return[r.id,JSON.parse(rows[0].data||'{}')];}catch(e){}}
@@ -2197,7 +2244,7 @@ function KapitelProgress({ chapters, player, allRuns, gradeSettings }) {
     });
   },[player,allRuns]);
 
-  var topLevel=chapters.filter(function(c){return !c.parent_id;});
+  var topLevel=chapters.filter(function(c){return !c.parent_id&&c.id!=='allgemein';});
   if(!topLevel.length||!allRuns||!allRuns.length) return null;
 
   return <div style={{marginBottom:14}}>
@@ -2226,27 +2273,26 @@ function KapitelProgress({ chapters, player, allRuns, gradeSettings }) {
 
 // ── LeitersSpielStreakSettings ────────────────────────────────
 function LeitersSpielStreakSettings({ settings, onSave }) {
-  var DEF=DEFAULT_STREAK;
-  var s=settings||DEF;
-  var [up,setUp]=useState(Object.assign({},DEF.upThresholds,s.upThresholds));
-  var [down,setDown]=useState(Object.assign({},DEF.downThresholds,s.downThresholds));
+  var s=settings||DEFAULT_STREAK;
+  var [up,setUp]=useState(Object.assign({},DEFAULT_STREAK.upThresholds,s.upThresholds));
+  var [down,setDown]=useState(Object.assign({},DEFAULT_STREAK.downThresholds,s.downThresholds));
   var pColors={1:RE,2:'#f97316',3:AM,4:T};
-  var pLabels={1:'Topf 1→2 (Quiz)',2:'Topf 2→3 (Buchstaben)',3:'Topf 3→4 (DE→EN)',4:'Topf 4→5 (EN→DE)'};
+  var pLabels={1:'T1→T2 (Quiz)',2:'T2→T3 (Buchstaben)',3:'T3→T4 (DE→EN)',4:'T4→T5 (EN→DE)'};
   return <div style={{padding:14,background:G50,borderRadius:12,border:'1px solid '+G200,marginTop:12}}>
-    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:8}}>🔄 Topf-Wechsel Einstellungen</div>
+    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:8}}>🔄 Topf-Wechsel</div>
     {[1,2,3,4].map(function(pot){return <div key={pot} style={{marginBottom:8,padding:'8px 10px',background:'white',borderRadius:8,border:'1px solid '+G200}}>
       <div style={{fontWeight:'bold',fontSize:11,color:pColors[pot],marginBottom:5}}>{pLabels[pot]}</div>
       <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <span style={{fontSize:11,color:G600}}>✓ Hoch nach:</span>
           <input type="number" min={1} max={5} value={up[pot]} onChange={function(e){setUp(function(prev){var n=Object.assign({},prev);n[pot]=parseInt(e.target.value)||1;return n;});}}
-            style={{width:48,padding:'3px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}}/>
+            style={{width:46,padding:'3px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}}/>
           <span style={{fontSize:11,color:G400}}>Richtig</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:6}}>
           <span style={{fontSize:11,color:G600}}>✗ Runter nach:</span>
           <input type="number" min={0} max={5} value={down[pot]} onChange={function(e){setDown(function(prev){var n=Object.assign({},prev);n[pot]=parseInt(e.target.value)||0;return n;});}}
-            style={{width:48,padding:'3px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}}/>
+            style={{width:46,padding:'3px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}}/>
           <span style={{fontSize:11,color:G400}}>{down[pot]===0?'(nie)':'Falsch'}</span>
         </div>
       </div>
@@ -2258,14 +2304,14 @@ function LeitersSpielStreakSettings({ settings, onSave }) {
 
 // ── LeitersSpielGradeSettings ─────────────────────────────────
 function LeitersSpielGradeSettings({ settings, onSave }) {
-  var DEF_GRADES=[{grade:1,maxErrors:1},{grade:2,maxErrors:3},{grade:3,maxErrors:6},{grade:4,maxErrors:9},{grade:5,maxErrors:13}];
+  var DEF=[{grade:1,maxErrors:1},{grade:2,maxErrors:3},{grade:3,maxErrors:6},{grade:4,maxErrors:9},{grade:5,maxErrors:13}];
   var [testSize,setTestSize]=useState((settings&&settings.testSize)||20);
-  var [grades,setGrades]=useState((settings&&settings.grades)||DEF_GRADES);
-  function updateG(i,field,val){var ng=grades.slice();ng[i]=Object.assign({},ng[i]);ng[i][field]=parseInt(val)||0;setGrades(ng);}
+  var [grades,setGrades]=useState((settings&&settings.grades)||DEF);
+  function updG(i,field,val){var ng=grades.slice();ng[i]=Object.assign({},ng[i]);ng[i][field]=parseInt(val)||0;setGrades(ng);}
   return <div style={{padding:14,background:G50,borderRadius:12,border:'1px solid '+G200}}>
     <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>⚙️ Noteneinstellungen</div>
     <div style={{marginBottom:12}}>
-      <div style={{fontSize:12,color:G600,marginBottom:4}}>Anzahl Vokabeln im echten Test:</div>
+      <div style={{fontSize:12,color:G600,marginBottom:4}}>Vokabeln im echten Test:</div>
       <div style={{display:'flex',gap:6}}>
         {[10,15,20,25,30].map(function(n){return <button key={n} onClick={function(){setTestSize(n);}}
           style={{flex:1,padding:'6px',borderRadius:6,border:'2px solid '+(testSize===n?T:G200),background:testSize===n?TL:'white',cursor:'pointer',fontSize:13,fontWeight:'bold',color:testSize===n?T:G600}}>{n}</button>;})}
@@ -2274,55 +2320,146 @@ function LeitersSpielGradeSettings({ settings, onSave }) {
     {grades.map(function(g,i){return <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
       <div style={{fontSize:14,fontWeight:'bold',color:[null,'#22c55e','#84cc16','#f59e0b','#f97316','#ef4444'][g.grade]||G400,minWidth:56}}>Note {g.grade}</div>
       <span style={{fontSize:12,color:G400}}>max.</span>
-      <input type="number" value={g.maxErrors} min={0} max={testSize} onChange={function(e){updateG(i,'maxErrors',e.target.value);}}
+      <input type="number" value={g.maxErrors} min={0} max={testSize} onChange={function(e){updG(i,'maxErrors',e.target.value);}}
         style={{width:56,padding:'4px 8px',fontSize:14,border:'1.5px solid '+G200,borderRadius:6,textAlign:'center'}}/>
       <span style={{fontSize:12,color:G400}}>Fehler</span>
     </div>;})}
-    <button onClick={function(){var gs={testSize,grades};try{localStorage.setItem('ls_grade_settings',JSON.stringify(gs));}catch(e){}onSave(gs);}}
+    <button onClick={function(){var gs={testSize:testSize,grades:grades};try{localStorage.setItem('ls_grade_settings',JSON.stringify(gs));}catch(e){}onSave(gs);}}
       style={BtnStyle(T,'white',{width:'100%',padding:'10px',marginTop:8})}>💾 Speichern</button>
   </div>;
 }
 
-// ── LeitersSpielAdminOverview ─────────────────────────────────
+// ── LeitersSpielAdminOverview — mit Spieler-Detail ───────────
 function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
-  var [runs,setRuns]=useState([]); var [allProg,setAllProg]=useState([]); var [loading,setLoading]=useState(true);
+  var [runs,setRuns]=useState([]);
+  var [allProg,setAllProg]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [selectedUser,setSelectedUser]=useState(null);
+
   useEffect(function(){
-    Promise.all([lsGetRuns(),sbGet('ls_progress','select=player_id,run_id,data,updated_at&order=updated_at.desc')])
-      .then(function(res){setRuns(Array.isArray(res[0])?res[0]:[]);setAllProg(Array.isArray(res[1])?res[1]:[]);setLoading(false);});
+    Promise.all([
+      lsGetRuns(),
+      sbGet('ls_progress','select=id,player_id,run_id,data,updated_at&order=updated_at.desc')
+    ]).then(function(res){
+      setRuns(Array.isArray(res[0])?res[0]:[]);
+      setAllProg(Array.isArray(res[1])?res[1]:[]);
+      setLoading(false);
+    });
   },[]);
+
   if(loading) return <div style={{textAlign:'center',padding:20,color:G400}}>Lade…</div>;
-  return <div>
-    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>📋 Alle Läufe ({runs.length})</div>
-    {runs.map(function(run){
-      var prog=allProg.filter(function(p){return p.run_id===run.id;});
-      return <div key={run.id} style={{marginBottom:10,border:'1.5px solid '+G200,borderRadius:12,overflow:'hidden'}}>
-        <div style={{padding:'10px 12px',background:G50,fontWeight:'bold',fontSize:13,color:T,display:'flex',justifyContent:'space-between'}}>
-          <span>{run.is_admin_run?'📋 ':''}{run.name}</span>
-          <span style={{fontSize:11,color:G400,fontWeight:'normal'}}>{run.word_count}V</span>
-        </div>
-        {prog.length===0&&<div style={{padding:'8px 12px',fontSize:12,color:G400}}>Noch kein Spieler</div>}
-        {prog.map(function(p){
-          var user=(allUsers||[]).find(function(u){return String(u.id)===String(p.player_id);});
-          var data={};try{data=JSON.parse(p.data||'{}');}catch(e){}
-          var pct=lsPercent(data,gradeSettings);
-          var gr=lsGrade(pct,gradeSettings);
-          return <div key={p.player_id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderTop:'1px solid '+G100}}>
+
+  // Detail view
+  if(selectedUser){
+    var data=selectedUser.data;
+    var pct=lsPercent(data,gradeSettings);
+    var grade=lsGrade(pct,gradeSettings);
+    var run=runs.find(function(r){return r.id===selectedUser.runId;});
+    var user=(allUsers||[]).find(function(u){return String(u.id)===String(selectedUser.userId);});
+    var potLabels2={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben',3:'Topf 3 — DE→EN',4:'Topf 4 — EN→DE',5:'✅ Gelernt'};
+    var potColorsD={1:RE,2:'#f97316',3:AM,4:T,5:GR};
+    return (
+      <div>
+        <button onClick={function(){setSelectedUser(null);}} style={BtnStyle(G100,G600,{marginBottom:12,fontSize:12})}>← Übersicht</button>
+        <div style={{padding:12,background:G50,borderRadius:10,border:'1px solid '+G200,marginBottom:12}}>
+          <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:4}}>{user?user.name:'Spieler'} — {run?run.name:'Lauf'}</div>
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
             <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:'bold',color:G900}}>{user?user.name:p.player_id.slice(0,8)}</div>
-              <div style={{height:4,background:G200,borderRadius:2,marginTop:3,overflow:'hidden'}}>
-                <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:2}}/>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:G400,marginBottom:3}}>
+                <span>Fortschritt</span><span style={{fontWeight:'bold'}}>{pct}%{grade?' — Note '+grade:''}</span>
+              </div>
+              <div style={{height:8,background:G200,borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:4}}/>
               </div>
             </div>
-            <div style={{textAlign:'right'}}>
-              <div style={{fontSize:11,color:G400}}>{pct}%</div>
-              {gr&&<GradeDisplay grade={gr} size={14}/>}
+            {grade&&<GradeDisplay grade={grade} size={28}/>}
+          </div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {[1,2,3,4,5].map(function(pot){
+              var n=(data.pots[pot]||[]).length;
+              return <div key={pot} style={{textAlign:'center',padding:'4px 8px',borderRadius:6,background:potColorsD[pot]+'15',minWidth:44}}>
+                <div style={{fontSize:16,fontWeight:'bold',color:potColorsD[pot]}}>{n}</div>
+                <div style={{fontSize:9,color:G400}}>T{pot}</div>
+              </div>;
+            })}
+          </div>
+          {data._reconstructed&&<div style={{marginTop:8,fontSize:10,color:AM,background:'#fef3c7',padding:'4px 8px',borderRadius:6}}>⚠️ Rekonstruiert</div>}
+        </div>
+        {[1,2,3,4,5].map(function(pot){
+          var words=data.pots[pot]||[];
+          if(!words.length) return null;
+          return <div key={pot} style={{marginBottom:10,border:'1.5px solid '+potColorsD[pot]+'40',borderRadius:10,overflow:'hidden'}}>
+            <div style={{background:potColorsD[pot]+'15',padding:'8px 12px',fontWeight:'bold',fontSize:12,color:potColorsD[pot],display:'flex',justifyContent:'space-between'}}>
+              <span>{potLabels2[pot]}</span><span>{words.length} Vokabeln</span>
+            </div>
+            <div style={{padding:'4px 10px'}}>
+              {words.map(function(w,i){
+                return <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid '+G50,fontSize:12}}>
+                  <span style={{fontWeight:'bold',flex:1,color:G900}}>{w.word}</span>
+                  <span style={{color:G400,minWidth:80}}>{w.clue}</span>
+                  <div style={{display:'flex',gap:3}}>
+                    {(w.streak||0)>0&&<span style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5}}>✓{w.streak}×</span>}
+                    {(w.wrongStreak||0)>0&&<span style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5}}>✗{w.wrongStreak}×</span>}
+                  </div>
+                </div>;
+              })}
             </div>
           </div>;
         })}
-      </div>;
-    })}
-  </div>;
+        {(data.history||[]).length>1&&<div style={{marginTop:10,padding:10,background:G50,borderRadius:10,border:'1px solid '+G200}}>
+          <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Verlauf</div>
+          <div style={{display:'flex',alignItems:'flex-end',gap:2,height:40}}>
+            {data.history.slice(-20).map(function(h,i){
+              var col=h.grade?({'1':'#22c55e','2':'#84cc16','3':'#f59e0b','4':'#f97316','5':'#ef4444'}[String(h.grade)]||T):T;
+              return <div key={i} title={h.percent+'%'} style={{flex:1,background:col,borderRadius:'2px 2px 0 0',height:Math.max(2,h.percent/100*40)+'px'}}/>;
+            })}
+          </div>
+        </div>}
+      </div>
+    );
+  }
+
+  // Overview
+  return (
+    <div>
+      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>📋 Alle Läufe ({runs.length})</div>
+      {runs.map(function(run){
+        var prog=allProg.filter(function(p){return p.run_id===run.id;});
+        return <div key={run.id} style={{marginBottom:10,border:'1.5px solid '+G200,borderRadius:12,overflow:'hidden'}}>
+          <div style={{padding:'10px 12px',background:G50,fontWeight:'bold',fontSize:13,color:T,display:'flex',justifyContent:'space-between'}}>
+            <span>{run.is_admin_run?'📋 ':''}{run.name}</span>
+            <span style={{fontSize:11,color:G400,fontWeight:'normal'}}>{run.word_count}V</span>
+          </div>
+          {!prog.length&&<div style={{padding:'8px 12px',fontSize:12,color:G400}}>Noch kein Spieler gestartet</div>}
+          {prog.map(function(p){
+            var user2=(allUsers||[]).find(function(u){return String(u.id)===String(p.player_id);});
+            var d2={}; try{d2=JSON.parse(p.data||'{}');}catch(e){}
+            var pct2=lsPercent(d2,gradeSettings);
+            var gr2=lsGrade(pct2,gradeSettings);
+            var grColor2=gr2?({'1':'#22c55e','2':'#84cc16','3':'#f59e0b','4':'#f97316','5':'#ef4444'}[String(gr2)]||G400):G400;
+            return <div key={p.player_id} onClick={function(){setSelectedUser({userId:p.player_id,runId:run.id,data:d2});}}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderTop:'1px solid '+G100,cursor:'pointer'}}
+              onMouseOver={function(e){e.currentTarget.style.background=G50;}}
+              onMouseOut={function(e){e.currentTarget.style.background='white';}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:'bold',color:G900}}>{user2?user2.name:p.player_id.slice(0,8)}</div>
+                <div style={{height:4,background:G200,borderRadius:2,marginTop:3,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:pct2+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:2}}/>
+                </div>
+              </div>
+              <div style={{textAlign:'right',minWidth:60}}>
+                <div style={{fontSize:12,color:G400}}>{pct2}%</div>
+                {gr2&&<span style={{fontSize:13,fontWeight:'bold',color:grColor2}}>Note {gr2}</span>}
+              </div>
+              <span style={{color:G400,fontSize:14}}>›</span>
+            </div>;
+          })}
+        </div>;
+      })}
+    </div>
+  );
 }
+
 
 // ══════════════════════════════════════════════════════════════
 // UPLOAD-VORSCHAU mit bearbeitbaren Vokabeln
@@ -2438,430 +2575,111 @@ function UploadPreview({ draft, onSave, onCancel, chapters, chapterMode, targetC
 // ══════════════════════════════════════════════════════════════
 // KATEGORIE-SYSTEM & VOKABEL-SUCHE
 // ══════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════
-// VOKABEL-SUCHE (Themenbereich = topics, nicht categories table)
-// ══════════════════════════════════════════════════════════════
-function VocabSearch({ chapters }) {
+function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
   var [query,setQuery]=useState('');
-  var [filterTopic,setFilterTopic]=useState(''); // filter by topic chapter id
   var [results,setResults]=useState([]);
-  var [editingKey,setEditingKey]=useState(null);
+  var [editingWord,setEditingWord]=useState(null);
+  var [newCatName,setNewCatName]=useState('');
+  var [showCatForm,setShowCatForm]=useState(false);
+  var [viewCat,setViewCat]=useState(null); // category id to view
+  var [localCats,setLocalCats]=useState(allCategories||[]);
 
-  var topicChapters=chapters.filter(function(c){return !!c.parent_id;});
+  useEffect(function(){setLocalCats(allCategories||[]);},[allCategories]);
 
-  function doSearch(q,topicId){
-    var ql=(q||'').toLowerCase().trim();
+  function search(q){
+    if(!q||q.trim().length<2){setResults([]);return;}
+    var ql=q.toLowerCase();
     var found=[];
     chapters.forEach(function(ch){
-      if(!ch.parent_id) return;
-      if(topicId&&ch.id!==topicId) return;
-      var parent=chapters.find(function(p){return p.id===ch.parent_id;});
+      if(!ch.parent_id) return; // skip top-level, only topic chapters
       (ch.words||[]).forEach(function(w){
-        if(!ql||w.word.toLowerCase().includes(ql)||w.clue.toLowerCase().includes(ql)){
-          found.push({word:w.word,clue:w.clue,important:w.important,
-            topicId:ch.id,topicTitle:ch.title,topicIcon:ch.icon,topicColor:ch.color,
-            kapitelTitle:parent?parent.title:'',kapitelIcon:parent?parent.icon:'📗'});
+        if(w.word.toLowerCase().includes(ql)||w.clue.toLowerCase().includes(ql)){
+          var parent=chapters.find(function(p){return p.id===ch.parent_id;});
+          found.push({word:w.word,clue:w.clue,important:w.important,chapterId:ch.id,chapterTitle:ch.title,chapterIcon:ch.icon,parentTitle:parent?parent.title:'',color:ch.color});
         }
       });
     });
     setResults(found);
   }
 
-  function toggleImportant(r){
-    // Update in-memory chapters
-    var newChapters=chapters.map(function(ch){
-      if(ch.id!==r.topicId) return ch;
-      var newWords=ch.words.map(function(w){
-        return w.word===r.word?Object.assign({},w,{important:!w.important}):w;
-      });
-      return Object.assign({},ch,{words:newWords});
+  function createCategory(){
+    if(!newCatName.trim()) return;
+    sbPost('categories',{name:newCatName.trim(),color:'#6366f1'}).then(function(res){
+      if(res&&!res._err){
+        var newCat=res.id?res:{id:'local_'+Date.now(),name:newCatName.trim(),color:'#6366f1'};
+        setLocalCats(function(prev){return prev.concat([newCat]);});
+        if(onCategoryChange) onCategoryChange();
+        setNewCatName('');setShowCatForm(false);
+      }
     });
-    // Trigger parent update via setChapters if available — we pass it down
-    if(window._adminSetChapters) window._adminSetChapters(newChapters);
-    // Persist to Supabase
-    var updCh=newChapters.find(function(c){return c.id===r.topicId;});
-    if(updCh) sbPatch('chapters',{words:JSON.stringify(updCh.words)},'id=eq.'+r.topicId);
-    // Re-search to reflect change
-    setTimeout(function(){doSearch(query,filterTopic);},50);
   }
 
-  function moveTopic(r,newTopicId){
-    if(!newTopicId||newTopicId===r.topicId) return;
-    // Remove from old topic
-    var srcCh=chapters.find(function(c){return c.id===r.topicId;});
-    var dstCh=chapters.find(function(c){return c.id===newTopicId;});
-    if(!srcCh||!dstCh) return;
-    var wordObj=srcCh.words.find(function(w){return w.word===r.word;});
-    if(!wordObj) return;
-    var newSrcWords=srcCh.words.filter(function(w){return w.word!==r.word;});
-    var dstWords=(dstCh.words||[]).concat([wordObj]);
-    // Check duplicate
-    if(dstCh.words.find(function(w){return w.word.toLowerCase()===r.word.toLowerCase()})){
-      alert('Diese Vokabel ist im Ziel-Themenbereich bereits vorhanden.'); return;
-    }
-    var newChapters=chapters.map(function(ch){
-      if(ch.id===r.topicId) return Object.assign({},ch,{words:newSrcWords});
-      if(ch.id===newTopicId) return Object.assign({},ch,{words:dstWords});
-      return ch;
-    });
-    if(window._adminSetChapters) window._adminSetChapters(newChapters);
-    sbPatch('chapters',{words:JSON.stringify(newSrcWords)},'id=eq.'+r.topicId);
-    sbPatch('chapters',{words:JSON.stringify(dstWords)},'id=eq.'+newTopicId);
-    setEditingKey(null);
-    setTimeout(function(){doSearch(query,filterTopic);},100);
+  function assignCategory(word,chapterId,catId){
+    // Upsert into word_categories
+    sbPost('word_categories',{word:word,chapter_id:chapterId,category_id:catId||null,is_important:results.find(function(r){return r.word===word&&r.chapterId===chapterId;})?.important||false})
+      .then(function(){if(onCategoryChange) onCategoryChange();});
   }
+
+  var viewCatData=viewCat?localCats.find(function(c){return c.id===viewCat;}):null;
+  var catWords=viewCat?results.filter(function(r){return r.categoryId===viewCat;}):[];
 
   return <div>
-    {/* Search bar */}
-    <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
-      <div style={{position:'relative',flex:2,minWidth:150}}>
-        <input value={query} onChange={function(e){setQuery(e.target.value);doSearch(e.target.value,filterTopic);}}
-          placeholder="Vokabel suchen (DE oder EN)…"
-          style={{width:'100%',padding:'9px 32px 9px 12px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
-        {query&&<button onClick={function(){setQuery('');doSearch('',filterTopic);}}
-          style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>✕</button>}
+    {/* Category chips */}
+    <div style={{marginBottom:12}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+        <div style={{fontWeight:'bold',fontSize:13,color:G900}}>🏷️ Kategorien ({localCats.length})</div>
+        <button onClick={function(){setShowCatForm(!showCatForm);}} style={BtnStyle(T,'white',{padding:'4px 10px',fontSize:11})}>+ Neu</button>
       </div>
-      <select value={filterTopic} onChange={function(e){setFilterTopic(e.target.value);doSearch(query,e.target.value);}}
-        style={{flex:1,minWidth:120,padding:'8px 10px',fontSize:13,border:'1.5px solid '+G200,borderRadius:8,outline:'none',background:'white'}}>
-        <option value=''>Alle Themenbereiche</option>
-        {topicChapters.map(function(c){
-          var par=chapters.find(function(p){return p.id===c.parent_id;});
-          return <option key={c.id} value={c.id}>{par?par.icon+' '+par.title+' → ':''}{c.icon} {c.title}</option>;
-        })}
-      </select>
+      {showCatForm&&<div style={{display:'flex',gap:6,marginBottom:8}}>
+        <input value={newCatName} onChange={function(e){setNewCatName(e.target.value);}} placeholder="Kategoriename…"
+          onKeyDown={function(e){if(e.key==='Enter')createCategory();}}
+          style={{flex:1,padding:'6px 10px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
+        <button onClick={createCategory} style={BtnStyle(T,'white',{padding:'6px 12px'})}>✓</button>
+      </div>}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        {localCats.map(function(cat){return <button key={cat.id} onClick={function(){setViewCat(viewCat===cat.id?null:cat.id);}}
+          style={{padding:'4px 10px',borderRadius:99,border:'1.5px solid '+(viewCat===cat.id?cat.color:G200),background:viewCat===cat.id?cat.color+'20':'white',cursor:'pointer',fontSize:12,color:viewCat===cat.id?cat.color:G600}}>
+          {cat.name}
+        </button>;})}
+      </div>
     </div>
 
-    {/* Hint if nothing searched */}
-    {!query&&!filterTopic&&<div style={{textAlign:'center',color:G400,padding:12,fontSize:13}}>Suchbegriff eingeben oder Themenbereich auswählen</div>}
+    {/* Search */}
+    <div style={{position:'relative',marginBottom:10}}>
+      <input value={query} onChange={function(e){setQuery(e.target.value);search(e.target.value);}}
+        placeholder="Vokabel suchen (Deutsch oder Englisch)…"
+        style={{width:'100%',padding:'10px 36px 10px 12px',fontSize:16,border:'1.5px solid '+T,borderRadius:8,outline:'none'}}/>
+      {query&&<button onClick={function(){setQuery('');setResults([]);}} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:18}}>✕</button>}
+    </div>
 
-    {/* Results count */}
-    {results.length>0&&<div style={{fontSize:11,color:G400,marginBottom:8}}>{results.length} Vokabeln gefunden</div>}
-
-    {/* Result rows */}
+    {/* Results */}
     {results.map(function(r,i){
-      var key=r.word+':'+r.topicId;
-      var isEditing=editingKey===key;
-      return <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,
-        background:r.important?'#fef9ee':'white',
-        border:'1px solid '+(r.important?AM:G200)}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-          {/* Important toggle */}
-          <button onClick={function(){toggleImportant(r);}}
-            title={r.important?'Als normal markieren':'Als wichtig/fett markieren'}
-            style={{width:26,height:26,borderRadius:5,border:'2px solid '+(r.important?AM:G200),
-              background:r.important?AM:'white',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
-            {r.important?'⭐':'☆'}
-          </button>
-          <span style={{fontWeight:r.important?'bold':'normal',fontSize:13,color:G900}}>{r.word}</span>
+      var isEditing=editingWord===r.word+r.chapterId;
+      return <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,background:'white',border:'1px solid '+(r.important?AM:G200)}}>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
+          {r.important&&<span style={{fontSize:10,color:AM}}>⭐</span>}
+          <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{r.word}</span>
           <span style={{color:G400,fontSize:12}}>= {r.clue}</span>
-          <span style={{marginLeft:'auto',fontSize:10,color:G400,display:'flex',alignItems:'center',gap:3}}>
-            <span>{r.topicIcon}</span><span>{r.topicTitle}</span>
-            <span style={{color:G200}}>·</span>
-            <span>{r.kapitelIcon}</span><span>{r.kapitelTitle}</span>
-          </span>
-          <button onClick={function(){setEditingKey(isEditing?null:key);}}
-            style={{fontSize:10,padding:'2px 7px',borderRadius:5,border:'1px solid '+(isEditing?T:G200),
-              background:isEditing?TL:'white',cursor:'pointer',color:isEditing?T:G600,flexShrink:0}}>
-            {isEditing?'✕':'✏️ verschieben'}
-          </button>
+          <span style={{marginLeft:'auto',fontSize:10,color:G400}}>{r.chapterIcon} {r.chapterTitle}</span>
+          {r.parentTitle&&<span style={{fontSize:10,color:G400}}>· {r.parentTitle}</span>}
+          <button onClick={function(){setEditingWord(isEditing?null:r.word+r.chapterId);}}
+            style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>🏷️</button>
         </div>
-        {isEditing&&<div style={{marginTop:8,paddingTop:8,borderTop:'1px solid '+G100}}>
-          <div style={{fontSize:11,color:G600,marginBottom:5}}>Themenbereich wechseln:</div>
-          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-            {topicChapters.filter(function(c){return c.id!==r.topicId;}).map(function(c){
-              var par=chapters.find(function(p){return p.id===c.parent_id;});
-              return <button key={c.id} onClick={function(){moveTopic(r,c.id);}}
-                style={{padding:'4px 10px',borderRadius:8,border:'1.5px solid '+c.color,background:c.color+'15',
-                  cursor:'pointer',fontSize:11,color:c.color}}>
-                {par?par.icon+' '+par.title+' → ':''}{c.icon} {c.title}
-              </button>;
-            })}
+        {isEditing&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px solid '+G100}}>
+          <div style={{fontSize:11,color:G600,marginBottom:4}}>Kategorie zuweisen:</div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            <button onClick={function(){assignCategory(r.word,r.chapterId,null);setEditingWord(null);}}
+              style={{padding:'3px 8px',borderRadius:99,border:'1px solid '+G200,background:G50,cursor:'pointer',fontSize:11,color:G600}}>Keine</button>
+            {localCats.map(function(cat){return <button key={cat.id} onClick={function(){assignCategory(r.word,r.chapterId,cat.id);setEditingWord(null);}}
+              style={{padding:'3px 8px',borderRadius:99,border:'1.5px solid '+cat.color,background:cat.color+'15',cursor:'pointer',fontSize:11,color:cat.color}}>
+              {cat.name}
+            </button>;})}
           </div>
         </div>}
       </div>;
     })}
-    {(query.length>=2||filterTopic)&&results.length===0&&
-      <div style={{textAlign:'center',color:G400,padding:16,fontSize:13}}>Keine Vokabeln gefunden.</div>}
+    {query.length>=2&&results.length===0&&<div style={{textAlign:'center',color:G400,padding:16,fontSize:13}}>Keine Vokabeln gefunden.</div>}
   </div>;
-}
-
-
-// ══════════════════════════════════════════════════════════════
-// CHAPTER TREE — collapsible Kapitel → Themenbereich → Vokabeln
-// ══════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════
-// CHAPTER TREE — Kapitel → Themenbereich → Vokabeln
-// Architecture: words stored in sub-chapters (c1-c5), each word
-// has topic field = sub-chapter id. "allgemein" = fallback.
-// ══════════════════════════════════════════════════════════════
-function ChapterTree({ chapters, setChapters }) {
-  var [openKap,setOpenKap]=useState({});
-  var [openTopic,setOpenTopic]=useState({});
-  var [movingWord,setMovingWord]=useState(null); // {topicId, wordIdx}
-  var [moveFilter,setMoveFilter]=useState('');
-  var [renaming,setRenaming]=useState(null); // id being renamed
-  var [renameVal,setRenameVal]=useState('');
-
-  useEffect(function(){ window._adminSetChapters=setChapters; },[setChapters]);
-
-  // Partition chapters
-  var topLevel=chapters.filter(function(c){return !c.parent_id&&c.id!=='allgemein';});
-  var getTopics=function(kapId){ return chapters.filter(function(c){return c.parent_id===kapId;}); };
-
-  // Get all words from a Kapitel's topics
-  function getAllTopicWords(kapId){
-    var allW=[];
-    getTopics(kapId).forEach(function(t){
-      (t.words||[]).forEach(function(w,wi){
-        allW.push({word:w,topicId:t.id,wordIdx:wi,topic:t});
-      });
-    });
-    // Also get "allgemein" words that reference this kapitel
-    var allg=chapters.find(function(c){return c.id==='allgemein';});
-    if(allg){
-      (allg.words||[]).filter(function(w){return w.kapitelId===kapId;}).forEach(function(w,wi){
-        allW.push({word:w,topicId:'allgemein',wordIdx:wi,topic:allg});
-      });
-    }
-    return allW;
-  }
-
-  function saveWordImportant(topicId,wordIdx,important){
-    var ch=chapters.find(function(c){return c.id===topicId;});
-    if(!ch) return;
-    var newWords=ch.words.map(function(w,i){return i===wordIdx?Object.assign({},w,{important:important}):w;});
-    var newChapters=chapters.map(function(c){return c.id===topicId?Object.assign({},c,{words:newWords}):c;});
-    setChapters(newChapters);
-    sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+topicId);
-  }
-
-  function moveWordToTopic(fromTopicId,wordIdx,toTopicId){
-    if(fromTopicId===toTopicId) return;
-    var fromCh=chapters.find(function(c){return c.id===fromTopicId;});
-    var toCh=chapters.find(function(c){return c.id===toTopicId;});
-    if(!fromCh||!toCh) return;
-    var wordObj=fromCh.words[wordIdx];
-    if(!wordObj) return;
-    // Check duplicate in target
-    if((toCh.words||[]).find(function(w){return w.word.toLowerCase()===wordObj.word.toLowerCase();})){
-      alert('"'+wordObj.word+'" ist in "'+toCh.title+'" bereits vorhanden.'); return;
-    }
-    var movedWord=Object.assign({},wordObj,{topic:toTopicId});
-    var newFromWords=fromCh.words.filter(function(_,i){return i!==wordIdx;});
-    var newToWords=(toCh.words||[]).concat([movedWord]);
-    var newChapters=chapters.map(function(c){
-      if(c.id===fromTopicId) return Object.assign({},c,{words:newFromWords});
-      if(c.id===toTopicId)   return Object.assign({},c,{words:newToWords});
-      return c;
-    });
-    setChapters(newChapters);
-    sbPatch('chapters',{words:JSON.stringify(newFromWords)},'id=eq.'+fromTopicId);
-    sbPatch('chapters',{words:JSON.stringify(newToWords)},'id=eq.'+toTopicId);
-    setMovingWord(null); setMoveFilter('');
-  }
-
-  function renameChapter(id,val){
-    if(!val.trim()) return;
-    sbPatch('chapters',{title:val.trim()},'id=eq.'+id).then(function(){
-      setChapters(function(prev){return prev.map(function(c){return c.id===id?Object.assign({},c,{title:val.trim()}):c;});});
-    });
-    setRenaming(null);
-  }
-
-  function setInactive(ch){
-    if(!confirm('"'+ch.title+'" inaktiv setzen?')) return;
-    sbPatch('chapters',{is_inactive:true},'id=eq.'+ch.id).then(function(){
-      setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:true}):c;});});
-    });
-  }
-  function setActive(ch){
-    sbPatch('chapters',{is_inactive:false},'id=eq.'+ch.id).then(function(){
-      setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:false}):c;});});
-    });
-  }
-  function finalDelete(ch){
-    if(!confirm('"'+ch.title+'" endgültig löschen? Alle Vokabeln werden nach Allgemein verschoben.')) return;
-    // Move words to allgemein first
-    var allg=chapters.find(function(c){return c.id==='allgemein';});
-    if(allg&&ch.words&&ch.words.length>0){
-      var movedWords=(allg.words||[]).concat(ch.words.map(function(w){return Object.assign({},w,{topic:'allgemein'});}));
-      sbPatch('chapters',{words:JSON.stringify(movedWords)},'id=eq.allgemein');
-    }
-    sbDel('chapters','id=eq.'+ch.id).then(function(){
-      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
-    });
-  }
-
-  // Move filter panel
-  function renderMoveFilter(fromTopicId,wordIdx,kapColor){
-    var ql=moveFilter.toLowerCase();
-    var allTopicChapters=chapters.filter(function(c){return !!c.parent_id||c.id==='allgemein';});
-    var filtered=allTopicChapters.filter(function(c){
-      if(c.id===fromTopicId||c.is_inactive) return false;
-      if(!ql) return true;
-      return c.title.toLowerCase().includes(ql);
-    });
-    return (
-      <div style={{background:'white',border:'1.5px solid '+kapColor,borderRadius:10,padding:10,marginTop:4,width:'100%',boxSizing:'border-box'}}>
-        <div style={{fontSize:11,color:G400,marginBottom:6}}>Themenbereich wechseln:</div>
-        <div style={{position:'relative',marginBottom:6}}>
-          <input value={moveFilter} onChange={function(e){setMoveFilter(e.target.value);}}
-            placeholder="Themenbereich suchen…" autoFocus
-            style={{width:'100%',padding:'7px 28px 7px 10px',fontSize:14,border:'1.5px solid '+kapColor,borderRadius:7,outline:'none',boxSizing:'border-box'}}/>
-          {moveFilter&&<button onClick={function(){setMoveFilter('');}}
-            style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:14}}>✕</button>}
-        </div>
-        <div style={{maxHeight:200,overflowY:'auto'}}>
-          {filtered.length===0&&<div style={{fontSize:12,color:G400,padding:6}}>Kein Themenbereich gefunden.</div>}
-          {filtered.map(function(c){
-            var par=chapters.find(function(p){return p.id===c.parent_id;});
-            return <div key={c.id} onClick={function(){moveWordToTopic(fromTopicId,wordIdx,c.id);}}
-              style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,cursor:'pointer',marginBottom:2}}
-              onMouseOver={function(e){e.currentTarget.style.background=G50;}}
-              onMouseOut={function(e){e.currentTarget.style.background='transparent';}}>
-              <span style={{fontSize:14}}>{c.icon}</span>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,color:G900}}>{c.title}</div>
-                <div style={{fontSize:10,color:G400}}>{(c.words||[]).length} Vokabeln{par?' · '+par.icon+' '+par.title:''}</div>
-              </div>
-            </div>;
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>
-        📚 Kapitel ({topLevel.length}) · {chapters.filter(function(c){return !!c.parent_id;}).length} Themenbereiche
-      </div>
-      {topLevel.map(function(kap){
-        var kapTopics=getTopics(kap.id);
-        var totalW=kapTopics.reduce(function(s,t){return s+(t.words||[]).length;},0);
-        var totalI=kapTopics.reduce(function(s,t){return s+(t.words||[]).filter(function(w){return w.important;}).length;},0);
-        var isOpen=!!openKap[kap.id];
-        var isInactive=!!kap.is_inactive;
-        return (
-          <div key={kap.id} style={{marginBottom:10,border:'1.5px solid '+(isInactive?G200:kap.color+'60'),borderRadius:12,overflow:'visible',opacity:isInactive?0.55:1}}>
-            {/* Kapitel header */}
-            <div onClick={function(){if(!isInactive) setOpenKap(function(p){return Object.assign({},p,{[kap.id]:!p[kap.id]});});}}
-              style={{background:isInactive?G100:kap.color+'18',padding:'11px 12px',display:'flex',alignItems:'center',gap:8,cursor:isInactive?'default':'pointer',borderRadius:isOpen?'10px 10px 0 0':'10px'}}>
-              <span style={{fontSize:12,transition:'transform 0.15s',display:'inline-block',transform:isOpen&&!isInactive?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-              <span style={{fontSize:16}}>{kap.icon}</span>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:kap.color}}>
-                  {kap.title}
-                  {isInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 6px',borderRadius:8}}>inaktiv</span>}
-                </div>
-                <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
-              </div>
-              <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-                {isInactive
-                  ? <button onClick={function(){setActive(kap);}} style={BtnStyle(GR,'white',{padding:'3px 8px',fontSize:10})}>▶ Aktiv</button>
-                  : <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(n&&n.trim())renameChapter(kap.id,n);}} style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
-                }
-                {!kap.is_builtin&&(isInactive
-                  ? <button onClick={function(){finalDelete(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑</button>
-                  : <button onClick={function(){setInactive(kap);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'3px 8px',fontSize:10})}>⏸</button>
-                )}
-              </div>
-            </div>
-
-            {/* Themenbereiche */}
-            {isOpen&&!isInactive&&(
-              <div>
-                {kapTopics.length===0&&<div style={{padding:'10px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche. Bild hochladen!</div>}
-                {kapTopics.map(function(topic){
-                  var tKey=kap.id+':'+topic.id;
-                  var isTopicOpen=!!openTopic[tKey];
-                  var isTopicInactive=!!topic.is_inactive;
-                  var impCount=(topic.words||[]).filter(function(w){return w.important;}).length;
-                  return (
-                    <div key={topic.id} style={{borderTop:'1px solid '+G100,background:isTopicInactive?G50:'white',opacity:isTopicInactive?0.6:1}}>
-                      {/* Topic header */}
-                      <div onClick={function(){if(!isTopicInactive) setOpenTopic(function(p){return Object.assign({},p,{[tKey]:!p[tKey]});});}}
-                        style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px 9px 28px',cursor:isTopicInactive?'default':'pointer',
-                          background:isTopicOpen&&!isTopicInactive?kap.color+'06':'transparent'}}>
-                        <span style={{fontSize:11,transition:'transform 0.15s',display:'inline-block',transform:isTopicOpen&&!isTopicInactive?'rotate(90deg)':'rotate(0deg)'}}>▶</span>
-                        <span style={{fontSize:14}}>{topic.icon}</span>
-                        <div style={{flex:1}}>
-                          {renaming===topic.id
-                            ? <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-                                <input value={renameVal} onChange={function(e){setRenameVal(e.target.value);}}
-                                  onKeyDown={function(e){if(e.key==='Enter')renameChapter(topic.id,renameVal);if(e.key==='Escape')setRenaming(null);}}
-                                  autoFocus style={{flex:1,padding:'3px 8px',fontSize:13,border:'1.5px solid '+kap.color,borderRadius:6,outline:'none'}}/>
-                                <button onClick={function(){renameChapter(topic.id,renameVal);}} style={BtnStyle(kap.color,'white',{padding:'3px 8px',fontSize:11})}>✓</button>
-                                <button onClick={function(){setRenaming(null);}} style={BtnStyle(G100,G600,{padding:'3px 6px',fontSize:11})}>✕</button>
-                              </div>
-                            : <div style={{fontSize:13,fontWeight:'bold',color:isTopicInactive?G400:G600}}>
-                                {topic.title}
-                                {isTopicInactive&&<span style={{marginLeft:6,fontSize:10,background:G200,color:G400,padding:'1px 5px',borderRadius:8}}>inaktiv</span>}
-                              </div>
-                          }
-                          <div style={{fontSize:10,color:G400}}>{(topic.words||[]).length} Vokabeln · {impCount} ⭐</div>
-                        </div>
-                        <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:4}}>
-                          {isTopicInactive
-                            ? <button onClick={function(){setActive(topic);}} style={BtnStyle(GR,'white',{padding:'2px 6px',fontSize:10})}>▶ Aktiv</button>
-                            : <button onClick={function(){setRenaming(topic.id);setRenameVal(topic.title);}} style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
-                          }
-                          {!topic.is_builtin&&(isTopicInactive
-                            ? <button onClick={function(){finalDelete(topic);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>
-                            : <button onClick={function(){setInactive(topic);}} style={BtnStyle('#fff7ed','#c2410c',{padding:'2px 6px',fontSize:10})}>⏸</button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Vokabeln */}
-                      {isTopicOpen&&!isTopicInactive&&(
-                        <div style={{padding:'4px 12px 8px 52px',background:kap.color+'04'}}>
-                          {(topic.words||[]).length===0&&<div style={{color:G400,fontSize:11,padding:'6px 0'}}>Keine Vokabeln.</div>}
-                          {(topic.words||[]).map(function(w,wi){
-                            var mkey=topic.id+':'+wi;
-                            var isMoving=movingWord===mkey;
-                            return (
-                              <div key={wi}>
-                                <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 0',borderBottom:'1px solid '+G50,background:isMoving?kap.color+'08':'transparent'}}>
-                                  {/* Importance toggle */}
-                                  <button onClick={function(){saveWordImportant(topic.id,wi,!w.important);}}
-                                    title={w.important?'Als normal markieren':'Als wichtig/fett markieren'}
-                                    style={{width:22,height:22,borderRadius:4,border:'1.5px solid '+(w.important?AM:G200),
-                                      background:w.important?AM:'white',cursor:'pointer',flexShrink:0,
-                                      display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,touchAction:'manipulation'}}>
-                                    <span style={{color:w.important?'white':G200}}>{w.important?'★':'☆'}</span>
-                                  </button>
-                                  <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1,color:G900}}>{w.word}</span>
-                                  <span style={{fontSize:11,color:G400,minWidth:70,textAlign:'right'}}>{w.clue}</span>
-                                  {/* Move button */}
-                                  <button onClick={function(){
-                                    setMovingWord(isMoving?null:mkey);
-                                    setMoveFilter('');
-                                  }} style={{fontSize:10,padding:'2px 7px',borderRadius:5,
-                                    border:'1px solid '+(isMoving?kap.color:G200),
-                                    background:isMoving?kap.color+'15':'transparent',
-                                    cursor:'pointer',color:isMoving?kap.color:G400,
-                                    flexShrink:0,touchAction:'manipulation'}}>
-                                    {isMoving?'✕':'↔'}
-                                  </button>
-                                </div>
-                                {isMoving&&renderMoveFilter(topic.id,wi,kap.color)}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel.</div>}
-    </div>
-  );
 }
 
 
@@ -2965,10 +2783,8 @@ NUR JSON antworten (kein Markdown):
       if(!targetChapter){setImgMsg('❌ Übergeordnetes Kapitel auswählen');return;}
       if(!dTitle.trim()){setImgMsg('❌ Themenbereich-Name eingeben');return;}
       var id='ch_'+Date.now();
-      // Add topic field to all words
-      var wWithTopic=w.map(function(word){return Object.assign({},word,{topic:id});});
-      var ch={id,title:dTitle.trim(),color:dColor,icon:dIcon,words:wWithTopic,sentences:s,is_builtin:false,parent_id:targetChapter};
-      sbPost('chapters',Object.assign({},ch,{words:JSON.stringify(wWithTopic),sentences:JSON.stringify(s),parent_id:targetChapter})).then(function(){
+      var ch={id,title:dTitle.trim(),color:dColor,icon:dIcon,words:w,sentences:s,is_builtin:false,parent_id:targetChapter};
+      sbPost('chapters',Object.assign({},ch,{words:JSON.stringify(w),sentences:JSON.stringify(s),parent_id:targetChapter})).then(function(){
         setChapters(function(prev){return prev.concat([ch]);});
         setDraft(null); setImgMsg('✅ "'+dTitle+'" gespeichert mit '+w.length+' Vokabeln, '+s.length+' Sätzen!');
       });
@@ -2977,8 +2793,7 @@ NUR JSON antworten (kein Markdown):
       if(!existingCh){setImgMsg('❌ Themenbereich nicht gefunden');return;}
       var existW=new Set(existingCh.words.map(function(x){return x.word.toLowerCase();}));
       var existS=new Set((existingCh.sentences||[]).map(function(x){return x.text.toLowerCase().trim();}));
-      var newW=w.filter(function(x){return !existW.has(x.word.toLowerCase());})
-        .map(function(x){return Object.assign({},x,{topic:targetChapter});});
+      var newW=w.filter(function(x){return !existW.has(x.word.toLowerCase());});
       var newS=s.filter(function(x){return !existS.has(x.text.toLowerCase().trim());});
       var updW=existingCh.words.concat(newW);
       var updS=(existingCh.sentences||[]).concat(newS);
@@ -2992,18 +2807,10 @@ NUR JSON antworten (kein Markdown):
 
   function delCh(ch) {
     if(ch.is_builtin) return;
-    // Soft-delete: set inactive first; only final-delete if already inactive
-    if(ch.is_inactive) {
-      if(!confirm('"'+ch.title+'" endgültig löschen? Das kann nicht rückgängig gemacht werden!')) return;
-      sbDel('chapters','id=eq.'+ch.id).then(function(){
-        setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
-      });
-    } else {
-      if(!confirm('"'+ch.title+'" inaktiv setzen? Es kann später wieder aktiviert werden.')) return;
-      sbPatch('chapters',{is_inactive:true},'id=eq.'+ch.id).then(function(){
-        setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{is_inactive:true}):c;});});
-      });
-    }
+    if(!confirm('"'+ch.title+'" löschen?')) return;
+    sbDel('chapters','id=eq.'+ch.id).then(function(){
+      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
+    });
   }
 
   return(
@@ -3015,7 +2822,7 @@ NUR JSON antworten (kein Markdown):
           ['users', pendingCount>0?'👤 Benutzer ('+pendingCount+' ⏳)':'👤 Benutzer'],
           ['chapters','📚 Kapitel & Upload'],
           ['leiterspiel','🎯 Leiterspiel'],
-          ['search','🔍 Suche & Verwaltung']
+          ['search','🔍 Vokabel-Suche']
         ];
         return tabList.map(function(pair){
           return <button key={pair[0]} onClick={function(){setTab(pair[0]);}} style={BtnStyle(tab===pair[0]?T:G100,tab===pair[0]?'white':G600,{padding:'7px 14px',fontSize:12})}>{pair[1]}</button>;
@@ -3131,7 +2938,8 @@ NUR JSON antworten (kein Markdown):
 
       {/* SEARCH TAB */}
       {tab==='search'&&(
-        <VocabSearch chapters={chapters}/>
+        <VocabSearch chapters={chapters} player={player} allCategories={allCategories}
+          onCategoryChange={function(){sbGet('categories','select=*').then(function(cats){if(Array.isArray(cats)&&cats.length) setAllCategories(cats);});}}/>
       )}
 
       {/* CHAPTERS TAB */}
@@ -3208,7 +3016,44 @@ NUR JSON antworten (kein Markdown):
           </div>
 
           {/* Chapter list */}
-          <ChapterTree chapters={chapters} setChapters={setChapters}/>
+          {(function(){
+            var topLevel=chapters.filter(function(c){return !c.parent_id;});
+            var topics=chapters.filter(function(c){return !!c.parent_id;});
+            return <div>
+              <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>📚 Kapitel ({topLevel.length}) · {topics.length} Themenbereiche</div>
+              {topLevel.map(function(kap){
+                var kapTopics=topics.filter(function(t){return t.parent_id===kap.id;});
+                var totalW=kapTopics.reduce(function(s,t){return s+t.words.length;},0);
+                var totalI=kapTopics.reduce(function(s,t){return s+t.words.filter(function(w){return w.important;}).length;},0);
+                return <div key={kap.id} style={{marginBottom:10,border:'2px solid '+kap.color+'50',borderRadius:12,overflow:'hidden'}}>
+                  <div style={{background:kap.color+'20',padding:'10px 12px',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:20}}>{kap.icon}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:'bold',fontSize:14,color:kap.color}}>{kap.title}</div>
+                      <div style={{fontSize:10,color:G400}}>{kapTopics.length} Themenbereiche · {totalW} Vokabeln · {totalI} ⭐</div>
+                    </div>
+                    <button onClick={function(){var n=prompt('Neuer Name:',kap.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+kap.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===kap.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
+                      style={BtnStyle(G100,G600,{padding:'3px 8px',fontSize:10})}>✏️</button>
+                    {!kap.is_builtin&&<button onClick={function(){delCh(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑</button>}
+                  </div>
+                  {kapTopics.map(function(t){
+                    return <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 24px',borderTop:'1px solid '+G100,background:'white'}}>
+                      <span>{t.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:'bold',color:G600}}>{t.title}</div>
+                        <div style={{fontSize:10,color:G400}}>{t.words.length}V · {t.words.filter(function(w){return w.important;}).length}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
+                      </div>
+                      <button onClick={function(){var n=prompt('Neuer Name:',t.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+t.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===t.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
+                        style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
+                      {!t.is_builtin&&<button onClick={function(){delCh(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>}
+                    </div>;
+                  })}
+                  {kapTopics.length===0&&<div style={{padding:'8px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche.</div>}
+                </div>;
+              })}
+              {topLevel.length===0&&<div style={{textAlign:'center',color:G400,padding:16}}>Noch keine Kapitel. Oben "Neues Kapitel" erstellen.</div>}
+            </div>;
+          })()}
         </div>
       )}
     </div>
@@ -3531,7 +3376,7 @@ function App() {
   }, []);
 
   useEffect(function() {
-    sbGet('chapters','select=id,title,color,icon,is_builtin,is_inactive,parent_id,words,sentences&order=created_at.asc').then(function(rows){
+    sbGet('chapters','select=id,title,color,icon,is_builtin,parent_id,words,sentences&order=created_at.asc').then(function(rows){
       if (!Array.isArray(rows) || rows.length === 0) return;
       var parsed = rows.map(function(c) {
         var w = c.words, s = c.sentences;
@@ -3543,17 +3388,11 @@ function App() {
       var merged = parsed.map(function(c) {
         var b = BUILTIN.find(function(x){ return x.id === c.id; });
         if (b && (!c.words || c.words.length === 0)) return Object.assign({}, c, { words: b.words, sentences: b.sentences||[] });
-        // Ensure all words have topic field = their chapter id
-        var fixedWords=(c.words||[]).map(function(w){return w.topic?w:Object.assign({},w,{topic:c.id});});
-        return Object.assign({},c,{words:fixedWords});
+        return c;
       });
-      // Add any BUILTIN not yet in DB (includes Allgemein)
+      // Add any BUILTIN not yet in DB
       var dbIds = new Set(merged.map(function(c){ return c.id; }));
-      BUILTIN.forEach(function(b) {
-        if (!dbIds.has(b.id)) {
-          merged.push(b); // already has parent_id set in BUILTIN
-        }
-      });
+      BUILTIN.forEach(function(b) { if (!dbIds.has(b.id)) merged.push(b); });
       setChapters(merged);
     });
   },[]);
