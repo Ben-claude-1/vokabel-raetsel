@@ -1209,7 +1209,14 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
 
   // ── SETUP SCREEN ──
   if(phase==='setup'){
-    var allOtherUsers=(allUsers||[]).filter(function(u){return String(u.id)!==String(player.id);});
+    var allOtherUsers=(allUsers||[]).filter(function(u){
+      if(String(u.id)===String(player.id)) return false;
+      if(u.is_admin) return false;
+      if(u.is_active===false) return false;
+      var n=(u.name||'').toLowerCase();
+      if(n.startsWith('testuser_')||n.startsWith('cors_test')||n.startsWith('srcdoc_test')||n==='debuguser123') return false;
+      return true;
+    });
     var filteredUsers=userSearch.trim()
       ? allOtherUsers.filter(function(u){return u.name.toLowerCase().includes(userSearch.toLowerCase());})
       : allOtherUsers;
@@ -3082,11 +3089,13 @@ function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
 }
 
 
-function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories }) {
+function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories, allRuns }) {
   var [tab, setTab] = useState('users');
   var [players, setPlayers] = useState([]);
   var [selP, setSelP] = useState(null);
   var [results, setResults] = useState([]);
+  var [selLsProgress, setSelLsProgress] = useState([]); // Leiterspiel progress for selected user
+  var [lsDetailPot, setLsDetailPot] = useState(null); // which pot is open in admin view
   var [loading, setLoading] = useState(false);
   var [imgLoading, setImgLoading] = useState(false);
   var [imgMsg, setImgMsg] = useState('');
@@ -3105,10 +3114,20 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   }, [allUsers]);
 
   function loadP(p) {
-    setSelP(p); setLoading(true);
+    setSelP(p); setLoading(true); setSelLsProgress([]); setLsDetailPot(null);
     sbGet('results','player_id=eq.'+p.id+'&order=completed_at.desc').then(function(r){
-      setResults(Array.isArray(r)?r:[]); setLoading(false);
+      setResults(Array.isArray(r)?r:[]);
     });
+    // Also load Leiterspiel progress for this user
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(UUID.test(p.id)){
+      sbGet('ls_progress','player_id=eq.'+p.id+'&select=id,run_id,data,updated_at').then(function(rows){
+        setSelLsProgress(Array.isArray(rows)?rows:[]);
+        setLoading(false);
+      }).catch(function(){ setLoading(false); });
+    } else {
+      setLoading(false);
+    }
   }
 
   var wStats = useMemo(function(){
@@ -3277,6 +3296,7 @@ NUR JSON antworten (kein Markdown):
           {loading&&<div style={{textAlign:'center',color:G400,padding:20}}>Lade…</div>}
           {selP&&!loading&&(
             <div>
+              {/* ── Header ── */}
               <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:'16px 18px',marginBottom:14,color:'white'}}>
                 <div style={{fontWeight:'bold',fontSize:16,marginBottom:6}}>{selP.name}</div>
                 <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:8}}>
@@ -3288,6 +3308,81 @@ NUR JSON antworten (kein Markdown):
                   <div style={{height:'100%',width:overallPct+'%',background:'white',borderRadius:4}}/>
                 </div>
               </div>
+
+              {/* ── Leiterspiel-Fortschritt ── */}
+              {selLsProgress.length>0&&(function(){
+                var allRuns_=(allRuns||[]);
+                return <div style={{marginBottom:12}}>
+                  <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🎯 Leiterspiel-Fortschritt</div>
+                  {selLsProgress.map(function(row){
+                    var run=allRuns_.find(function(r){return r.id===row.run_id;});
+                    var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+                    var pots=data.pots||{};
+                    var pct=lsPercent(data,gradeSettings);
+                    var gr=lsGrade(pct,gradeSettings);
+                    var potColors2={1:RE,2:'#f97316',3:AM,4:T,5:GR};
+                    var potLabels2={1:'Quiz',2:'Buchstaben',3:'DE→EN',4:'EN→DE',5:'Gelernt'};
+                    return <div key={row.id} style={{background:'white',border:'1px solid '+G200,borderRadius:12,marginBottom:10,overflow:'hidden'}}>
+                      {/* Run header */}
+                      <div style={{padding:'10px 12px',background:G50,display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run?run.name:row.run_id.slice(0,8)}</div>
+                          <div style={{fontSize:10,color:G400}}>Zuletzt gespielt: {new Date(row.updated_at).toLocaleDateString('de-DE')}</div>
+                        </div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontSize:14,fontWeight:'bold',color:pct>=80?GR:pct>=50?AM:T}}>{pct}%</div>
+                          {gr&&<div style={{fontSize:11,color:G400}}>Note {gr}</div>}
+                        </div>
+                      </div>
+                      {/* Progress bar */}
+                      <div style={{height:4,background:G200}}>
+                        <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',transition:'width 0.5s'}}/>
+                      </div>
+                      {/* Pot summary — clickable */}
+                      <div style={{display:'flex',padding:'8px 10px',gap:4}}>
+                        {[1,2,3,4,5].map(function(pot){
+                          var words=pots[pot]||[];
+                          var isOpen=lsDetailPot===row.id+':'+pot;
+                          return <button key={pot} onClick={function(){setLsDetailPot(isOpen?null:row.id+':'+pot);}}
+                            style={{flex:1,padding:'5px 2px',borderRadius:7,border:'1.5px solid '+(isOpen?potColors2[pot]:G200),
+                              background:isOpen?potColors2[pot]+'20':'white',cursor:'pointer',textAlign:'center'}}>
+                            <div style={{fontSize:14,fontWeight:'bold',color:potColors2[pot]}}>{words.length}</div>
+                            <div style={{fontSize:9,color:G400}}>{potLabels2[pot]}</div>
+                          </button>;
+                        })}
+                      </div>
+                      {/* Expanded pot word list */}
+                      {[1,2,3,4,5].map(function(pot){
+                        var key2=row.id+':'+pot;
+                        if(lsDetailPot!==key2) return null;
+                        var words=(pots[pot]||[]);
+                        return <div key={pot} style={{padding:'6px 10px 10px',borderTop:'1px solid '+G100}}>
+                          <div style={{fontSize:11,fontWeight:'bold',color:potColors2[pot],marginBottom:5}}>
+                            {potLabels2[pot]} — {words.length} Vokabeln
+                          </div>
+                          {words.length===0&&<div style={{color:G400,fontSize:11}}>Leer</div>}
+                          {words.map(function(w,wi){
+                            var rc=w.streak||0; var wc=w.wrongStreak||0;
+                            return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',
+                              borderBottom:'1px solid '+G50,fontSize:12}}>
+                              <span style={{fontWeight:'bold',flex:1,color:G900}}>{w.word}</span>
+                              <span style={{color:G400,fontSize:11,minWidth:70}}>{w.clue}</span>
+                              <span title="Richtig" style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✓{rc}</span>
+                              <span title="Falsch" style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✗{wc}</span>
+                            </div>;
+                          })}
+                        </div>;
+                      })}
+                    </div>;
+                  })}
+                </div>;
+              })()}
+              {selLsProgress.length===0&&<div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200,fontSize:12,color:G400}}>
+                📊 Kein Leiterspiel-Fortschritt für diesen Spieler
+              </div>}
+
+              {/* ── Kapitel-Statistik ── */}
+              {chStats.length>0&&<div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📚 Kapitel-Statistik (alte Methode)</div>}
               {chStats.map(function(ch){
                 return(
                   <div key={ch.id} style={{marginBottom:6,padding:'10px 12px',background:'white',border:'1px solid '+G200,borderRadius:10}}>
@@ -3848,7 +3943,7 @@ function App() {
 
   if(screen==='admin') return(
     <Shell showBack={false} onBack={function(){}} title='👑 Admin' rightBtn={logoutBtn} player={player}>
-      <AdminDash chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} player={player} gradeSettings={gradeSettings} streakSettings={streakSettings} setGradeSettings={setGradeSettings} setStreakSettings={setStreakSettings} allCategories={allCategories}/>
+      <AdminDash chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} player={player} gradeSettings={gradeSettings} streakSettings={streakSettings} setGradeSettings={setGradeSettings} setStreakSettings={setStreakSettings} allCategories={allCategories} allRuns={allRuns}/>
     </Shell>
   );
 
