@@ -15,6 +15,17 @@
 </head>
 <body>
   <div id="root"></div>
+  </script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; }
+    input, button, select, textarea { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
   <script type="text/babel" data-presets="react">
 const { useState, useMemo, useCallback, useEffect, useRef } = React;
 
@@ -23,7 +34,7 @@ const { useState, useMemo, useCallback, useEffect, useRef } = React;
 const SB_URL = "https://zdtwlxclgsrfskqqnved.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdHdseGNsZ3NyZnNrcXFudmVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4MTMzNDIsImV4cCI6MjA5MDM4OTM0Mn0.CQbzIo8a9uJnZIgZ1Ulp4okrgwl9IZH48j0HHUBRVJc";
 const HG = { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
-// NOTE: No "Prefer" header on POST — triggers CORS preflight that is blocked in claude.ai sandbox
+// NOTE: No "Prefer" header on POST - triggers CORS preflight that is blocked in claude.ai sandbox
 var HW_POST = { "Content-Type": "application/json", apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
 
 function sbGet(t, q) {
@@ -63,7 +74,7 @@ function sbSingle(t, q) {
   return sbGet(t, q).then(function(d) { return Array.isArray(d) && d.length > 0 ? d[0] : null; });
 }
 
-// ── window.storage helpers — shared:true so ALL users see ALL registrations cross-device ──
+// ── window.storage helpers - shared:true so ALL users see ALL registrations cross-device ──
 // This is the key: shared storage persists across artifact versions AND across devices
 const STORE = {
   getUser: function(name) {
@@ -96,13 +107,13 @@ const STORE = {
   }
 };
 
-// ── Hash — always synchronous, no hanging on mobile ──
+// ── Hash - always synchronous, no hanging on mobile ──
 function simpleHash(str) {
   var s = str + "vocab_salt_2024", h = 5381, h2 = 0;
   for (var i = 0; i < s.length; i++) { h = ((h << 5) + h) ^ s.charCodeAt(i); h2 = (h2 * 31 + s.charCodeAt(i)) | 0; }
   return "fb_" + Math.abs(h).toString(16).padStart(8,"0") + Math.abs(h2).toString(16).padStart(8,"0");
 }
-// hashPw is synchronous — avoids crypto.subtle hanging on mobile browsers
+// hashPw is synchronous - avoids crypto.subtle hanging on mobile browsers
 // Returns Promise for API compatibility, but resolves instantly
 function hashPw(pw) {
   return Promise.resolve(simpleHash(pw));
@@ -983,7 +994,7 @@ function QuizSolo({ chapters, onDone }) {
 
 // ── Quiz Duel (async, turn-based) ─────────────────────────────
 // ══════════════════════════════════════════════════════════════
-// QUIZ DUELL — User-Auswahl, Reihenfolge, Tie-Handling
+// QUIZ DUELL - User-Auswahl, Reihenfolge, Tie-Handling
 // Reihenfolge: Herausgeforderter spielt ZUERST, dann Herausforderer
 // ══════════════════════════════════════════════════════════════
 function QuizDuel({ chapters, player, onDone, allUsers }) {
@@ -1037,7 +1048,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
   function challengeUser(targetUser){
     var generated = makeAllRounds(chapters);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
-    // whose_turn starts as 'p2' — challenged user plays first
+    // whose_turn starts as 'p2' - challenged user plays first
     sbPost('quiz_duels',{
       code:code, player1_id:player.id, player1_name:player.name,
       player2_id:targetUser.id, player2_name:targetUser.name,
@@ -1228,7 +1239,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
     }
 
     return <div style={{padding:8}}>
-      {/* Pending challenges — highlighted at top */}
+      {/* Pending challenges - highlighted at top */}
       {pendingChallenges.length>0&&<div style={{padding:12,background:'#fffbeb',borderRadius:12,
         border:'2px solid '+AM,marginBottom:14,boxShadow:'0 2px 8px rgba(245,158,11,0.15)'}}>
         <div style={{fontWeight:'bold',fontSize:13,color:AM,marginBottom:8}}>⚔️ Herausforderungen ({pendingChallenges.length})</div>
@@ -1360,7 +1371,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
         <div style={{padding:16,background:'white',borderRadius:12,border:'1px solid '+G200,
           boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
           <div style={{fontWeight:'bold',fontSize:14,color:'#7c3aed',marginBottom:4}}>🔗 Beitreten</div>
-          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du spielst zuerst — dann ist der Ersteller dran.</div>
+          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du spielst zuerst - dann ist der Ersteller dran.</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <input value={joinCode} onChange={function(e){setJoinCode(e.target.value.toUpperCase());}}
               placeholder="CODE"
@@ -1384,7 +1395,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
       <div style={{fontSize:36,marginBottom:12}}>📨</div>
       <h3 style={{color:T,marginBottom:8}}>Herausforderung gesendet!</h3>
       {myCode&&<div style={{fontSize:24,fontWeight:'bold',letterSpacing:6,color:AM,background:G100,padding:'10px 16px',borderRadius:10,display:'inline-block',marginBottom:12}}>{myCode}</div>}
-      <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {gameData&&gameData.player2_name||'dein Gegner'} seine Runde gespielt hat — dann bist du dran.</p>
+      <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {gameData&&gameData.player2_name||'dein Gegner'} seine Runde gespielt hat - dann bist du dran.</p>
       <div style={{color:G400,fontSize:12,marginBottom:16}}>Der Herausgeforderte spielt immer zuerst.</div>
       <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active'){setPhase('readyToPlay');}}});}}
         style={BtnStyle(G100,G600,{padding:'8px 16px',fontSize:12})}>🔄 Status prüfen</button>
@@ -1397,7 +1408,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
       <div style={{fontSize:32,marginBottom:12}}>⏳</div>
       <h3 style={{color:T,marginBottom:8}}>Warte auf Mitspieler…</h3>
       <div style={{fontSize:28,fontWeight:'bold',letterSpacing:8,color:AM,margin:'16px 0',background:G100,padding:'12px 20px',borderRadius:12,display:'inline-block'}}>{myCode}</div>
-      <p style={{color:G400,fontSize:13}}>Code teilen — sobald jemand beitritt, kann er zuerst spielen, dann bist du dran.</p>
+      <p style={{color:G400,fontSize:13}}>Code teilen - sobald jemand beitritt, kann er zuerst spielen, dann bist du dran.</p>
       <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active')setPhase('readyToPlay');}});}}
         style={BtnStyle(G100,G600,{marginTop:16,padding:'8px 16px',fontSize:12})}>🔄 Aktualisieren</button>
     </div>;
@@ -1434,7 +1445,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
       <div style={{padding:20,background:'#eff6ff',borderRadius:14,marginBottom:12}}>
         <div style={{fontSize:28,marginBottom:8}}>⏳</div>
         <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} ist dran!</div>
-        <div style={{fontSize:12,color:G600,marginTop:4}}>Warte bis er fertig ist — dann wirst du benachrichtigt.</div>
+        <div style={{fontSize:12,color:G600,marginTop:4}}>Warte bis er fertig ist - dann wirst du benachrichtigt.</div>
       </div>
       <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){
         if(d){setGameData(d);var myT=(isP1&&d.whose_turn==='p1')||(!isP1&&d.whose_turn==='p2');if(myT||d.status==='finished')setPhase('readyToPlay');}
@@ -1453,7 +1464,7 @@ function QuizDuel({ chapters, player, onDone, allUsers }) {
       <div style={{textAlign:'center',padding:'20px 16px',background:roundWon?'#f0fdf4':'#fef2f2',borderRadius:14,marginBottom:12,border:'2px solid '+(roundWon?GR:RE)}}>
         <div style={{fontSize:32,marginBottom:6}}>{roundWon?'🎉':'😔'}</div>
         <div style={{fontSize:17,fontWeight:'bold',color:roundWon?'#065f46':RE}}>
-          Runde {myWins.length}: {roundCorrect2}/3 richtig — {roundWon?'Gewonnen!':'Verloren'}
+          Runde {myWins.length}: {roundCorrect2}/3 richtig - {roundWon?'Gewonnen!':'Verloren'}
         </div>
       </div>
       <ScoreBoard/>
@@ -1848,7 +1859,7 @@ function BrowseChapter({ ch }) {
 // ── Admin ─────────────────────────────────────────────────────
 
 // ══════════════════════════════════════════════════════════════
-// LEITERSPIEL — Persistentes Speichern + 5-Topf-System
+// LEITERSPIEL - Persistentes Speichern + 5-Topf-System
 // REGEL: Nach jeder Antwort sofort mit Supabase synchronisieren
 // ══════════════════════════════════════════════════════════════
 
@@ -2003,7 +2014,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
       <div onDragOver={function(e){e.preventDefault();setOverZone('source');}}
         onDrop={function(e){e.preventDefault();if(!dragId||dragFrom!=='answer')return;var t=getTile(dragId);if(t)moveToSource(t);setDragId(null);setDragFrom(null);setOverZone(null);}}
         style={{display:'flex',flexWrap:'wrap',gap:5,minHeight:46,padding:'6px 8px',borderRadius:8,border:'1px dashed '+(overZone==='source'?'#0369a1':G200),background:overZone==='source'?'#eff6ff':G50,alignItems:'center',justifyContent:'center',marginBottom:10}}>
-        <div style={{fontSize:10,color:G400,width:'100%',textAlign:'center'}}>Vorrat — antippen oder ziehen</div>
+        <div style={{fontSize:10,color:G400,width:'100%',textAlign:'center'}}>Vorrat - antippen oder ziehen</div>
         {source.length===0&&<span style={{color:G400,fontSize:11}}>Alle eingesetzt</span>}
         {source.map(function(tile){
           return <div key={tile.id} draggable={!checked}
@@ -2031,7 +2042,7 @@ function GradeDisplay({ grade, size }) {
 }
 
 function CelebrationPopup({ newGrade, onClose }) {
-  var msgs={1:'🏆 Note 1 — Perfekt!',2:'🥈 Note 2 — Sehr gut!',3:'💪 Note 3 — Gut!',4:'👍 Weiter so!'};
+  var msgs={1:'🏆 Note 1 - Perfekt!',2:'🥈 Note 2 - Sehr gut!',3:'💪 Note 3 - Gut!',4:'👍 Weiter so!'};
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999,padding:20}}>
       <div style={{background:'white',borderRadius:20,padding:30,textAlign:'center',maxWidth:300,width:'100%'}}>
@@ -2045,7 +2056,7 @@ function CelebrationPopup({ newGrade, onClose }) {
   );
 }
 
-// ── LeitersSpielSession — 5-Topf mit persistentem Speichern ──
+// ── LeitersSpielSession - 5-Topf mit persistentem Speichern ──
 function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBack }) {
   var ss=streakSettings||DEFAULT_STREAK;
   var [progress,setProgress]=useState(null);
@@ -2185,8 +2196,8 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var allVocabDone=(progress.pots[1]||[]).length===0&&(progress.pots[2]||[]).length===0&&(progress.pots[3]||[]).length===0&&(progress.pots[4]||[]).length===0;
   var bonusAllDone=allVocabDone&&progress.sentences.every(function(s){return s.streak>=2;});
 
-  // ── POTS VIEW — klick auf Topf zeigt Vokabeln ──
-  var potLabels={1:'Topf 1 — Quiz (DE→EN)',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE→EN Tippen',4:'Topf 4 — EN→DE Tippen',5:'✅ Gelernt'};
+  // ── POTS VIEW - klick auf Topf zeigt Vokabeln ──
+  var potLabels={1:'Topf 1 - Quiz (DE→EN)',2:'Topf 2 - Buchstaben-Puzzle',3:'Topf 3 - DE→EN Tippen',4:'Topf 4 - EN→DE Tippen',5:'✅ Gelernt'};
   var potColors={1:RE,2:'#f97316',3:AM,4:T,5:GR};
 
   if(view==='pots'){
@@ -2232,7 +2243,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var p=progress.pots;
   var header=(
     <div style={{marginBottom:10}}>
-      {saveErr&&<div style={{fontSize:10,color:RE,background:'#fef2f2',padding:'3px 8px',borderRadius:5,marginBottom:4}}>⚠️ Speichern fehlgeschlagen — wird erneut versucht</div>}
+      {saveErr&&<div style={{fontSize:10,color:RE,background:'#fef2f2',padding:'3px 8px',borderRadius:5,marginBottom:4}}>⚠️ Speichern fehlgeschlagen - wird erneut versucht</div>}
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
         <div style={{flex:1}}>
           <div style={{display:'flex',justifyContent:'space-between',fontSize:11,color:G400,marginBottom:3}}>
@@ -2274,7 +2285,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   if(bonusAllDone) return <div style={{padding:8}}>{header}
     <div style={{textAlign:'center',padding:24,background:'#d1fae5',borderRadius:14}}>
       <div style={{fontSize:50,marginBottom:8}}>🏆</div>
-      <div style={{fontWeight:'bold',fontSize:18,color:'#065f46'}}>100% — Du bist bereit!</div>
+      <div style={{fontWeight:'bold',fontSize:18,color:'#065f46'}}>100% - Du bist bereit!</div>
       {grade&&<div style={{marginTop:8}}>Note: <GradeDisplay grade={grade} size={32}/></div>}
     </div>
   </div>;
@@ -2324,9 +2335,9 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
 
   var word=currentItem.word; var pot=currentItem.pot;
   var potColors2={1:RE,2:'#f97316',3:AM,4:T};
-  var potLabel2={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben-Puzzle',3:'Topf 3 — DE → EN',4:'Topf 4 — EN → DE'};
+  var potLabel2={1:'Topf 1 - Quiz',2:'Topf 2 - Buchstaben-Puzzle',3:'Topf 3 - DE → EN',4:'Topf 4 - EN → DE'};
 
-  // ── POT 1: Quiz — Deutsches Wort → 4 englische Optionen ──
+  // ── POT 1: Quiz - Deutsches Wort → 4 englische Optionen ──
   if(pot===1) return <div style={{padding:8}}>
     {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
     {header}
@@ -2334,7 +2345,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     <div style={{textAlign:'center',padding:'18px 14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
       <div style={{fontSize:11,color:G400,marginBottom:4}}>Was bedeutet auf Englisch:</div>
       <div style={{fontSize:26,fontWeight:'bold',color:G900}}>{word.clue}</div>
-      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch — '+word.word}</div>}
+      {result&&<div style={{marginTop:8,fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch - '+word.word}</div>}
     </div>
     {!result&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
       {quizAnswers.map(function(a,i){
@@ -2383,7 +2394,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.clue}</div>
         {result&&<div style={{marginTop:8}}>
           <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:result.partial?AM:RE}}>
-            {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt — „to" fehlt':'✗ Falsch'}
+            {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt - „to" fehlt':'✗ Falsch'}
           </div>
           {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
             <div style={{fontSize:12,padding:'3px 8px',background:result.partial?'#fef3c7':'#fee2e2',borderRadius:5,color:result.partial?'#92400e':RE}}>Du: {result.typed}</div>
@@ -2396,7 +2407,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:6}}>
           {wordParts.length===1?wordParts[0].length+' Buchstaben':wordParts.length+' Wörter: '+wordParts.map(function(w){return w.length;}).join(' + ')+' Buchstaben'}
         </div>
-        {/* Input DIREKT über den Strichen — transparenter Input mit Strich-Visualisierung */}
+        {/* Input DIREKT über den Strichen - transparenter Input mit Strich-Visualisierung */}
         <div style={{position:'relative',marginBottom:12}}>
           <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap',pointerEvents:'none',userSelect:'none',padding:'0 4px'}}>
             {wordParts.map(function(wp,wi){
@@ -2437,7 +2448,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
       <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.word}</div>
       {result&&<div style={{marginTop:8}}>
         <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:result.partial?AM:RE}}>
-          {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt — „to" fehlt':'✗ Falsch'}
+          {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt - „to" fehlt':'✗ Falsch'}
         </div>
         {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
           <div style={{fontSize:12,padding:'3px 8px',background:result.partial?'#fef3c7':'#fee2e2',borderRadius:5,color:result.partial?'#92400e':RE}}>Du: {result.typed}</div>
@@ -2740,7 +2751,7 @@ function LeitersSpielGradeSettings({ settings, onSave }) {
   </div>;
 }
 
-// ── LeitersSpielAdminOverview — mit Spieler-Detail ───────────
+// ── LeitersSpielAdminOverview - mit Spieler-Detail ───────────
 function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
   var [runs,setRuns]=useState([]);
   var [allProg,setAllProg]=useState([]);
@@ -2774,17 +2785,17 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
     var grade=lsGrade(pct,gradeSettings);
     var run=runs.find(function(r){return r.id===selectedUser.runId;});
     var user=(allUsers||[]).find(function(u){return String(u.id)===String(selectedUser.userId);});
-    var potLabels2={1:'Topf 1 — Quiz',2:'Topf 2 — Buchstaben',3:'Topf 3 — DE→EN',4:'Topf 4 — EN→DE',5:'✅ Gelernt'};
+    var potLabels2={1:'Topf 1 - Quiz',2:'Topf 2 - Buchstaben',3:'Topf 3 - DE→EN',4:'Topf 4 - EN→DE',5:'✅ Gelernt'};
     var potColorsD={1:RE,2:'#f97316',3:AM,4:T,5:GR};
     return (
       <div>
         <button onClick={function(){setSelectedUser(null);}} style={BtnStyle(G100,G600,{marginBottom:12,fontSize:12})}>← Übersicht</button>
         <div style={{padding:12,background:G50,borderRadius:10,border:'1px solid '+G200,marginBottom:12}}>
-          <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:4}}>{user?user.name:'Spieler'} — {run?run.name:'Lauf'}</div>
+          <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:4}}>{user?user.name:'Spieler'} - {run?run.name:'Lauf'}</div>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
             <div style={{flex:1}}>
               <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:G400,marginBottom:3}}>
-                <span>Fortschritt</span><span style={{fontWeight:'bold'}}>{pct}%{grade?' — Note '+grade:''}</span>
+                <span>Fortschritt</span><span style={{fontWeight:'bold'}}>{pct}%{grade?' - Note '+grade:''}</span>
               </div>
               <div style={{height:8,background:G200,borderRadius:4,overflow:'hidden'}}>
                 <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:4}}/>
@@ -2947,7 +2958,7 @@ function UploadPreview({ draft, onSave, onCancel, chapters, chapterMode, targetC
       {[['words','📝 Vokabeln',words.length],['sentences','💬 Sätze',sentences.length]].map(function(x){
         return <button key={x[0]} onClick={function(){setTab(x[0]);}}
           style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(tab===x[0]?T:G200),background:tab===x[0]?TL:'white',cursor:'pointer',fontSize:12,fontWeight:'bold',color:tab===x[0]?T:G600}}>
-          {x[1]} ({x[2]}) {tab===x[0]&&<span style={{color:G400,fontWeight:'normal',fontSize:10}}> — ⭐ {(x[0]==='words'?words:sentences).filter(function(i){return i.important;}).length} fett</span>}
+          {x[1]} ({x[2]}) {tab===x[0]&&<span style={{color:G400,fontWeight:'normal',fontSize:10}}> - ⭐ {(x[0]==='words'?words:sentences).filter(function(i){return i.important;}).length} fett</span>}
         </button>;
       })}
     </div>
@@ -3226,13 +3237,13 @@ SÄTZE:
 
 FORMAT - NUR JSON, kein Markdown:
 {"title":"Kurzer Seitentitel","words":[{"word":"Where is ...?","clue":"Wo ist ...?","important":true},{"word":"red","clue":"rot","important":true},{"word":"birthday","clue":"Geburtstag","important":false}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}` }
-        ]}]}).then(function(resp){return resp.json();}).then(function(d){
+        ]}]})}).then(function(resp){return resp.json();}).then(function(d){
         var txt=d.content.map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
         var parsed=JSON.parse(txt);
         setDraft({words:parsed.words||[],sentences:parsed.sentences||[],src:file.name});
         setDTitle(parsed.title||file.name.replace(/\.[^.]+$/,''));
         setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln · '+(parsed.sentences||[]).length+' Sätze erkannt · '+(parsed.words||[]).filter(function(w){return w.important;}).length+' ⭐ fett');
-      }).catch(function(e){setImgMsg('❌ '+e.message+(e.message.indexOf('fetch')>=0?' — API-Key prüfen oder Netzwerk':''));setImgLoading(false);});
+      }).catch(function(e){setImgMsg('❌ '+e.message+(e.message.indexOf('fetch')>=0?' - API-Key pruefen oder Netzwerk':''));setImgLoading(false);});
     };
     reader.readAsDataURL(file);
   }
@@ -3404,7 +3415,7 @@ FORMAT - NUR JSON, kein Markdown:
                       <div style={{height:4,background:G200}}>
                         <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',transition:'width 0.5s'}}/>
                       </div>
-                      {/* Pot summary — clickable */}
+                      {/* Pot summary - clickable */}
                       <div style={{display:'flex',padding:'8px 10px',gap:4}}>
                         {[1,2,3,4,5].map(function(pot){
                           var words=pots[pot]||[];
@@ -3424,7 +3435,7 @@ FORMAT - NUR JSON, kein Markdown:
                         var words=(pots[pot]||[]);
                         return <div key={pot} style={{padding:'6px 10px 10px',borderTop:'1px solid '+G100}}>
                           <div style={{fontSize:11,fontWeight:'bold',color:potColors2[pot],marginBottom:5}}>
-                            {potLabels2[pot]} — {words.length} Vokabeln
+                            {potLabels2[pot]} - {words.length} Vokabeln
                           </div>
                           {words.length===0&&<div style={{color:G400,fontSize:11}}>Leer</div>}
                           {words.map(function(w,wi){
@@ -3510,7 +3521,7 @@ FORMAT - NUR JSON, kein Markdown:
             <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:10}}>📷 Seite hochladen</div>
             {/* API Key config */}
             {!window._ANTHROPIC_KEY&&<div style={{marginBottom:8,padding:'6px 10px',background:'#fef3c7',borderRadius:7,border:'1px solid #fcd34d',fontSize:11,color:'#92400e'}}>
-              ⚠️ Anthropic API-Key fehlt — Upload nicht möglich.
+              ⚠️ Anthropic API-Key fehlt - Upload nicht möglich.
               <div style={{display:'flex',gap:6,marginTop:6}}>
                 <input id="api_key_input" type="password" placeholder="sk-ant-..." autoComplete="off"
                   style={{flex:1,padding:'5px 8px',fontSize:12,border:'1px solid #fcd34d',borderRadius:6,outline:'none'}}/>
@@ -3689,7 +3700,7 @@ function Stats({ results, onRemedial, name }) {
         <div>
           <div style={{fontWeight:"bold",fontSize:13,color:RE,marginBottom:6}}>❌ Falsch</div>
           {wrong.map(function(r,i){
-            return <div key={i} style={{display:"flex",gap:8,padding:"8px 10px",background:"#fef2f2",borderRadius:8,marginBottom:4,fontSize:12,alignItems:"center"}}><span style={{color:G400,minWidth:100,flexShrink:0}}>{r.clue}</span><span style={{color:RE,textDecoration:"line-through"}}>{r.typedAnswer||"—"}</span><span style={{color:"#065f46",fontWeight:"bold",marginLeft:"auto"}}>→ {r.word}</span></div>;
+            return <div key={i} style={{display:"flex",gap:8,padding:"8px 10px",background:"#fef2f2",borderRadius:8,marginBottom:4,fontSize:12,alignItems:"center"}}><span style={{color:G400,minWidth:100,flexShrink:0}}>{r.clue}</span><span style={{color:RE,textDecoration:"line-through"}}>{r.typedAnswer||"-"}</span><span style={{color:"#065f46",fontWeight:"bold",marginLeft:"auto"}}>→ {r.word}</span></div>;
           })}
           <button onClick={function(){onRemedial(wrong);}} style={BtnStyle(AM,"#92400e",{width:"100%",marginTop:12})}>🔁 Nachübungs-Rätsel</button>
         </div>
@@ -3713,7 +3724,7 @@ function LoginScreen({ onLogin, onGoRegister, users }) {
     if (!pw) { setErr("Bitte Passwort eingeben"); return; }
     setLoading(true); setErr("");
 
-    // ADMIN SHORTCUT — always works, no Supabase needed
+    // ADMIN SHORTCUT - always works, no Supabase needed
     if (n.toLowerCase() === "admin" && pw === "Magda1982") {
       setLoading(false);
       onLogin({ id: "admin-local", name: "admin", is_admin: true, total_score: 0, total_correct: 0, total_wrong: 0 });
@@ -3741,7 +3752,7 @@ function LoginScreen({ onLogin, onGoRegister, users }) {
         if (sbFound.is_active === false) { setLoading(false); setErr("Account noch nicht freigeschalten."); return; }
         setLoading(false); onLogin(sbFound); return;
       }
-      // Step 3: Last resort — check KNOWN_USERS directly (works fully offline)
+      // Step 3: Last resort - check KNOWN_USERS directly (works fully offline)
       var knownFound = KNOWN_USERS.find(function(u){ return u.name.toLowerCase() === n.toLowerCase(); });
       if (knownFound) {
         if (knownFound.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
@@ -3749,7 +3760,7 @@ function LoginScreen({ onLogin, onGoRegister, users }) {
       }
       setLoading(false); setErr("Kein Account gefunden. Bitte zuerst registrieren.");
     }).catch(function() {
-      // Network completely down — try KNOWN_USERS as last resort
+      // Network completely down - try KNOWN_USERS as last resort
       var knownFound = KNOWN_USERS.find(function(u){ return u.name.toLowerCase() === n.toLowerCase(); });
       if (knownFound) {
         if (knownFound.password_hash !== _hash) { setLoading(false); setErr("Falsches Passwort"); return; }
@@ -3804,7 +3815,7 @@ function RegisterScreen({ onRegister, onGoLogin, users, onUserAdded }) {
       sbPost("players", { name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }).then(function(res) {
         if (res && res._err) {
           setLoading(false);
-          setErr("Registrierung fehlgeschlagen: " + (res.msg || "Datenbankfehler") + " — bitte erneut versuchen.");
+          setErr("Registrierung fehlgeschlagen: " + (res.msg || "Datenbankfehler") + " - bitte erneut versuchen.");
           return;
         }
         var u = (res && res.id) ? res : { id: "local_" + Date.now(), name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0 };
@@ -3812,7 +3823,7 @@ function RegisterScreen({ onRegister, onGoLogin, users, onUserAdded }) {
         if (onUserAdded) onUserAdded(u);
         setLoading(false); setPending(true);
       }).catch(function() {
-        setErr("Verbindungsfehler — wird erneut versucht…");
+        setErr("Verbindungsfehler - wird erneut versucht…");
         setTimeout(function() {
           sbPost("players", { name: n, password_hash: _hash, is_admin: false, is_active: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }).then(function(res2) {
             if (res2 && res2._err) { setLoading(false); setErr("Registrierung fehlgeschlagen. Bitte Verbindung prüfen."); return; }
@@ -3822,7 +3833,7 @@ function RegisterScreen({ onRegister, onGoLogin, users, onUserAdded }) {
             setLoading(false); setPending(true);
           }).catch(function() {
             setLoading(false);
-            setErr("Keine Verbindung zur Datenbank. Account wurde nicht angelegt — bitte Internetverbindung prüfen.");
+            setErr("Keine Verbindung zur Datenbank. Account wurde nicht angelegt - bitte Internetverbindung prüfen.");
           });
         }, 2000);
     });
@@ -3881,7 +3892,7 @@ function App() {
   var [screen, setScreen] = useState('login');
   var [player, setPlayer] = useState(null);
   var [chapters, setChapters] = useState(BUILTIN);
-  // Known users hardcoded — always available without network
+  // Known users hardcoded - always available without network
   var KNOWN_USERS = [
     { id: "supabase-emma-d46d1397", name: "Emma", password_hash: "fb_63b25a920b81aad7", is_admin: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }
   ];
@@ -3942,10 +3953,10 @@ function App() {
         // Check if already in Supabase
         sbGet('players','name=ilike.'+encodeURIComponent(u.name)+'&select=id').then(function(rows) {
           if (Array.isArray(rows) && rows.length > 0) {
-            // Already exists in Supabase — update cache with real ID
+            // Already exists in Supabase - update cache with real ID
             STORE.setUser(Object.assign({}, u, { id: rows[0].id }));
           } else {
-            // Not in Supabase yet — try to sync
+            // Not in Supabase yet - try to sync
             sbPost('players', { name: u.name, password_hash: u.passwordHash, is_admin: false,
               total_score: u.total_score||0, total_correct: u.total_correct||0,
               total_wrong: u.total_wrong||0, puzzles_completed: 0 })
@@ -4042,7 +4053,7 @@ function App() {
     </Shell>
   );
 
-  // Vocabulary trainer — select chapter first
+  // Vocabulary trainer - select chapter first
   if(screen==='vocabSelect') return(
     <Shell showBack={true} onBack={function(){goScreen('menu');}} title='✍️ Vokabeln lernen' player={player}>
       <WordSelector chapters={chapters} onStart={function(words){setVocab(words);goScreen('vocabTrain');}} mode='vocab'/>
