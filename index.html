@@ -3210,6 +3210,87 @@ function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
 }
 
 
+// ── ApiKeyManager: loads/saves Anthropic key to Supabase settings ──
+function ApiKeyManager() {
+  var [keyVal, setKeyVal] = useState('');
+  var [status, setStatus] = useState('loading'); // loading|missing|set
+  var [saving, setSaving] = useState(false);
+  var [showInput, setShowInput] = useState(false);
+
+  function loadKey() {
+    sbGet('settings','key=eq.anthropic_key&select=value').then(function(rows){
+      var v = Array.isArray(rows)&&rows.length>0 ? rows[0].value : '';
+      if(v) {
+        window._ANTHROPIC_KEY = v;
+        try{sessionStorage.setItem('_ak',v);}catch(e){}
+        setStatus('set');
+      } else {
+        setStatus('missing');
+      }
+    }).catch(function(){ setStatus('missing'); });
+  }
+
+  useEffect(function(){ loadKey(); }, []);
+
+  function saveKey() {
+    var k = keyVal.trim();
+    if(!k) return;
+    setSaving(true);
+    // PATCH first (key already exists from seed), POST as fallback
+    sbPatch('settings',{value:k,updated_at:new Date().toISOString()},'key=eq.anthropic_key').then(function(res){
+      if(res&&res._err){
+        // Row doesn't exist yet - create it
+        return sbPost('settings',{key:'anthropic_key',value:k});
+      }
+      return res;
+    }).then(function(){
+      window._ANTHROPIC_KEY = k;
+      try{sessionStorage.setItem('_ak',k);}catch(e){}
+      setStatus('set'); setSaving(false); setShowInput(false); setKeyVal('');
+    }).catch(function(){
+      setSaving(false);
+      setStatus('missing');
+    });
+  }
+
+  function clearKey() {
+    sbPatch('settings',{value:''},'key=eq.anthropic_key').then(function(){
+      window._ANTHROPIC_KEY = '';
+      try{sessionStorage.removeItem('_ak');}catch(e){}
+      setStatus('missing');
+    });
+  }
+
+  if(status==='loading') return <div style={{fontSize:11,color:G400,marginBottom:6}}>API-Key wird geladen...</div>;
+
+  if(status==='set') return (
+    <div style={{marginBottom:8,padding:'5px 10px',background:'#d1fae5',borderRadius:7,border:'1px solid #6ee7b7',fontSize:11,color:'#065f46',display:'flex',alignItems:'center',gap:8}}>
+      <span>✅ Anthropic API-Key gesetzt (aus Datenbank)</span>
+      <button onClick={function(){setShowInput(true);setStatus('missing');}} style={{fontSize:10,padding:'2px 7px',borderRadius:5,border:'1px solid #6ee7b7',background:'white',cursor:'pointer',color:'#065f46',marginLeft:'auto'}}>Ändern</button>
+      <button onClick={clearKey} style={{fontSize:10,padding:'2px 7px',borderRadius:5,border:'1px solid #fca5a5',background:'white',cursor:'pointer',color:RE}}>Löschen</button>
+    </div>
+  );
+
+  return (
+    <div style={{marginBottom:8,padding:'8px 10px',background:'#fef3c7',borderRadius:7,border:'1px solid #fcd34d',fontSize:11,color:'#92400e'}}>
+      ⚠️ Anthropic API-Key fehlt - Upload nicht möglich.
+      <div style={{display:'flex',gap:6,marginTop:6}}>
+        <input value={keyVal} onChange={function(e){setKeyVal(e.target.value);}}
+          type="password" placeholder="sk-ant-api03-..."
+          autoComplete="off" spellCheck="false"
+          style={{flex:1,padding:'6px 8px',fontSize:13,border:'1.5px solid #f59e0b',borderRadius:6,outline:'none'}}
+          onKeyDown={function(e){if(e.key==='Enter')saveKey();}}/>
+        <button onClick={saveKey} disabled={saving||!keyVal.trim()}
+          style={{padding:'6px 12px',borderRadius:6,background:saving?G400:AM,color:'white',border:'none',cursor:saving?'default':'pointer',fontSize:12,fontWeight:'bold',whiteSpace:'nowrap'}}>
+          {saving?'..':'Speichern'}
+        </button>
+      </div>
+      <div style={{fontSize:10,color:'#b45309',marginTop:4}}>Wird in der Datenbank gespeichert - nur einmal eingeben.</div>
+    </div>
+  );
+}
+
+
 function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories, allRuns }) {
   var [tab, setTab] = useState('users');
   var [players, setPlayers] = useState([]);
@@ -3603,23 +3684,8 @@ Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adje
           {/* Upload section */}
           <div style={{marginBottom:14,padding:14,background:G50,borderRadius:12,border:'2px dashed '+G200}}>
             <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:10}}>📷 Seite hochladen</div>
-            {/* API Key config */}
-            {!window._ANTHROPIC_KEY&&<div style={{marginBottom:8,padding:'6px 10px',background:'#fef3c7',borderRadius:7,border:'1px solid #fcd34d',fontSize:11,color:'#92400e'}}>
-              ⚠️ Anthropic API-Key fehlt - Upload nicht möglich.
-              <div style={{display:'flex',gap:6,marginTop:6}}>
-                <input id="api_key_input" type="password" placeholder="sk-ant-..." autoComplete="off"
-                  style={{flex:1,padding:'5px 8px',fontSize:12,border:'1px solid #fcd34d',borderRadius:6,outline:'none'}}/>
-                <button onClick={function(){
-                  var k=document.getElementById('api_key_input').value.trim();
-                  if(k){window._ANTHROPIC_KEY=k;try{sessionStorage.setItem('_ak',k);}catch(e){}window.dispatchEvent(new Event('akset'));}
-                }} style={{padding:'5px 10px',borderRadius:6,background:AM,color:'white',border:'none',cursor:'pointer',fontSize:11}}>✓ Setzen</button>
-              </div>
-            </div>}
-            {window._ANTHROPIC_KEY&&<div style={{marginBottom:8,padding:'4px 8px',background:'#d1fae5',borderRadius:6,fontSize:10,color:'#065f46'}}>
-              ✅ API-Key gesetzt
-              <button onClick={function(){window._ANTHROPIC_KEY='';try{sessionStorage.removeItem('_ak');}catch(e){}}} style={{marginLeft:8,fontSize:9,padding:'1px 5px',border:'1px solid #6ee7b7',borderRadius:4,background:'white',cursor:'pointer',color:'#065f46'}}>Entfernen</button>
-            </div>}
-
+            {/* API Key config - DB backed */}
+            <ApiKeyManager/>
             {/* Mode selection */}
             <div style={{display:'flex',gap:4,marginBottom:10,flexWrap:'wrap'}}>
               {[['new','➕ Neuer Themenbereich'],['existing','📂 Zu bestehendem'],['newKapitel','📚 Neues Kapitel']].map(function(pair){
