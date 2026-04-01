@@ -2142,9 +2142,11 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
 
     if(isCorrect){
       word.streak=Math.max(0,word.streak||0)+1; word.wrongStreak=0;
+      word.totalCorrect=(word.totalCorrect||0)+1; // NEVER resets
       np.streak=(np.streak||0)+1;
       if(upT>0&&word.streak>=upT){
         np.pots[pot].splice(widx,1); word.streak=0; word.wrongStreak=0;
+        // totalCorrect/totalWrong preserved across pot moves
         var nextPot=Math.min(pot+1,5); np.pots[nextPot].push(word);
         var newGr=lsGrade(lsPercent(np,gradeSettings),gradeSettings);
         var oldGr=lsGrade(lsPercent(progress,gradeSettings),gradeSettings);
@@ -2152,7 +2154,9 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         if(!np.bonusStarted&&np.pots[1].length===0&&np.pots[2].length===0&&np.pots[3].length===0&&np.pots[4].length===0&&np.sentences.length>0) np.bonusStarted=true;
       }
     } else {
-      word.wrongStreak=Math.max(0,word.wrongStreak||0)+1; word.streak=0; np.streak=0;
+      word.wrongStreak=Math.max(0,word.wrongStreak||0)+1; word.streak=0;
+      word.totalWrong=(word.totalWrong||0)+1; // NEVER resets
+      np.streak=0;
       if(dnT>0&&word.wrongStreak>=dnT&&pot>1){
         np.pots[pot].splice(widx,1); word.streak=0; word.wrongStreak=0;
         np.pots[pot-1].push(word);
@@ -2211,8 +2215,8 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
                       <span style={{color:G400,marginLeft:8}}>{w.clue}</span>
                     </div>
                     <div style={{display:'flex',gap:4}}>
-                      {(w.streak||0)>0&&<span style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5}}>✓{w.streak}</span>}
-                      {(w.wrongStreak||0)>0&&<span style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5}}>✗{w.wrongStreak}</span>}
+                      <span style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5}}>✓{w.totalCorrect||0}</span>
+                      <span style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5}}>✗{w.totalWrong||0}</span>
                     </div>
                   </div>;
                 })}
@@ -2411,7 +2415,8 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
           <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}}
             autoCapitalize="none" autoCorrect="off" spellCheck="false"
-            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',opacity:0,fontSize:16,cursor:'text'}}/>
+            type="text" inputMode="text"
+            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',opacity:0,fontSize:16,cursor:'text',textTransform:'none'}}/>
         </div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={function(){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}
@@ -2742,7 +2747,8 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
   var [loading,setLoading]=useState(true);
   var [selectedUser,setSelectedUser]=useState(null);
 
-  useEffect(function(){
+  function reload(){
+    setLoading(true);
     Promise.all([
       lsGetRuns(),
       sbGet('ls_progress','select=id,player_id,run_id,data,updated_at&order=updated_at.desc')
@@ -2751,6 +2757,12 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
       setAllProg(Array.isArray(res[1])?res[1]:[]);
       setLoading(false);
     });
+  }
+  useEffect(function(){
+    reload();
+    // Auto-refresh every 30s
+    var t=setInterval(reload,30000);
+    return function(){clearInterval(t);};
   },[]);
 
   if(loading) return <div style={{textAlign:'center',padding:20,color:G400}}>Lade…</div>;
@@ -2828,7 +2840,12 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
   // Overview
   return (
     <div>
-      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>📋 Alle Läufe ({runs.length})</div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{fontWeight:'bold',fontSize:14,color:G900}}>📋 Alle Läufe ({runs.length})</div>
+        <button onClick={reload} style={{fontSize:11,padding:'4px 10px',borderRadius:7,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600}}>
+          🔄 Aktualisieren
+        </button>
+      </div>
       {runs.map(function(run){
         var prog=allProg.filter(function(p){return p.run_id===run.id;});
         return <div key={run.id} style={{marginBottom:10,border:'1.5px solid '+G200,borderRadius:12,overflow:'hidden'}}>
@@ -2997,11 +3014,21 @@ function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
     var ql=q.toLowerCase();
     var found=[];
     chapters.forEach(function(ch){
-      if(!ch.parent_id) return; // skip top-level, only topic chapters
+      if(!ch.parent_id) return;
       (ch.words||[]).forEach(function(w){
         if(w.word.toLowerCase().includes(ql)||w.clue.toLowerCase().includes(ql)){
           var parent=chapters.find(function(p){return p.id===ch.parent_id;});
-          found.push({word:w.word,clue:w.clue,important:w.important,chapterId:ch.id,chapterTitle:ch.title,chapterIcon:ch.icon,parentTitle:parent?parent.title:'',color:ch.color});
+          // Find linked sentences by vocabWord field
+          var linked=(ch.sentences||[]).filter(function(s){
+            if(!s.vocabWord) return false;
+            var sw=s.vocabWord.toLowerCase().replace(/^to /,'');
+            var ww=w.word.toLowerCase().replace(/^to /,'');
+            return sw===ww||s.vocabWord.toLowerCase()===w.word.toLowerCase();
+          });
+          found.push({word:w.word,clue:w.clue,important:w.important,
+            chapterId:ch.id,chapterTitle:ch.title,chapterIcon:ch.icon,
+            parentTitle:parent?parent.title:'',color:ch.color,
+            sentences:linked});
         }
       });
     });
@@ -3070,6 +3097,7 @@ function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
           {r.parentTitle&&<span style={{fontSize:10,color:G400}}>· {r.parentTitle}</span>}
           <button onClick={function(){setEditingWord(isEditing?null:r.word+r.chapterId);}}
             style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>🏷️</button>
+          {r.sentences&&r.sentences.length>0&&<span style={{fontSize:10,padding:'2px 6px',borderRadius:5,background:'#d1fae5',color:'#065f46'}}>💬 {r.sentences.length}</span>}
         </div>
         {isEditing&&<div style={{marginTop:6,paddingTop:6,borderTop:'1px solid '+G100}}>
           <div style={{fontSize:11,color:G600,marginBottom:4}}>Kategorie zuweisen:</div>
@@ -3157,30 +3185,54 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
     reader.onload=function(){
       var b64=reader.result.split(',')[1];
       fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',headers:{'Content-Type':'application/json'},
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':window._ANTHROPIC_KEY||'','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-          {type:'text',text:`Analysiere diese Schulbuch-Seite. Extrahiere GETRENNT:
-1. VOKABELN: Einzelne Wörter mit Übersetzung
-2. SÄTZE: Vollständige Beispielsätze (nicht einzelne Vokabeln)
+          {type:'text',text:`Analysiere diese Schulbuch-Seite für einen Englisch-Vokabeltrainer.
 
-Regeln:
-- "important": true wenn das Wort/der Satz im Bild FETT gedruckt ist
-- Englische Wörter/Sätze in "text", deutsche Übersetzung in "translation"  
-- Monate großgeschrieben (January etc.), alles andere klein
-- Sätze haben subject+verb und sind vollständige Aussagen
-- Ignoriere Aussprache in /.../ und Seitenangaben
+LAYOUT DER SEITE:
+Vokabeln sind zwischen horizontalen Trennlinien (durchgehende Linien von links bis rechts) angeordnet.
+Zwischen zwei Trennlinien steht ein Block mit:
+  - Englische Vokabel (manchmal fett gedruckt)
+  - Lautschrift /.../ — entweder auf derselben Zeile ODER direkt darunter auf der nächsten Zeile
+  - Deutsche Übersetzung
+  - Optional: Ein Beispielsatz
 
-NUR JSON antworten (kein Markdown):
-{"title":"Kurzer Seitentitel","words":[{"word":"birthday","clue":"Geburtstag","important":true}],"sentences":[{"text":"I want to buy a bag.","translation":"Ich möchte eine Tasche kaufen.","important":true}]}`}
-        ]}]})
-      }).then(function(resp){return resp.json();}).then(function(d){
+VOKABELN ERKENNEN — Lautschrift-Regel:
+Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthält — egal ob auf derselben Zeile oder direkt darunter.
+Beispiele:
+  - "birthday /ˈbɜːθdeɪ/  Geburtstag" → Vokabel "birthday"
+  - "Where is ...?" auf Zeile 1, dann "/weər ɪz/" auf Zeile 2 → Vokabel "Where is ...?"
+  - "red" auf Zeile 1, dann "/red/" auf Zeile 2, dann "rot" → Vokabel "red"
+
+IMPORTANT-FLAG — Fettdruck erkennen:
+- important:true wenn die englische Vokabel FETT gedruckt ist (die Buchstaben haben einen dickeren, schwereren Strich als normaler Text)
+- important:false wenn die Vokabel in normaler Schriftstärke steht
+- WICHTIG: Alle Vokabeln stehen in SCHWARZEM Text. Prüfe nur ob der schwarze Text fett oder normal ist.
+- Das Wort "red" (= die Farbe Rot) ist ein normales schwarzes Wort — prüfe ob ES fett gedruckt ist
+- Das Wort "orange" (= die Farbe Orange) ist ein normales schwarzes Wort — prüfe ob ES fett gedruckt ist
+- Niemals die Wortbedeutung (Farbe) mit der Schriftfarbe verwechseln
+
+VERBEN:
+- Immer mit "to": "to play", "to sing", "to be"
+- Wenn nur Verbstamm fett → ganzes Verb important:true
+
+SÄTZE:
+- Nur aufnehmen wenn im Block eine fett gedruckte Vokabel vorkommt
+- Feld "vocabWord": das englische Vokabelwort des Blocks
+- Aufgaben wie "What can you see?", "Read and..." → IGNORIEREN
+- Bunte Überschriften/Titel → IGNORIEREN
+
+FORMAT — NUR JSON, kein Markdown:
+{"title":"Kurzer Seitentitel","words":[{"word":"Where is ...?","clue":"Wo ist ...?","important":true},{"word":"red","clue":"rot","important":true},{"word":"birthday","clue":"Geburtstag","important":false}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}` }
+        ]}]}).then(function(resp){return resp.json();}).then(function(d){
         var txt=d.content.map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
         var parsed=JSON.parse(txt);
         setDraft({words:parsed.words||[],sentences:parsed.sentences||[],src:file.name});
         setDTitle(parsed.title||file.name.replace(/\.[^.]+$/,''));
         setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln · '+(parsed.sentences||[]).length+' Sätze erkannt · '+(parsed.words||[]).filter(function(w){return w.important;}).length+' ⭐ fett');
-      }).catch(function(e){setImgMsg('❌ '+e.message);}).finally(function(){setImgLoading(false);});
+      }).catch(function(e){setImgMsg('❌ '+e.message+(e.message.includes('fetch')?' — API-Key prüfen oder Netzwerk':''));}).finally(function(){setImgLoading(false);});
     };
     reader.readAsDataURL(file);
   }
@@ -3251,6 +3303,20 @@ NUR JSON antworten (kein Markdown):
       {/* USERS TAB */}
       {tab==='users'&&(
         <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+            <div style={{fontSize:12,color:G400}}>👥 {players.length} Spieler</div>
+            <button onClick={function(){
+              sbGet('players','is_admin=eq.false&select=id,name,password_hash,is_admin,is_active,total_score,total_correct,total_wrong&order=name.asc').then(function(rows){
+                if(Array.isArray(rows)) setPlayers(rows);
+                if(setAllUsers) setAllUsers(function(prev){
+                  var admins=prev.filter(function(u){return u.is_admin;});
+                  return admins.concat(rows||[]);
+                });
+              });
+            }} style={{fontSize:11,padding:'4px 10px',borderRadius:7,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600}}>
+              🔄 Aktualisieren
+            </button>
+          </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
             {players.map(function(p){
               var isPending = p.is_active === false;
@@ -3362,13 +3428,13 @@ NUR JSON antworten (kein Markdown):
                           </div>
                           {words.length===0&&<div style={{color:G400,fontSize:11}}>Leer</div>}
                           {words.map(function(w,wi){
-                            var rc=w.streak||0; var wc=w.wrongStreak||0;
+                            var rc=w.totalCorrect||0; var wc=w.totalWrong||0;
                             return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',
                               borderBottom:'1px solid '+G50,fontSize:12}}>
                               <span style={{fontWeight:'bold',flex:1,color:G900}}>{w.word}</span>
                               <span style={{color:G400,fontSize:11,minWidth:70}}>{w.clue}</span>
-                              <span title="Richtig" style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✓{rc}</span>
-                              <span title="Falsch" style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✗{wc}</span>
+                              <span title="Gesamt richtig" style={{fontSize:10,color:GR,background:'#dcfce7',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✓{rc}</span>
+                              <span title="Gesamt falsch" style={{fontSize:10,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5,minWidth:24,textAlign:'center'}}>✗{wc}</span>
                             </div>;
                           })}
                         </div>;
@@ -3442,6 +3508,22 @@ NUR JSON antworten (kein Markdown):
           {/* Upload section */}
           <div style={{marginBottom:14,padding:14,background:G50,borderRadius:12,border:'2px dashed '+G200}}>
             <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:10}}>📷 Seite hochladen</div>
+            {/* API Key config */}
+            {!window._ANTHROPIC_KEY&&<div style={{marginBottom:8,padding:'6px 10px',background:'#fef3c7',borderRadius:7,border:'1px solid #fcd34d',fontSize:11,color:'#92400e'}}>
+              ⚠️ Anthropic API-Key fehlt — Upload nicht möglich.
+              <div style={{display:'flex',gap:6,marginTop:6}}>
+                <input id="api_key_input" type="password" placeholder="sk-ant-..." autoComplete="off"
+                  style={{flex:1,padding:'5px 8px',fontSize:12,border:'1px solid #fcd34d',borderRadius:6,outline:'none'}}/>
+                <button onClick={function(){
+                  var k=document.getElementById('api_key_input').value.trim();
+                  if(k){window._ANTHROPIC_KEY=k;try{sessionStorage.setItem('_ak',k);}catch(e){}window.dispatchEvent(new Event('akset'));}
+                }} style={{padding:'5px 10px',borderRadius:6,background:AM,color:'white',border:'none',cursor:'pointer',fontSize:11}}>✓ Setzen</button>
+              </div>
+            </div>}
+            {window._ANTHROPIC_KEY&&<div style={{marginBottom:8,padding:'4px 8px',background:'#d1fae5',borderRadius:6,fontSize:10,color:'#065f46'}}>
+              ✅ API-Key gesetzt
+              <button onClick={function(){window._ANTHROPIC_KEY='';try{sessionStorage.removeItem('_ak');}catch(e){}}} style={{marginLeft:8,fontSize:9,padding:'1px 5px',border:'1px solid #6ee7b7',borderRadius:4,background:'white',cursor:'pointer',color:'#065f46'}}>Entfernen</button>
+            </div>}
 
             {/* Mode selection */}
             <div style={{display:'flex',gap:4,marginBottom:10,flexWrap:'wrap'}}>
@@ -3794,6 +3876,8 @@ function Shell({ children, showBack, onBack, title, rightBtn, player }) {
 
 // ── App ───────────────────────────────────────────────────────
 function App() {
+  // Restore API key from session
+  (function(){try{var k=sessionStorage.getItem('_ak');if(k)window._ANTHROPIC_KEY=k;}catch(e){}}());
   var [screen, setScreen] = useState('login');
   var [player, setPlayer] = useState(null);
   var [chapters, setChapters] = useState(BUILTIN);
