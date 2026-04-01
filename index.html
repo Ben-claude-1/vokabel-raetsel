@@ -284,22 +284,79 @@ function makeAllRounds(chapters) {
 function normalizeAnswer(s) {
   return s.trim().toLowerCase()
     .replace(/^(to|die|der|das|ein|eine|einen|einem|einer|ich|sie|er|es|wir|ihr)\s+/i, '')
-    .replace(/[.,!?;:()]/g, '').trim();
+    .replace(/[.,!?;:]/g, '')
+    .replace(/\s*\([^)]*\)\s*/g, ' ') // remove parenthetical groups
+    .replace(/[()]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+// Generate all variants from a word with parentheticals:
+// "(irgend)ein(e)" → ["ein","eine","irgendein","irgendeine","(irgend)ein(e)"]
+function wordVariants(raw) {
+  var w = raw.trim().toLowerCase();
+  var variants = [w, normalizeAnswer(w)];
+  // Core: remove all parenthetical content
+  var core = w.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
+  if (core) variants.push(core);
+  // Merged: keep content without parens
+  var merged = w.replace(/\(([^)]*)\)/g,'$1').replace(/\s+/g,' ').trim();
+  if (merged) variants.push(merged);
+  // Expand: all 2^n combinations of optional parenthetical parts
+  var parts = w.split(/(\([^)]*\))/);
+  var optionals = [];
+  var base = [];
+  parts.forEach(function(p){
+    if(/^\([^)]*\)$/.test(p)){
+      optionals.push({pos:base.length, content:p.slice(1,-1)});
+      base.push('');
+    } else {
+      base.push(p);
+    }
+  });
+  var n = optionals.length;
+  for (var mask=0; mask < (1<<n); mask++) {
+    var b = base.slice();
+    for (var j=0; j<n; j++) {
+      if (mask & (1<<j)) b[optionals[j].pos] = optionals[j].content;
+    }
+    var v = b.join('').replace(/\s+/g,' ').trim();
+    if (v) variants.push(v);
+  }
+  // Deduplicate
+  var seen = {};
+  return variants.filter(function(v){if(!v||seen[v])return false;seen[v]=1;return true;});
 }
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim().toLowerCase();
   var tN = normalizeAnswer(t);
-  var variants = correct.split(/[,;\/]+/).map(function(s){ return s.trim().toLowerCase(); }).filter(Boolean);
-  var variantsN = variants.map(normalizeAnswer);
-  // Exact match
-  for (var i=0;i<variants.length;i++) {
-    if (variants[i]===t || variantsN[i]===t || variantsN[i]===tN || variants[i]===tN) return 'correct';
+  var corrects = correct.split(/[,;\/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
+
+  // Check if any correct answer is a "to-verb" (starts with "to ")
+  function isToVerb(c){ return /^to\s+/i.test(c.trim()); }
+  function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
+
+  // First pass: exact match (including "to X" === "to X")
+  var allVariants = [];
+  corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
+  for (var i=0;i<allVariants.length;i++) {
+    if (allVariants[i]===t || allVariants[i]===tN) return 'correct';
   }
-  // Partial match
-  for (var j=0;j<variantsN.length;j++) {
-    var v=variantsN[j];
-    if (v.includes(tN) || tN.includes(v)) return 'partial';
+
+  // Second pass: "to-verb" typed without "to" → partial
+  for (var k=0;k<corrects.length;k++) {
+    if (isToVerb(corrects[k])) {
+      var base = stripTo(corrects[k]);
+      var baseN = normalizeAnswer(base);
+      if (t===base || tN===base || t===baseN || tN===baseN) return 'partial'; // missing "to"
+    }
+  }
+
+  // Third pass: general partial (substring match)
+  var allNorm = corrects.map(normalizeAnswer);
+  for (var j=0;j<allNorm.length;j++) {
+    var v=allNorm[j];
+    if (v && tN && (v.includes(tN)||tN.includes(v))) return 'partial';
   }
   return 'wrong';
 }
@@ -925,284 +982,567 @@ function QuizSolo({ chapters, onDone }) {
 }
 
 // ── Quiz Duel (async, turn-based) ─────────────────────────────
-function QuizDuel({ chapters, player, onDone }) {
-  var [phase, setPhase] = useState("setup"); // setup | invite | waiting | playing | roundResult | finalResult
-  var [myCode, setMyCode] = useState("");
-  var [joinCode, setJoinCode] = useState("");
-  var [joinErr, setJoinErr] = useState("");
+// ══════════════════════════════════════════════════════════════
+// QUIZ DUELL — User-Auswahl, Reihenfolge, Tie-Handling
+// Reihenfolge: Herausgeforderter spielt ZUERST, dann Herausforderer
+// ══════════════════════════════════════════════════════════════
+function QuizDuel({ chapters, player, onDone, allUsers }) {
+  var [phase, setPhase] = useState("setup");
+  var [tab, setTab] = useState("users"); // "users" | "code"
   var [gameId, setGameId] = useState(null);
   var [gameData, setGameData] = useState(null);
-  var [rounds, setRounds] = useState([]); // pregenerated questions
+  var [rounds, setRounds] = useState([]);
   var [currentRoundIdx, setCurrentRoundIdx] = useState(0);
   var [qIdx, setQIdx] = useState(0);
   var [chosen, setChosen] = useState(null);
   var [timeLeft, setTimeLeft] = useState(20);
-  var [myAnswers, setMyAnswers] = useState([]); // answers for current round
+  var [myAnswers, setMyAnswers] = useState([]);
+  var [joinCode, setJoinCode] = useState("");
+  var [joinErr, setJoinErr] = useState("");
+  var [myCode, setMyCode] = useState("");
+  var [pendingChallenges, setPendingChallenges] = useState([]);
   var timerRef = useRef(null);
+  var pollRef = useRef(null);
+  var [userSearch,setUserSearch]=useState(''); // For user list search in setup
 
-  // Load game data
-  useEffect(function() {
-    if (!gameId) return;
-    function poll() {
-      sbSingle("quiz_duels", "id=eq."+gameId).then(function(d) {
-        if (d) setGameData(d);
+  // Poll for game updates and pending challenges
+  useEffect(function(){
+    if(!player) return;
+    function pollAll(){
+      // Check pending challenges (games where I'm p2 and status=waiting)
+      sbGet('quiz_duels','player2_id=eq.'+player.id+'&status=eq.waiting&select=id,code,player1_name,created_at').then(function(d){
+        if(Array.isArray(d)) setPendingChallenges(d);
       });
+      // If in active game, poll for updates
+      if(gameId){
+        sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){
+          if(d) setGameData(d);
+        });
+      }
     }
-    poll();
-    var t = setInterval(poll, 3000);
-    return function() { clearInterval(t); };
-  }, [gameId]);
+    pollAll();
+    pollRef.current = setInterval(pollAll, 3000);
+    return function(){ clearInterval(pollRef.current); };
+  },[player, gameId]);
 
-  function createGame() {
+  // Auto-advance when opponent finishes and it's my turn
+  useEffect(function(){
+    if(!gameData||!gameId) return;
+    var isP1 = gameData.player1_id === player.id;
+    var myTurn = (isP1 && gameData.whose_turn==='p1')||((!isP1)&&gameData.whose_turn==='p2');
+    if(phase==='waiting'&&myTurn) setPhase('readyToPlay');
+    if(gameData.status==='finished'&&phase!=='finalResult') setPhase('finalResult');
+  },[gameData]);
+
+  function challengeUser(targetUser){
     var generated = makeAllRounds(chapters);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
-    sbPost("quiz_duels", {
-      code: code,
-      player1_id: player.id,
-      player1_name: player.name,
-      rounds: JSON.stringify(generated),
-      round_wins_p1: JSON.stringify([]),
-      round_wins_p2: JSON.stringify([]),
-      current_round: 0,
-      whose_turn: "p1",
-      status: "waiting",
-    }).then(function(res) {
-      if (res && (res.id || res._ok)) {
-        sbSingle("quiz_duels", "code=eq."+code).then(function(d) {
-          if (d) { setGameId(d.id); setRounds(generated); setMyCode(code); setPhase("invite"); }
+    // whose_turn starts as 'p2' — challenged user plays first
+    sbPost('quiz_duels',{
+      code:code, player1_id:player.id, player1_name:player.name,
+      player2_id:targetUser.id, player2_name:targetUser.name,
+      rounds:JSON.stringify(generated),
+      round_wins_p1:JSON.stringify([]), round_wins_p2:JSON.stringify([]),
+      current_round:0, whose_turn:'p2', status:'waiting',
+    }).then(function(res){
+      if(res&&!res._err){
+        sbSingle('quiz_duels','code=eq.'+code).then(function(d){
+          if(d){ setGameId(d.id); setRounds(generated); setMyCode(code); setPhase('waitingForChallengee'); }
         });
       }
     });
   }
 
-  function joinGame() {
+  function createOpenGame(){
+    var generated = makeAllRounds(chapters);
+    var code = Math.random().toString(36).slice(2,8).toUpperCase();
+    sbPost('quiz_duels',{
+      code:code, player1_id:player.id, player1_name:player.name,
+      rounds:JSON.stringify(generated),
+      round_wins_p1:JSON.stringify([]), round_wins_p2:JSON.stringify([]),
+      current_round:0, whose_turn:'p2', status:'waiting',
+    }).then(function(res){
+      if(res&&!res._err){
+        sbSingle('quiz_duels','code=eq.'+code).then(function(d){
+          if(d){ setGameId(d.id); setRounds(generated); setMyCode(code); setPhase('invite'); }
+        });
+      }
+    });
+  }
+
+  function joinByCode(){
     var code = joinCode.trim().toUpperCase();
-    if (!code) { setJoinErr("Code eingeben"); return; }
-    sbSingle("quiz_duels", "code=eq."+code+"&status=eq.waiting").then(function(d) {
-      if (!d) { setJoinErr("Spiel nicht gefunden"); return; }
-      sbPatch("quiz_duels", { player2_id: player.id, player2_name: player.name, status: "active" }, "id=eq."+d.id).then(function() {
-        var parsedRounds = JSON.parse(d.rounds || "[]");
-        setRounds(parsedRounds);
-        setGameId(d.id);
-        setGameData(Object.assign({}, d, { player2_id: player.id, status: "active" }));
-        setPhase("playing");
-        setCurrentRoundIdx(d.current_round || 0);
+    if(!code){ setJoinErr('Code eingeben'); return; }
+    sbSingle('quiz_duels','code=eq.'+code+'&status=eq.waiting').then(function(d){
+      if(!d){ setJoinErr('Spiel nicht gefunden'); return; }
+      var parsedRounds = JSON.parse(d.rounds||'[]');
+      sbPatch('quiz_duels',{player2_id:player.id, player2_name:player.name, status:'active'},'id=eq.'+d.id).then(function(){
+        setRounds(parsedRounds); setGameId(d.id);
+        setGameData(Object.assign({},d,{player2_id:player.id,player2_name:player.name,status:'active'}));
+        setCurrentRoundIdx(0); setPhase('readyToPlay'); // challenged player goes first
       });
     });
   }
 
-  function startMyTurn() {
-    var round = rounds[currentRoundIdx];
-    if (!round) return;
-    setQIdx(0); setMyAnswers([]); setChosen(null); setTimeLeft(20);
-    setPhase("playing");
+  function acceptChallenge(challenge){
+    sbSingle('quiz_duels','id=eq.'+challenge.id).then(function(d){
+      if(!d) return;
+      var parsedRounds = JSON.parse(d.rounds||'[]');
+      sbPatch('quiz_duels',{status:'active'},'id=eq.'+d.id).then(function(){
+        setRounds(parsedRounds); setGameId(d.id);
+        setGameData(Object.assign({},d,{status:'active'}));
+        setCurrentRoundIdx(0); setPhase('readyToPlay');
+      });
+    });
   }
 
-  function handleDuelAnswer(word) {
+  function startMyTurn(){
+    setQIdx(0); setMyAnswers([]); setChosen(null); setTimeLeft(20);
+    setPhase('playing');
+  }
+
+  function handleDuelAnswer(word){
     clearInterval(timerRef.current);
-    setChosen(word || "__none__");
-    var correct = word === currentRound.correct.word;
-    var newAnswers = myAnswers.concat([{word: word, correct: correct}]);
+    if(chosen) return;
+    setChosen(word||'__none__');
+    var correct = word && currentRound && word===currentRound.correct.word;
+    var newAnswers = myAnswers.concat([{word:word,correct:!!correct}]);
     setMyAnswers(newAnswers);
 
-    setTimeout(function() {
-      if (qIdx + 1 >= currentRoundArr.length) {
-        // Round done - save results
-        var roundCorrect = newAnswers.filter(function(a){ return a.correct; }).length;
-        var isP1 = gameData && gameData.player1_id === player.id;
-        var existingWins = JSON.parse((isP1 ? gameData.round_wins_p1 : gameData.round_wins_p2) || "[]");
+    setTimeout(function(){
+      if(!currentRoundArr||qIdx+1>=currentRoundArr.length){
+        // Round done
+        var roundCorrect = newAnswers.filter(function(a){return a.correct;}).length;
+        var isP1 = gameData&&gameData.player1_id===player.id;
+        var existingWins = JSON.parse((isP1?gameData.round_wins_p1:gameData.round_wins_p2)||'[]');
         var newWins = existingWins.concat([roundCorrect]);
+        var otherWins = JSON.parse((isP1?gameData.round_wins_p2:gameData.round_wins_p1)||'[]');
         var update = {};
-        if (isP1) {
+        if(isP1){
           update.round_wins_p1 = JSON.stringify(newWins);
-          update.whose_turn = "p2";
+          update.whose_turn = 'p2';
         } else {
           update.round_wins_p2 = JSON.stringify(newWins);
-          update.whose_turn = "p1";
-          update.current_round = (gameData.current_round || 0) + 1;
+          update.whose_turn = 'p1';
         }
-        // Check if game over
-        var otherWins = JSON.parse((isP1 ? gameData.round_wins_p2 : gameData.round_wins_p1) || "[]");
-        var totalRoundsPlayed = newWins.length + otherWins.length;
-        if (newWins.length === 6 && otherWins.length === 6) update.status = "finished";
-
-        sbPatch("quiz_duels", update, "id=eq."+gameId).then(function() {
-          setPhase("roundResult");
+        // Game over when both have played all 6 rounds
+        var totalMe = newWins.length;
+        var totalOpp = otherWins.length;
+        if(totalMe>=6&&totalOpp>=6) update.status='finished';
+        sbPatch('quiz_duels',update,'id=eq.'+gameId).then(function(){
           setMyAnswers(newAnswers);
+          setGameData(function(prev){return Object.assign({},prev,update,
+            isP1?{round_wins_p1:update.round_wins_p1}:{round_wins_p2:update.round_wins_p2}
+          );});
+          setPhase('roundResult');
         });
       } else {
-        setQIdx(function(i){ return i + 1; });
-        setChosen(null);
-        setTimeLeft(20);
+        setQIdx(function(i){return i+1;});
+        setChosen(null); setTimeLeft(20);
       }
-    }, 1200);
+    },1200);
   }
 
-  useEffect(function() {
-    if (phase !== "playing" || chosen) return;
+  // Timer
+  useEffect(function(){
+    if(phase!=='playing'||chosen) return;
     clearInterval(timerRef.current);
     setTimeLeft(20);
-    timerRef.current = setInterval(function() {
-      setTimeLeft(function(t) {
-        if (t <= 1) { clearInterval(timerRef.current); handleDuelAnswer(null); return 0; }
-        return t - 1;
+    timerRef.current = setInterval(function(){
+      setTimeLeft(function(t){
+        if(t<=1){clearInterval(timerRef.current);handleDuelAnswer(null);return 0;}
+        return t-1;
       });
-    }, 1000);
-    return function() { clearInterval(timerRef.current); };
-  }, [phase, qIdx, chosen]);
+    },1000);
+    return function(){clearInterval(timerRef.current);};
+  },[phase,qIdx,chosen]);
 
-  var currentRoundArr = rounds[currentRoundIdx] || [];
+  var TOTAL_ROUNDS = 6;
+  var currentRoundArr = rounds[currentRoundIdx]||[];
   var currentRound = currentRoundArr[qIdx];
-  var isP1 = gameData && gameData.player1_id === player.id;
-  var myWins = JSON.parse((gameData && (isP1 ? gameData.round_wins_p1 : gameData.round_wins_p2)) || "[]");
-  var oppWins = JSON.parse((gameData && (isP1 ? gameData.round_wins_p2 : gameData.round_wins_p1)) || "[]");
+  var isP1 = gameData&&gameData.player1_id===player.id;
+  var myWins = JSON.parse((gameData&&(isP1?gameData.round_wins_p1:gameData.round_wins_p2))||'[]');
+  var oppWins = JSON.parse((gameData&&(isP1?gameData.round_wins_p2:gameData.round_wins_p1))||'[]');
+  var oppName = gameData?(isP1?gameData.player2_name:gameData.player1_name)||'Gegner':'Gegner';
 
-  // Setup screen
-  if (phase === "setup") return (
-    <div style={{padding:"8px"}}>
-      <div style={{marginBottom:16,padding:16,background:G50,borderRadius:12,border:"1px solid "+G200}}>
-        <div style={{fontWeight:"bold",fontSize:14,color:T,marginBottom:8}}>🎯 Neues Duell erstellen</div>
-        <p style={{fontSize:12,color:G600,marginBottom:12}}>Du erstellst ein Spiel und lädst jemanden ein. Du spielst als Erstes, dann ist dein Gegner dran — abwechselnd über 6 Runden.</p>
-        <button onClick={createGame} style={BtnStyle(T,"#fff",{width:"100%",padding:"10px"})}>Duell erstellen</button>
+  // ── SCORE DISPLAY HELPER ──
+  function ScoreBoard({compact}){
+    var myR=myWins.filter(function(s){return s>=2;}).length;
+    var oppR=oppWins.filter(function(s){return s>=2;}).length;
+    if(compact) return (
+      <div style={{display:'flex',gap:6,alignItems:'center',justifyContent:'center',marginBottom:8}}>
+        <span style={{fontWeight:'bold',color:T,fontSize:13}}>{player.name}</span>
+        <span style={{fontSize:18,fontWeight:'bold',color:myR>oppR?GR:myR<oppR?RE:AM}}>{myR}</span>
+        <span style={{color:G400}}>:</span>
+        <span style={{fontSize:18,fontWeight:'bold',color:oppR>myR?GR:oppR<myR?RE:AM}}>{oppR}</span>
+        <span style={{fontWeight:'bold',color:G600,fontSize:13}}>{oppName}</span>
+        <span style={{marginLeft:8,fontSize:11,color:G400}}>Runde {Math.max(myWins.length,oppWins.length)+1}/{TOTAL_ROUNDS}</span>
       </div>
-      <div style={{padding:16,background:G50,borderRadius:12,border:"1px solid "+G200}}>
-        <div style={{fontWeight:"bold",fontSize:14,color:"#7c3aed",marginBottom:8}}>🔗 Bestehendem Duell beitreten</div>
-        <div style={{display:"flex",gap:8}}>
-          <input value={joinCode} onChange={function(e){ setJoinCode(e.target.value.toUpperCase()); }} placeholder="Code eingeben…"
-            style={{flex:1,padding:"10px 12px",fontSize:16,border:"2px solid "+T,borderRadius:8,outline:"none",letterSpacing:4,textTransform:"uppercase",textAlign:"center"}} />
-          <button onClick={joinGame} style={BtnStyle(T)}>Beitreten</button>
+    );
+    return (
+      <div style={{padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200,marginBottom:10}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <span style={{fontWeight:'bold',fontSize:12,color:T}}>{player.name}</span>
+          <span style={{fontSize:10,color:G400}}>Runde {Math.max(myWins.length,oppWins.length)}/{TOTAL_ROUNDS}</span>
+          <span style={{fontWeight:'bold',fontSize:12,color:G600}}>{oppName}</span>
         </div>
-        {joinErr && <div style={{color:RE,fontSize:12,marginTop:6}}>{joinErr}</div>}
+        <div style={{display:'flex',gap:3,justifyContent:'center',flexWrap:'wrap'}}>
+          {Array.from({length:TOTAL_ROUNDS}).map(function(_,i){
+            var myS=myWins[i]; var oppS=oppWins[i];
+            var myWon=myS!==undefined&&myS>=2; var oppWon=oppS!==undefined&&oppS>=2;
+            return <div key={i} style={{textAlign:'center',width:36}}>
+              <div style={{fontSize:9,color:G400,marginBottom:2}}>R{i+1}</div>
+              <div style={{display:'flex',gap:1}}>
+                <div style={{flex:1,height:20,borderRadius:'3px 0 0 3px',background:myS!==undefined?(myWon?GR:RE):G200,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'white',fontWeight:'bold'}}>
+                  {myS!==undefined?myS:''}
+                </div>
+                <div style={{flex:1,height:20,borderRadius:'0 3px 3px 0',background:oppS!==undefined?(oppWon?GR:RE):G200,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'white',fontWeight:'bold'}}>
+                  {oppS!==undefined?oppS:''}
+                </div>
+              </div>
+            </div>;
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  // Invite screen
-  if (phase === "invite") return (
-    <div style={{textAlign:"center",padding:32}}>
+  // ── SETUP SCREEN ──
+  if(phase==='setup'){
+    var allOtherUsers=(allUsers||[]).filter(function(u){return String(u.id)!==String(player.id);});
+    var filteredUsers=userSearch.trim()
+      ? allOtherUsers.filter(function(u){return u.name.toLowerCase().includes(userSearch.toLowerCase());})
+      : allOtherUsers;
+
+    function avatarColor(name){
+      var colors=['#0f766e','#7c3aed','#b45309','#0369a1','#be185d','#15803d','#dc2626','#0891b2'];
+      var idx=0;for(var i=0;i<name.length;i++)idx=(idx+name.charCodeAt(i))%colors.length;
+      return colors[idx];
+    }
+
+    return <div style={{padding:8}}>
+      {/* Pending challenges — highlighted at top */}
+      {pendingChallenges.length>0&&<div style={{padding:12,background:'#fffbeb',borderRadius:12,
+        border:'2px solid '+AM,marginBottom:14,boxShadow:'0 2px 8px rgba(245,158,11,0.15)'}}>
+        <div style={{fontWeight:'bold',fontSize:13,color:AM,marginBottom:8}}>⚔️ Herausforderungen ({pendingChallenges.length})</div>
+        {pendingChallenges.map(function(c){
+          var ac2=avatarColor(c.player1_name||'?');
+          return <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid #fde68a'}}>
+            <div style={{width:36,height:36,borderRadius:'50%',background:ac2,color:'white',
+              display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:15,flexShrink:0}}>
+              {(c.player1_name||'?')[0].toUpperCase()}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{c.player1_name}</div>
+              <div style={{fontSize:10,color:G400}}>fordert dich heraus!</div>
+            </div>
+            <button onClick={function(){acceptChallenge(c);}}
+              style={{padding:'8px 16px',borderRadius:8,border:'none',background:T,color:'white',
+                cursor:'pointer',fontSize:13,fontWeight:'bold',flexShrink:0,touchAction:'manipulation'}}>
+              ✓ Annehmen
+            </button>
+          </div>;
+        })}
+      </div>}
+
+      {/* Tabs */}
+      <div style={{display:'flex',gap:6,marginBottom:12,background:G100,padding:4,borderRadius:10}}>
+        <button onClick={function(){setTab('users');}}
+          style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',
+            background:tab==='users'?'white':G100,color:tab==='users'?T:G600,
+            boxShadow:tab==='users'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>
+          👥 Spieler auswählen
+        </button>
+        <button onClick={function(){setTab('code');}}
+          style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',
+            background:tab==='code'?'white':G100,color:tab==='code'?T:G600,
+            boxShadow:tab==='code'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>
+          🔗 Per Code
+        </button>
+      </div>
+
+      {/* ── USER SELECTION TAB ── */}
+      {tab==='users'&&<div>
+        {/* Search bar */}
+        <div style={{position:'relative',marginBottom:10}}>
+          <span style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:G400,fontSize:16,pointerEvents:'none'}}>🔍</span>
+          <input value={userSearch} onChange={function(e){setUserSearch(e.target.value);}}
+            placeholder="Spieler suchen…"
+            style={{width:'100%',padding:'11px 36px 11px 36px',fontSize:15,border:'1.5px solid '+G200,
+              borderRadius:10,outline:'none',boxSizing:'border-box',background:'white'}}/>
+          {userSearch&&<button onClick={function(){setUserSearch('');}}
+            style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',
+              border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>✕</button>}
+        </div>
+
+        {/* Legend */}
+        <div style={{display:'flex',gap:12,fontSize:11,color:G400,marginBottom:8,paddingLeft:2}}>
+          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:GR}}/><span>Aktiv</span>
+          </div>
+          <div style={{display:'flex',gap:4,alignItems:'center'}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:G400}}/><span>Inaktiv</span>
+          </div>
+          <span style={{marginLeft:'auto'}}>{filteredUsers.length} Spieler</span>
+        </div>
+
+        {/* Player list */}
+        {filteredUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>
+          {userSearch?'Kein Spieler gefunden.':'Keine anderen Spieler vorhanden.'}
+        </div>}
+        {filteredUsers.map(function(u){
+          var isInactive=u.is_active===false;
+          var ac=avatarColor(u.name);
+          return <div key={u.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px',marginBottom:6,
+            borderRadius:12,border:'1.5px solid '+(isInactive?G200:G100),
+            background:isInactive?G50:'white',
+            boxShadow:isInactive?'none':'0 1px 4px rgba(0,0,0,0.06)'}}>
+            {/* Avatar with status dot */}
+            <div style={{position:'relative',flexShrink:0}}>
+              <div style={{width:44,height:44,borderRadius:'50%',
+                background:isInactive?G300:ac,
+                display:'flex',alignItems:'center',justifyContent:'center',
+                fontWeight:'bold',color:'white',fontSize:19,
+                border:'2px solid '+(isInactive?G200:'white'),
+                boxShadow:'0 2px 6px rgba(0,0,0,0.15)'}}>
+                {u.name[0].toUpperCase()}
+              </div>
+              <div style={{position:'absolute',bottom:1,right:1,width:12,height:12,borderRadius:'50%',
+                background:isInactive?G400:GR,border:'2.5px solid white'}}/>
+            </div>
+            {/* Name + status */}
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:G900,
+                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {u.name}
+              </div>
+              <div style={{fontSize:11,color:isInactive?G400:'#22c55e',fontWeight:'500'}}>
+                {isInactive?'⏸ Inaktiv':'● Aktiv'}
+              </div>
+            </div>
+            {/* Challenge button */}
+            <button onClick={function(){challengeUser(u);}}
+              style={{flexShrink:0,padding:'9px 16px',borderRadius:9,border:'none',
+                background:isInactive?G200:T,color:isInactive?G600:'white',
+                cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation',
+                boxShadow:isInactive?'none':'0 2px 5px rgba(15,118,110,0.3)'}}>
+              {isInactive?'✉️ Einladen':'⚔️ Herausfordern'}
+            </button>
+          </div>;
+        })}
+
+        {/* Open game */}
+        <button onClick={createOpenGame}
+          style={{display:'block',width:'100%',padding:'11px',marginTop:10,borderRadius:10,
+            border:'1.5px dashed '+G200,background:G50,cursor:'pointer',
+            fontSize:12,color:G600,fontWeight:'bold',touchAction:'manipulation'}}>
+          + Offenes Spiel per Code erstellen
+        </button>
+      </div>}
+
+      {/* ── CODE TAB ── */}
+      {tab==='code'&&<div>
+        <div style={{padding:16,background:'white',borderRadius:12,border:'1px solid '+G200,marginBottom:10,
+          boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+          <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>🎮 Neues Duell erstellen</div>
+          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du erhältst einen 6-stelligen Code den du teilen kannst. Dein Gegner spielt als Erster.</div>
+          <button onClick={createOpenGame} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:14})}>
+            Duell erstellen & Code teilen
+          </button>
+        </div>
+        <div style={{padding:16,background:'white',borderRadius:12,border:'1px solid '+G200,
+          boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+          <div style={{fontWeight:'bold',fontSize:14,color:'#7c3aed',marginBottom:4}}>🔗 Beitreten</div>
+          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du spielst zuerst — dann ist der Ersteller dran.</div>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <input value={joinCode} onChange={function(e){setJoinCode(e.target.value.toUpperCase());}}
+              placeholder="CODE"
+              style={{flex:1,padding:'12px 8px',fontSize:20,border:'2px solid #7c3aed',borderRadius:10,
+                outline:'none',letterSpacing:8,textTransform:'uppercase',textAlign:'center',
+                fontWeight:'bold',color:'#7c3aed'}}/>
+            <button onClick={joinByCode}
+              style={{padding:'12px 20px',borderRadius:10,border:'none',
+                background:'#7c3aed',color:'white',cursor:'pointer',fontSize:16,fontWeight:'bold',
+                touchAction:'manipulation'}}>→</button>
+          </div>
+          {joinErr&&<div style={{color:RE,fontSize:12,marginTop:8,padding:'6px 10px',
+            background:'#fef2f2',borderRadius:7,border:'1px solid #fca5a5'}}>{joinErr}</div>}
+        </div>
+      </div>}
+    </div>;
+  }
+  // ── WAITING FOR CHALLENGEE ──
+  if(phase==='waitingForChallengee'){
+    return <div style={{textAlign:'center',padding:32}}>
+      <div style={{fontSize:36,marginBottom:12}}>📨</div>
+      <h3 style={{color:T,marginBottom:8}}>Herausforderung gesendet!</h3>
+      {myCode&&<div style={{fontSize:24,fontWeight:'bold',letterSpacing:6,color:AM,background:G100,padding:'10px 16px',borderRadius:10,display:'inline-block',marginBottom:12}}>{myCode}</div>}
+      <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {gameData&&gameData.player2_name||'dein Gegner'} seine Runde gespielt hat — dann bist du dran.</p>
+      <div style={{color:G400,fontSize:12,marginBottom:16}}>Der Herausgeforderte spielt immer zuerst.</div>
+      <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active'){setPhase('readyToPlay');}}});}}
+        style={BtnStyle(G100,G600,{padding:'8px 16px',fontSize:12})}>🔄 Status prüfen</button>
+    </div>;
+  }
+
+  // ── INVITE (open game) ──
+  if(phase==='invite'){
+    return <div style={{textAlign:'center',padding:32}}>
       <div style={{fontSize:32,marginBottom:12}}>⏳</div>
       <h3 style={{color:T,marginBottom:8}}>Warte auf Mitspieler…</h3>
-      <div style={{fontSize:28,fontWeight:"bold",letterSpacing:8,color:AM,margin:"16px 0",background:G100,padding:"12px 20px",borderRadius:12,display:"inline-block"}}>{myCode}</div>
-      <p style={{color:G400,fontSize:13,marginBottom:16}}>Diesen Code teilen — sobald jemand beitritt, kannst du spielen</p>
-      <button onClick={startMyTurn} style={BtnStyle(T,"#fff",{padding:"10px 24px"})}>🚀 Ich spiele jetzt meine Runde</button>
-    </div>
-  );
-
-  // Waiting for opponent's turn
-  if (phase === "waiting") return (
-    <div style={{textAlign:"center",padding:32}}>
-      <div style={{fontSize:40,marginBottom:12}}>⏳</div>
-      <h3 style={{color:T}}>Dein Gegner ist dran!</h3>
-      <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {isP1 ? gameData.player2_name : gameData.player1_name} seine Runde gespielt hat.</p>
-      <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:16}}>
-        {myWins.map(function(s,i){ return <div key={i} style={{width:32,height:32,borderRadius:"50%",background:s>=2?GR:RE,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold"}}>{s}</div>; })}
-        {oppWins.map(function(s,i){ return <div key={"o"+i} style={{width:32,height:32,borderRadius:"50%",background:G400,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{s}</div>; })}
-      </div>
-      <button onClick={function(){ sbSingle("quiz_duels","id=eq."+gameId).then(function(d){ if(d){setGameData(d);if(d.whose_turn===(isP1?"p1":"p2"))startMyTurn();} }); }}
-        style={BtnStyle(G100,G600,{border:"1px solid "+G200})}>🔄 Aktualisieren</button>
-    </div>
-  );
-
-  // Round result
-  if (phase === "roundResult") {
-    var roundCorrect2 = myAnswers.filter(function(a){ return a.correct; }).length;
-    return (
-      <div style={{padding:"8px"}}>
-        <div style={{textAlign:"center",padding:"24px",background:roundCorrect2>=2?"#f0fdf4":"#fef2f2",borderRadius:16,marginBottom:16,border:"2px solid "+(roundCorrect2>=2?GR:RE)}}>
-          <div style={{fontSize:36,marginBottom:8}}>{roundCorrect2>=2?"🎉":"😔"}</div>
-          <div style={{fontSize:20,fontWeight:"bold",color:roundCorrect2>=2?T:RE}}>Runde {currentRoundIdx+1}: {roundCorrect2}/3 richtig</div>
-        </div>
-        <div style={{padding:"12px",background:G50,borderRadius:10,marginBottom:16,fontSize:13,color:G600}}>
-          <strong>Jetzt ist {isP1?(gameData.player2_name||"dein Gegner"):(gameData.player1_name||"dein Gegner")} dran</strong> — danach kannst du Runde {currentRoundIdx+2} spielen.
-        </div>
-        <button onClick={function(){
-          // Check if game over
-          var newMyWins = myWins.slice();
-          if (gameData && gameData.status === "finished") { setPhase("finalResult"); return; }
-          setPhase("waiting");
-          setCurrentRoundIdx(function(i){ return i+1; });
-        }} style={BtnStyle(T,"#fff",{width:"100%",padding:"12px"})}>OK, Gegner ist dran →</button>
-      </div>
-    );
+      <div style={{fontSize:28,fontWeight:'bold',letterSpacing:8,color:AM,margin:'16px 0',background:G100,padding:'12px 20px',borderRadius:12,display:'inline-block'}}>{myCode}</div>
+      <p style={{color:G400,fontSize:13}}>Code teilen — sobald jemand beitritt, kann er zuerst spielen, dann bist du dran.</p>
+      <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active')setPhase('readyToPlay');}});}}
+        style={BtnStyle(G100,G600,{marginTop:16,padding:'8px 16px',fontSize:12})}>🔄 Aktualisieren</button>
+    </div>;
   }
 
-  // Final result
-  if (phase === "finalResult") {
-    var myRoundsWon = myWins.filter(function(s){ return s>=2; }).length;
-    var oppRoundsWon = oppWins.filter(function(s){ return s>=2; }).length;
-    var iWon = myRoundsWon > oppRoundsWon;
-    return (
-      <div style={{padding:"8px"}}>
-        <div style={{background:"linear-gradient(135deg,"+T+","+TD+")",borderRadius:16,padding:"24px",color:"white",textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:40,marginBottom:8}}>{iWon?"🏆":"😔"}</div>
-          <div style={{fontSize:22,fontWeight:"bold"}}>{iWon?"Du hast gewonnen!":"Niederlage"}</div>
-          <div style={{fontSize:14,opacity:0.8,marginTop:4}}>{myRoundsWon} : {oppRoundsWon} Runden</div>
-        </div>
-        <button onClick={onDone} style={BtnStyle(T,"#fff",{width:"100%",padding:"12px"})}>← Zurück zum Menü</button>
-      </div>
-    );
+  // ── READY TO PLAY ──
+  if(phase==='readyToPlay'){
+    var isMyTurnNow = gameData&&((isP1&&gameData.whose_turn==='p1')||(!isP1&&gameData.whose_turn==='p2'));
+    return <div style={{padding:8,textAlign:'center'}}>
+      {gameData&&<ScoreBoard/>}
+      {isMyTurnNow
+        ? <div style={{padding:20,background:'#d1fae5',borderRadius:14,marginBottom:12,border:'2px solid '+GR}}>
+            <div style={{fontSize:28,marginBottom:8}}>🎯</div>
+            <div style={{fontWeight:'bold',fontSize:16,color:'#065f46',marginBottom:4}}>Jetzt bist du dran!</div>
+            <div style={{fontSize:12,color:G600}}>Runde {(isP1?myWins:oppWins).length+1} von {TOTAL_ROUNDS}</div>
+          </div>
+        : <div style={{padding:20,background:'#eff6ff',borderRadius:14,marginBottom:12}}>
+            <div style={{fontSize:28,marginBottom:8}}>⏳</div>
+            <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} spielt gerade…</div>
+          </div>
+      }
+      {isMyTurnNow&&<button onClick={startMyTurn} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16})}>
+        ▶ Meine Runde starten
+      </button>}
+      {!isMyTurnNow&&<button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);}});}}
+        style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>🔄 Aktualisieren</button>}
+    </div>;
   }
 
-  // Playing
-  var letters2 = ["A","B","C","D"];
-  var isEn2De2 = currentRound && currentRound.type === "en2de";
-  var question2 = currentRound ? (isEn2De2 ? currentRound.correct.word : currentRound.correct.clue) : "";
+  // ── WAITING ──
+  if(phase==='waiting'){
+    return <div style={{padding:8,textAlign:'center'}}>
+      <ScoreBoard/>
+      <div style={{padding:20,background:'#eff6ff',borderRadius:14,marginBottom:12}}>
+        <div style={{fontSize:28,marginBottom:8}}>⏳</div>
+        <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} ist dran!</div>
+        <div style={{fontSize:12,color:G600,marginTop:4}}>Warte bis er fertig ist — dann wirst du benachrichtigt.</div>
+      </div>
+      <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){
+        if(d){setGameData(d);var myT=(isP1&&d.whose_turn==='p1')||(!isP1&&d.whose_turn==='p2');if(myT||d.status==='finished')setPhase('readyToPlay');}
+      });}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>🔄 Aktualisieren</button>
+    </div>;
+  }
 
-  return (
-    <div style={{padding:"8px"}}>
-      <div style={{background:TL,borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:12,display:"flex",gap:8,alignItems:"center"}}>
-        <span>Du: <strong>{player.name}</strong></span>
-        <span style={{color:G400}}>vs</span>
-        <span>{isP1?(gameData&&gameData.player2_name)||"wartet…":(gameData&&gameData.player1_name)||"wartet…"}</span>
-        <span style={{marginLeft:"auto",color:G400}}>Runde {currentRoundIdx+1}/6</span>
-      </div>
-      <div style={{display:"flex",gap:8,marginBottom:12}}>
-        <div style={{flex:1,textAlign:"center",padding:"8px",background:TL,borderRadius:8}}>
-          <div style={{fontSize:10,color:G400}}>Meine Runden</div>
-          <div style={{fontSize:18,fontWeight:"bold",color:T}}>{myWins.filter(function(s){return s>=2;}).length}</div>
-        </div>
-        <div style={{flex:1,textAlign:"center",padding:"8px",background:G100,borderRadius:8}}>
-          <div style={{fontSize:10,color:G400}}>Gegner</div>
-          <div style={{fontSize:18,fontWeight:"bold",color:G600}}>{oppWins.filter(function(s){return s>=2;}).length}</div>
-        </div>
-        <div style={{flex:1,textAlign:"center",padding:"8px",background:timeLeft<=5?"#fef2f2":G100,borderRadius:8}}>
-          <div style={{fontSize:10,color:G400}}>Zeit</div>
-          <div style={{fontSize:18,fontWeight:"bold",color:timeLeft<=5?RE:G600}}>{timeLeft}s</div>
+  // ── ROUND RESULT ──
+  if(phase==='roundResult'){
+    var roundCorrect2=myAnswers.filter(function(a){return a.correct;}).length;
+    var roundWon=roundCorrect2>=2;
+    var myRoundsTotal=myWins.filter(function(s){return s>=2;}).length;
+    var oppRoundsTotal=oppWins.filter(function(s){return s>=2;}).length;
+    var gameOver=gameData&&gameData.status==='finished';
+    return <div style={{padding:8}}>
+      <div style={{textAlign:'center',padding:'20px 16px',background:roundWon?'#f0fdf4':'#fef2f2',borderRadius:14,marginBottom:12,border:'2px solid '+(roundWon?GR:RE)}}>
+        <div style={{fontSize:32,marginBottom:6}}>{roundWon?'🎉':'😔'}</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:roundWon?'#065f46':RE}}>
+          Runde {myWins.length}: {roundCorrect2}/3 richtig — {roundWon?'Gewonnen!':'Verloren'}
         </div>
       </div>
-      {currentRound && (
-        <div style={{textAlign:"center",padding:"28px 20px",background:G50,borderRadius:16,marginBottom:12,border:"2px solid "+G200}}>
-          <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{isEn2De2?"Was bedeutet dieses englische Wort?":"Wie heißt das auf Englisch?"}</div>
-          <div style={{fontSize:28,fontWeight:"bold",color:G900}}>{question2}</div>
+      <ScoreBoard/>
+      {!gameOver&&<div style={{padding:10,background:'#eff6ff',borderRadius:10,marginBottom:12,fontSize:13,color:T,textAlign:'center'}}>
+        Jetzt ist <strong>{oppName}</strong> dran mit Runde {oppWins.length+1}.
+      </div>}
+      <button onClick={function(){
+        if(gameOver){setPhase('finalResult');return;}
+        setPhase('waiting');
+        setCurrentRoundIdx(function(i){return i+1;});
+        setQIdx(0); setMyAnswers([]); setChosen(null);
+      }} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>
+        {gameOver?'🏁 Ergebnis sehen':'OK, Gegner ist dran →'}
+      </button>
+    </div>;
+  }
+
+  // ── FINAL RESULT ──
+  if(phase==='finalResult'){
+    var myR2=myWins.filter(function(s){return s>=2;}).length;
+    var oppR2=oppWins.filter(function(s){return s>=2;}).length;
+    var tie=myR2===oppR2;
+    var iWon=myR2>oppR2;
+    return <div style={{padding:8}}>
+      <div style={{borderRadius:16,padding:'24px 16px',textAlign:'center',marginBottom:12,
+        background:tie?'linear-gradient(135deg,'+AM+',#f59e0b)':iWon?'linear-gradient(135deg,'+GR+',#16a34a)':'linear-gradient(135deg,'+RE+',#dc2626)',
+        color:'white'}}>
+        <div style={{fontSize:48,marginBottom:8}}>{tie?'🤝':iWon?'🏆':'😔'}</div>
+        <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>
+          {tie?'Unentschieden!':iWon?'Du hast gewonnen!':'Niederlage'}
         </div>
-      )}
-      <div style={{height:4,background:G200,borderRadius:2,overflow:"hidden",marginBottom:12}}>
-        <div style={{height:"100%",width:(timeLeft/20*100)+"%",background:timeLeft<=5?RE:T,borderRadius:2,transition:"width 1s linear"}}></div>
+        <div style={{fontSize:16,opacity:0.9}}>{myR2} : {oppR2} Runden</div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-        {currentRound && currentRound.answers.map(function(a, i) {
-          var answerText = isEn2De2 ? a.clue : a.word;
-          var isCorrect = a.word === currentRound.correct.word;
-          var isChosen = chosen && chosen === a.word;
-          var bg = G50, border3 = "2px solid "+G200, col3 = G900;
-          if (chosen) {
-            if (isCorrect) { bg="#d1fae5"; border3="2px solid "+GR; col3="#065f46"; }
-            else if (isChosen) { bg="#fee2e2"; border3="2px solid "+RE; col3="#991b1b"; }
-          }
-          return (
-            <button key={i} onClick={function(){ if (!chosen) handleDuelAnswer(a.word); }} disabled={!!chosen}
-              style={{padding:"14px 10px",background:bg,border:border3,borderRadius:12,cursor:chosen?"default":"pointer",textAlign:"left"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{width:24,height:24,borderRadius:"50%",background:chosen&&isCorrect?GR:chosen&&isChosen?RE:G200,color:chosen&&(isCorrect||isChosen)?"white":G600,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:"bold",flexShrink:0}}>{letters2[i]}</span>
-                <span style={{fontSize:13,fontWeight:"bold",color:col3,lineHeight:1.3}}>{answerText}</span>
-              </div>
-            </button>
-          );
-        })}
+      <ScoreBoard/>
+      <div style={{display:'flex',gap:8,marginTop:8}}>
+        <button onClick={function(){setPhase('setup');setGameId(null);setGameData(null);setRounds([]);setMyAnswers([]);setMyWins&&null;setCurrentRoundIdx(0);}}
+          style={BtnStyle(T,'white',{flex:1,padding:'12px'})}>🔄 Neues Duell</button>
+        <button onClick={onDone} style={BtnStyle(G100,G600,{flex:1,padding:'12px'})}>← Menü</button>
+      </div>
+    </div>;
+  }
+
+  // ── PLAYING ──
+  var isEn2De2=currentRound&&currentRound.type==='en2de';
+  var question2=currentRound?(isEn2De2?currentRound.correct.word:currentRound.correct.clue):'';
+  var letters2=['A','B','C','D'];
+
+  return <div style={{padding:8}}>
+    <ScoreBoard compact={true}/>
+    <div style={{display:'flex',gap:8,marginBottom:10}}>
+      <div style={{flex:1,textAlign:'center',padding:'8px',background:TL,borderRadius:8}}>
+        <div style={{fontSize:9,color:G400}}>Meine Runden</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:T}}>{myWins.filter(function(s){return s>=2;}).length}</div>
+      </div>
+      <div style={{flex:1,textAlign:'center',padding:'8px',background:G100,borderRadius:8}}>
+        <div style={{fontSize:9,color:G400}}>{oppName}</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:G600}}>{oppWins.filter(function(s){return s>=2;}).length}</div>
+      </div>
+      <div style={{flex:1,textAlign:'center',padding:'8px',background:timeLeft<=5?'#fef2f2':G100,borderRadius:8}}>
+        <div style={{fontSize:9,color:G400}}>Zeit</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:timeLeft<=5?RE:G600}}>{timeLeft}s</div>
+      </div>
+      <div style={{flex:1,textAlign:'center',padding:'8px',background:G100,borderRadius:8}}>
+        <div style={{fontSize:9,color:G400}}>Frage</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:G600}}>{qIdx+1}/3</div>
       </div>
     </div>
-  );
+    {currentRound&&<div style={{textAlign:'center',padding:'20px 16px',background:G50,borderRadius:14,marginBottom:10,border:'2px solid '+G200}}>
+      <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{isEn2De2?'Was bedeutet auf Deutsch:':'Wie heißt auf Englisch:'}</div>
+      <div style={{fontSize:26,fontWeight:'bold',color:G900}}>{question2}</div>
+    </div>}
+    <div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginBottom:10}}>
+      <div style={{height:'100%',width:(timeLeft/20*100)+'%',background:timeLeft<=5?RE:T,borderRadius:2,transition:'width 1s linear'}}/>
+    </div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+      {currentRound&&currentRound.answers.map(function(a,i){
+        var answerText=isEn2De2?a.clue:a.word;
+        var isCorrect=a.word===currentRound.correct.word;
+        var isChosen=chosen&&chosen===a.word;
+        var bg=G50,border3='2px solid '+G200,col3=G900;
+        if(chosen){
+          if(isCorrect){bg='#d1fae5';border3='2px solid '+GR;col3='#065f46';}
+          else if(isChosen){bg='#fee2e2';border3='2px solid '+RE;col3='#991b1b';}
+        }
+        return <button key={i} onClick={function(){if(!chosen)handleDuelAnswer(a.word);}} disabled={!!chosen}
+          style={{padding:'14px 10px',background:bg,border:border3,borderRadius:12,cursor:chosen?'default':'pointer',textAlign:'left',touchAction:'manipulation'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{width:22,height:22,borderRadius:'50%',background:chosen&&isCorrect?GR:chosen&&isChosen?RE:G200,color:chosen&&(isCorrect||isChosen)?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:'bold',flexShrink:0}}>{letters2[i]}</span>
+            <span style={{fontSize:13,fontWeight:'bold',color:col3,lineHeight:1.3}}>{answerText}</span>
+          </div>
+        </button>;
+      })}
+    </div>
+  </div>;
 }
+
 
 // ── Puzzle ────────────────────────────────────────────────────
 function Puzzle({ data, solPhrase, solMsg, onWord, chapId }) {
@@ -1601,9 +1941,9 @@ function T2LetterField({ word, onCorrect, onWrong }) {
   }
   function check(){
     var typed=answer.map(function(t){return t.l;}).join('');
-    var ok=typed===word;
+    var ok=typed.toLowerCase()===word.toLowerCase();
     setChecked(true); setCorrect(ok);
-    if(ok) onCorrect(); else onWrong();
+    if(ok) onCorrect(); else onWrong(typed);
   }
   var complete=answer.length===word.length;
 
@@ -2010,7 +2350,12 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         </div>}
       </div>}
     </div>
-    {!result&&<T2LetterField word={word.word} onCorrect={function(){handleAnswer(true);}} onWrong={function(){handleAnswer(false);}}/>}
+    {!result&&<T2LetterField word={word.word}
+                onCorrect={function(){handleAnswer(true);}}
+                onWrong={function(typed){
+                  setResult({correct:false,typed:typed||'?',expected:word.word});
+                  handleAnswer(false);
+                }}/>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
   </div>;
 
@@ -2022,13 +2367,15 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
       {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
       {header}
       <div style={{textAlign:'center',fontSize:10,color:AM,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[3]}</div>
-      <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
+      <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':result.partial?'#fefce8':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:result.partial?AM:RE:G200)}}>
         <div style={{fontSize:11,color:G400,marginBottom:4}}>Schreibe auf Englisch:</div>
         <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.clue}</div>
         {result&&<div style={{marginTop:8}}>
-          <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+          <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:result.partial?AM:RE}}>
+            {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt — „to" fehlt':'✗ Falsch'}
+          </div>
           {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
-            <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {result.typed}</div>
+            <div style={{fontSize:12,padding:'3px 8px',background:result.partial?'#fef3c7':'#fee2e2',borderRadius:5,color:result.partial?'#92400e':RE}}>Du: {result.typed}</div>
             <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {word.word}</div>
           </div>}
         </div>}
@@ -2055,12 +2402,12 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
             })}
           </div>
           <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);}}}
+            onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}}
             autoCapitalize="none" autoCorrect="off" spellCheck="false"
             style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',opacity:0,fontSize:16,cursor:'text'}}/>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={function(){var ok=checkAnswer(typeInput,word.word)==='correct';handleAnswer(ok);}}
+          <button onClick={function(){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}
             style={BtnStyle(AM,'white',{flex:1,padding:'12px'})}>✓ Prüfen</button>
         </div>
       </div>}
@@ -2073,23 +2420,25 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     {celebration&&<CelebrationPopup newGrade={celebration} onClose={function(){setCelebration(null);}}/>}
     {header}
     <div style={{textAlign:'center',fontSize:10,color:T,textTransform:'uppercase',letterSpacing:1,marginBottom:5}}>{potLabel2[4]}</div>
-    <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:RE:G200)}}>
+    <div style={{textAlign:'center',padding:'14px',background:result?(result.correct?'#d1fae5':result.partial?'#fefce8':'#fef2f2'):'white',borderRadius:14,marginBottom:10,border:'2px solid '+(result?result.correct?GR:result.partial?AM:RE:G200)}}>
       <div style={{fontSize:11,color:G400,marginBottom:4}}>Schreibe auf Deutsch:</div>
       <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{word.word}</div>
       {result&&<div style={{marginTop:8}}>
-        <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:RE}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
+        <div style={{fontSize:14,fontWeight:'bold',color:result.correct?GR:result.partial?AM:RE}}>
+          {result.correct?'✓ Richtig!':result.partial?'⚠️ Fast korrekt — „to" fehlt':'✗ Falsch'}
+        </div>
         {!result.correct&&<div style={{marginTop:6,display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
-          <div style={{fontSize:12,padding:'3px 8px',background:'#fee2e2',borderRadius:5,color:RE}}>Du: {result.typed}</div>
+          <div style={{fontSize:12,padding:'3px 8px',background:result.partial?'#fef3c7':'#fee2e2',borderRadius:5,color:result.partial?'#92400e':RE}}>Du: {result.typed}</div>
           <div style={{fontSize:12,padding:'3px 8px',background:'#dcfce7',borderRadius:5,color:GR}}>Richtig: {word.clue}</div>
         </div>}
       </div>}
     </div>
     {!result&&<div style={{display:'flex',gap:8,marginBottom:8}}>
       <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-        onKeyDown={function(e){if(e.key==='Enter'){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);}}}
+        onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.clue});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.clue});}handleAnswer(ok);}}}
         autoCapitalize="none" autoCorrect="off" spellCheck="false"
         placeholder="Deutsche Übersetzung…" style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-      <button onClick={function(){var ok=checkAnswer(typeInput,word.clue)==='correct';handleAnswer(ok);}}
+      <button onClick={function(){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.clue});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.clue});}handleAnswer(ok);}}
         style={BtnStyle(T,'white',{padding:'12px 16px'})}>✓</button>
     </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
@@ -2097,26 +2446,77 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
 }
 
 // ── LeitersSpielMenu ──────────────────────────────────────────
-function LeitersSpielMenu({ player, chapters, onStart, onCreateOwn }) {
-  var [runs,setRuns]=useState([]); var [loading,setLoading]=useState(true);
-  useEffect(function(){lsGetRuns().then(function(d){setRuns(Array.isArray(d)?d:[]);setLoading(false);});},[]);
+function LeitersSpielMenu({ player, chapters, onStart, onCreateOwn, gradeSettings }) {
+  var [runs,setRuns]=useState([]);
+  var [progMap,setProgMap]=useState({});
+  var [loading,setLoading]=useState(true);
+
+  useEffect(function(){
+    lsGetRuns().then(function(d){
+      var rList=Array.isArray(d)?d:[];
+      setRuns(rList);
+      // Load progress for each run
+      if(player&&rList.length>0){
+        var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if(!UUID.test(player.id)){setLoading(false);return;}
+        Promise.all(rList.map(function(r){
+          return lsGetProgress(player.id,r.id).then(function(rows){
+            if(Array.isArray(rows)&&rows.length>0){
+              try{return[r.id,JSON.parse(rows[0].data||'{}')];}catch(e){}
+            }
+            return null;
+          });
+        })).then(function(results){
+          var map={};
+          results.filter(Boolean).forEach(function(p){map[p[0]]=p[1];});
+          setProgMap(map);
+          setLoading(false);
+        });
+      } else {
+        setLoading(false);
+      }
+    });
+  },[player]);
+
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Läufe…</div>;
+
   var adminRuns=runs.filter(function(r){return r.is_admin_run;});
   var myRuns=runs.filter(function(r){return !r.is_admin_run;});
+
+  function makeRunCard(r, border, progMap, gradeSettings, onStart) {
+    var data=progMap[r.id]||{};
+    var hasProg=!!(progMap[r.id]);
+    var pct=hasProg?lsPercent(data,gradeSettings):null;
+    var gr=hasProg?lsGrade(pct,gradeSettings):null;
+    var grColor=gr?({'1':'#22c55e','2':'#84cc16','3':'#f59e0b','4':'#f97316','5':'#ef4444'}[String(gr)]||G400):G400;
+    return <button key={r.id} onClick={function(){onStart(r);}}
+      style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,borderRadius:12,
+        border:'2px solid '+(hasProg?T:border||G200),background:'white',cursor:'pointer'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:hasProg?5:0}}>
+        <div style={{fontWeight:'bold',color:hasProg?T:G900,fontSize:14}}>
+          {border===T?'🎯 ':''}{r.name}
+        </div>
+        {hasProg&&<div style={{textAlign:'right'}}>
+          <span style={{fontSize:12,color:G400}}>{pct}%</span>
+          {gr&&<span style={{fontSize:12,fontWeight:'bold',color:grColor,marginLeft:6}}>Note {gr}</span>}
+        </div>}
+      </div>
+      {hasProg&&<div style={{height:4,background:G200,borderRadius:2,overflow:'hidden'}}>
+        <div style={{height:'100%',width:pct+'%',background:'linear-gradient(90deg,'+AM+','+GR+')',borderRadius:2}}/>
+      </div>}
+      {!hasProg&&<div style={{fontSize:11,color:G400}}>{r.word_count} Vokabeln · {r.sentence_count||0} Sätze</div>}
+      {hasProg&&<div style={{fontSize:10,color:G400,marginTop:3}}>
+        {r.word_count} Vokabeln · Topf 5: {(data.pots&&data.pots[5]||[]).length} gelernt
+      </div>}
+    </button>;
+  }
+
   return <div>
     <button onClick={onCreateOwn} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginBottom:16,fontSize:15})}>➕ Neuen Lauf erstellen</button>
     {adminRuns.length>0&&<div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:8}}>📋 Klassen-Läufe</div>}
-    {adminRuns.map(function(r){return <button key={r.id} onClick={function(){onStart(r);}}
-      style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,borderRadius:12,border:'2px solid '+T,background:'white',cursor:'pointer'}}>
-      <div style={{fontWeight:'bold',color:T,fontSize:14}}>🎯 {r.name}</div>
-      <div style={{fontSize:11,color:G400}}>{r.word_count} Vokabeln · {r.sentence_count||0} Sätze</div>
-    </button>;})}
+    {adminRuns.map(function(r){return makeRunCard(r, T, progMap, gradeSettings, onStart);} )}
     {myRuns.length>0&&<div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:8,marginTop:adminRuns.length?12:0}}>📁 Meine Läufe</div>}
-    {myRuns.map(function(r){return <button key={r.id} onClick={function(){onStart(r);}}
-      style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,borderRadius:12,border:'2px solid '+G200,background:'white',cursor:'pointer'}}>
-      <div style={{fontWeight:'bold',color:G900,fontSize:14}}>{r.name}</div>
-      <div style={{fontSize:11,color:G400}}>{r.word_count} Vokabeln</div>
-    </button>;})}
+    {myRuns.map(function(r){return makeRunCard(r, G200, progMap, gradeSettings, onStart);} )}
     {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20}}>Noch keine Läufe.</div>}
   </div>;
 }
@@ -3459,7 +3859,7 @@ function App() {
   );
   if(screen==='quizDuel') return(
     <Shell showBack={true} onBack={function(){goScreen('menu');}} title='⚔️ Quiz Duell' player={player}>
-      <QuizDuel chapters={chapters} player={player} onDone={function(){goScreen('menu');}}/>
+      <QuizDuel chapters={chapters} player={player} allUsers={allUsers} onDone={function(){goScreen('menu');}}/>
     </Shell>
   );
 
@@ -3515,7 +3915,7 @@ function App() {
     );
     return (
       <Shell showBack={true} onBack={function(){goScreen('menu');}} title='🎯 Leiterspiel' player={player}>
-        <LeitersSpielMenu player={player} chapters={chapters}
+        <LeitersSpielMenu player={player} chapters={chapters} gradeSettings={gradeSettings}
           onStart={function(run){setLsRun(run);}}
           onCreateOwn={function(){setLsCreateMode(true);}}
           onBack={function(){goScreen('menu');}}/>
