@@ -3049,7 +3049,7 @@ function VocabSearch({ chapters, player, allCategories, onCategoryChange }) {
 
   function assignCategory(word,chapterId,catId){
     // Upsert into word_categories
-    sbPost('word_categories',{word:word,chapter_id:chapterId,category_id:catId||null,is_important:results.find(function(r){return r.word===word&&r.chapterId===chapterId;})?.important||false})
+    sbPost('word_categories',{word:word,chapter_id:chapterId,category_id:catId||null,is_important:(function(){var _f=results.find(function(r){return r.word===word&&r.chapterId===chapterId;});return _f?_f.important:false;})()})
       .then(function(){if(onCategoryChange) onCategoryChange();});
   }
 
@@ -3195,36 +3195,36 @@ LAYOUT DER SEITE:
 Vokabeln sind zwischen horizontalen Trennlinien (durchgehende Linien von links bis rechts) angeordnet.
 Zwischen zwei Trennlinien steht ein Block mit:
   - Englische Vokabel (manchmal fett gedruckt)
-  - Lautschrift /.../ — entweder auf derselben Zeile ODER direkt darunter auf der nächsten Zeile
+  - Lautschrift /.../ - entweder auf derselben Zeile ODER direkt darunter auf der nächsten Zeile
   - Deutsche Übersetzung
   - Optional: Ein Beispielsatz
 
-VOKABELN ERKENNEN — Lautschrift-Regel:
-Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthält — egal ob auf derselben Zeile oder direkt darunter.
+VOKABELN ERKENNEN - Lautschrift-Regel:
+Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthält - egal ob auf derselben Zeile oder direkt darunter.
 Beispiele:
-  - "birthday /ˈbɜːθdeɪ/  Geburtstag" → Vokabel "birthday"
-  - "Where is ...?" auf Zeile 1, dann "/weər ɪz/" auf Zeile 2 → Vokabel "Where is ...?"
-  - "red" auf Zeile 1, dann "/red/" auf Zeile 2, dann "rot" → Vokabel "red"
+  - "birthday /ˈbɜːθdeɪ/  Geburtstag" => Vokabel "birthday"
+  - "Where is ...?" auf Zeile 1, dann "/weər ɪz/" auf Zeile 2 => Vokabel "Where is ...?"
+  - "red" auf Zeile 1, dann "/red/" auf Zeile 2, dann "rot" => Vokabel "red"
 
-IMPORTANT-FLAG — Fettdruck erkennen:
+IMPORTANT-FLAG - Fettdruck erkennen:
 - important:true wenn die englische Vokabel FETT gedruckt ist (die Buchstaben haben einen dickeren, schwereren Strich als normaler Text)
 - important:false wenn die Vokabel in normaler Schriftstärke steht
 - WICHTIG: Alle Vokabeln stehen in SCHWARZEM Text. Prüfe nur ob der schwarze Text fett oder normal ist.
-- Das Wort "red" (= die Farbe Rot) ist ein normales schwarzes Wort — prüfe ob ES fett gedruckt ist
-- Das Wort "orange" (= die Farbe Orange) ist ein normales schwarzes Wort — prüfe ob ES fett gedruckt ist
+- Das Wort "red" (= die Farbe Rot) ist ein normales schwarzes Wort - prüfe ob ES fett gedruckt ist
+- Das Wort "orange" (= die Farbe Orange) ist ein normales schwarzes Wort - prüfe ob ES fett gedruckt ist
 - Niemals die Wortbedeutung (Farbe) mit der Schriftfarbe verwechseln
 
 VERBEN:
 - Immer mit "to": "to play", "to sing", "to be"
-- Wenn nur Verbstamm fett → ganzes Verb important:true
+- Wenn nur Verbstamm fett => ganzes Verb important:true
 
 SÄTZE:
 - Nur aufnehmen wenn im Block eine fett gedruckte Vokabel vorkommt
 - Feld "vocabWord": das englische Vokabelwort des Blocks
-- Aufgaben wie "What can you see?", "Read and..." → IGNORIEREN
-- Bunte Überschriften/Titel → IGNORIEREN
+- Aufgaben wie "What can you see?", "Read and..." => IGNORIEREN
+- Bunte Überschriften/Titel => IGNORIEREN
 
-FORMAT — NUR JSON, kein Markdown:
+FORMAT - NUR JSON, kein Markdown:
 {"title":"Kurzer Seitentitel","words":[{"word":"Where is ...?","clue":"Wo ist ...?","important":true},{"word":"red","clue":"rot","important":true},{"word":"birthday","clue":"Geburtstag","important":false}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}` }
         ]}]}).then(function(resp){return resp.json();}).then(function(d){
         var txt=d.content.map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
@@ -3232,7 +3232,7 @@ FORMAT — NUR JSON, kein Markdown:
         setDraft({words:parsed.words||[],sentences:parsed.sentences||[],src:file.name});
         setDTitle(parsed.title||file.name.replace(/\.[^.]+$/,''));
         setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln · '+(parsed.sentences||[]).length+' Sätze erkannt · '+(parsed.words||[]).filter(function(w){return w.important;}).length+' ⭐ fett');
-      }).catch(function(e){setImgMsg('❌ '+e.message+(e.message.includes('fetch')?' — API-Key prüfen oder Netzwerk':''));}).finally(function(){setImgLoading(false);});
+      }).catch(function(e){setImgMsg('❌ '+e.message+(e.message.indexOf('fetch')>=0?' — API-Key prüfen oder Netzwerk':''));setImgLoading(false);});
     };
     reader.readAsDataURL(file);
   }
