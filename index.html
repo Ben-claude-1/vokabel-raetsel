@@ -270,10 +270,31 @@ function makeQuizRound(allWords, usedWords) {
   var pool = allWords.filter(function(w){ return !usedWords.has(w.word); });
   if (pool.length < 3) pool = allWords; // fallback
   var picked = shuffleArr(pool).slice(0, 3);
+  // Word type detection for matching distractors
+  function wType(w) {
+    var word = (w.word||'').toLowerCase().replace(/^to /, '');
+    var clue = (w.clue||'').toLowerCase();
+    // Verb: starts with "to " or German infinitive ends with "en"
+    if((w.word||'').toLowerCase().startsWith('to ')) return 'verb';
+    if(clue.match(/(en|eln|ern)$/) && !clue.match(/\s/)) return 'verb';
+    // Adjective: German clue ends in typical adj endings
+    if(clue.match(/(lich|ig|isch|sam|haft|los|voll|bar|reich|arm|frei)$/)) return 'adj';
+    if(word.match(/(ful|less|ous|ive|ent|ant|al|ic|ble|tic|ary|ory)$/)) return 'adj';
+    // Month = proper noun category
+    if(['january','february','march','april','may','june','july','august','september','october','november','december'].indexOf(word)>=0) return 'month';
+    return 'noun';
+  }
   return picked.map(function(correct) {
-    var distractors = shuffleArr(allWords.filter(function(w){ return w.word !== correct.word; })).slice(0,3);
+    var cType = wType(correct);
+    // 1st priority: same type
+    var sameType = allWords.filter(function(w){ return w.word !== correct.word && wType(w)===cType; });
+    // 2nd priority: any word
+    var anyOther = allWords.filter(function(w){ return w.word !== correct.word; });
+    var pool = sameType.length >= 3 ? sameType : anyOther;
+    var distractors = shuffleArr(pool).slice(0,3);
     var answers = shuffleArr([correct].concat(distractors));
-    return { correct: correct, answers: answers, type: Math.random() > 0.5 ? "de2en" : "en2de" };
+    // Quiz direction: always DE->EN (show German, pick English)  
+    return { correct: correct, answers: answers, type: 'de2en' };
   });
 }
 
@@ -306,33 +327,42 @@ function normalizeAnswer(s) {
 function wordVariants(raw) {
   var w = raw.trim().toLowerCase();
   var variants = [w, normalizeAnswer(w)];
-  // Core: remove all parenthetical content
+  // Core: remove all parenthetical content - "zweite(r,s)" -> "zweite"
   var core = w.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
-  if (core) variants.push(core);
-  // Merged: keep content without parens
-  var merged = w.replace(/\(([^)]*)\)/g,'$1').replace(/\s+/g,' ').trim();
-  if (merged) variants.push(merged);
-  // Expand: all 2^n combinations of optional parenthetical parts
+  if (core) variants.push(core, normalizeAnswer(core));
+  // Expand optional parentheticals as individual alternatives
+  // "(mit)bringen" -> ["bringen","mitbringen"]
+  // "zweite(r,s)" -> ["zweite","zweiter","zweites"] (split by comma inside parens)
   var parts = w.split(/(\([^)]*\))/);
   var optionals = [];
   var base = [];
   parts.forEach(function(p){
     if(/^\([^)]*\)$/.test(p)){
-      optionals.push({pos:base.length, content:p.slice(1,-1)});
+      // Split comma-separated options inside parens: "(r,s)" -> ["r","s",""]
+      var inner = p.slice(1,-1);
+      var options = inner.indexOf(',') >= 0
+        ? [''].concat(inner.split(','))  // empty = without, each part = with
+        : [inner, ''];                   // just two choices: with or without
+      optionals.push({pos:base.length, options:options});
       base.push('');
     } else {
       base.push(p);
     }
   });
-  var n = optionals.length;
-  for (var mask=0; mask < (1<<n); mask++) {
-    var b = base.slice();
-    for (var j=0; j<n; j++) {
-      if (mask & (1<<j)) b[optionals[j].pos] = optionals[j].content;
+  // Generate all combos
+  function combo(opts, idx, current) {
+    if(idx >= opts.length) {
+      var v = base.slice();
+      opts.forEach(function(o,i){ v[o.pos]=current[i]; });
+      var joined = v.join('').replace(/\s+/g,' ').trim();
+      if(joined) variants.push(joined, normalizeAnswer(joined));
+      return;
     }
-    var v = b.join('').replace(/\s+/g,' ').trim();
-    if (v) variants.push(v);
+    opts[idx].options.forEach(function(opt){
+      combo(opts, idx+1, current.concat([opt]));
+    });
   }
+  if(optionals.length > 0 && optionals.length <= 3) combo(optionals, 0, []);
   // Deduplicate
   var seen = {};
   return variants.filter(function(v){if(!v||seen[v])return false;seen[v]=1;return true;});
@@ -1928,7 +1958,15 @@ function lsPickWord(progress, lastWord) {
 // ── T2LetterField: Buchstaben antippen oder drag & drop ───────
 function T2LetterField({ word, onCorrect, onWrong }) {
   var initLetters=useMemo(function(){
-    return shuffleArr(word.split('').map(function(l,i){return{l:l,id:'t2_'+i};}));
+    // Real letters from word
+    var real=word.split('').map(function(l,i){return{l:l,id:'t2_'+i,dummy:false};});
+    // Add 2-3 dummy letters (not in the word) to prevent seeing complete word
+    var POOL='bcdfghjklmnpqrstvwxyz'.split('').filter(function(c){
+      return word.toLowerCase().indexOf(c)<0;
+    });
+    var extras=shuffleArr(POOL).slice(0,Math.min(3,POOL.length));
+    var dummies=extras.map(function(l,i){return{l:l,id:'t2_dummy_'+i,dummy:true};});
+    return shuffleArr(real.concat(dummies));
   },[word]);
 
   var [source,setSource]=useState(initLetters);
@@ -2001,7 +2039,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
                   {border:'1.5px solid '+(dragId===tile.id?'#93c5fd':corr?'#22c55e':wrng?'#ef4444':'#0369a1'),
                   background:dragId===tile.id?'#dbeafe':corr?'#dcfce7':wrng?'#fee2e2':'#eff6ff',
                   color:corr?'#15803d':wrng?'#dc2626':'#1e40af',opacity:dragId===tile.id?0.4:1})}>
-                {tile.l.toUpperCase()}
+                {tile.l}
               </div>
             </div>
           );
@@ -2022,7 +2060,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
             onDragEnd={function(){setDragId(null);setOverZone(null);}}
             onClick={function(){if(!checked)moveToAnswer(tile);}}
             style={Object.assign({},tileBase,{border:'1.5px solid '+(dragId===tile.id?'#93c5fd':G200),background:dragId===tile.id?'#dbeafe':G50,color:G900,opacity:dragId===tile.id?0.4:1})}>
-            {tile.l.toUpperCase()}
+            {tile.l}
           </div>;
         })}
       </div>
@@ -2159,6 +2197,14 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         np.pots[pot].splice(widx,1); word.streak=0; word.wrongStreak=0;
         // totalCorrect/totalWrong preserved across pot moves
         var nextPot=Math.min(pot+1,5); np.pots[nextPot].push(word);
+        // Award 1 point when word reaches Pot 5 (learned!)
+        if(nextPot===5&&player){
+          var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if(UUID.test(player.id)){
+            var newScore=(player.total_score||0)+1;
+            sbPatch('players',{total_score:newScore,total_correct:(player.total_correct||0)+1},'id=eq.'+player.id);
+          }
+        }
         var newGr=lsGrade(lsPercent(np,gradeSettings),gradeSettings);
         var oldGr=lsGrade(lsPercent(progress,gradeSettings),gradeSettings);
         if(newGr&&oldGr&&newGr<oldGr) setCelebration(newGr);
@@ -2417,7 +2463,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
                   var charIdx=wordParts.slice(0,wi).join('').length+li;
                   var typedChar=typeInput[charIdx]||'';
                   return <div key={li} style={{width:boxW,height:34,borderBottom:'2px solid '+AM,display:'flex',alignItems:'flex-end',justifyContent:'center',paddingBottom:2}}>
-                    <span style={{fontSize:15,fontWeight:'bold',color:G600}}>{typedChar.toUpperCase()||''}</span>
+                    <span style={{fontSize:15,fontWeight:'bold',color:G600}}>{typedChar||''}</span>
                   </div>;
                 })}
               </div>;
@@ -2965,17 +3011,53 @@ function UploadPreview({ draft, onSave, onCancel, chapters, chapterMode, targetC
 
     {/* Word editor */}
     {tab==='words'&&<div>
-      {words.map(function(w,i){return <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:4,padding:'6px 8px',borderRadius:8,background:w.important?'#fef3c7':G50,border:'1px solid '+(w.important?AM:G200)}}>
-        <div onClick={function(){toggleImportant(i,false);}} title="Fett/wichtig" style={{width:24,height:24,borderRadius:4,border:'2px solid '+(w.important?AM:G200),background:w.important?AM:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-          {w.important&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>⭐</span>}
-        </div>
-        <input value={w.word} onChange={function(e){editWord(i,'word',e.target.value);}}
-          style={{flex:1,padding:'4px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,outline:'none',minWidth:60}}/>
-        <span style={{color:G400,fontSize:12}}>=</span>
-        <input value={w.clue} onChange={function(e){editWord(i,'clue',e.target.value);}}
-          style={{flex:1,padding:'4px 6px',fontSize:13,border:'1px solid '+G200,borderRadius:6,outline:'none',minWidth:60}}/>
-        <button onClick={function(){removeWord(i);}} style={{width:24,height:24,borderRadius:4,border:'none',background:'#fef2f2',color:RE,cursor:'pointer',fontSize:14,flexShrink:0}}>✕</button>
-      </div>;})}
+      {(function(){
+        var TYPES=['verb','noun','adjective','phrase','other'];
+        var TYPE_LABELS={verb:'Verben',noun:'Substantive',adjective:'Adjektive',phrase:'Phrasen',other:'Sonstiges'};
+        var TYPE_BG={verb:'#dbeafe',noun:'#f3e8ff',adjective:'#d1fae5',phrase:'#fff7ed',other:'#f1f5f9'};
+        var TYPE_COLOR={verb:'#1e40af',noun:'#7c3aed',adjective:'#065f46',phrase:'#c2410c',other:'#475569'};
+        // Group words by type
+        var groups={};
+        words.forEach(function(w,i){
+          var t=w.type||'other';
+          if(!groups[t])groups[t]=[];
+          groups[t].push({w:w,i:i});
+        });
+        var sections=[];
+        TYPES.forEach(function(t){
+          if(!groups[t]||!groups[t].length) return;
+          sections.push(
+            <div key={t} style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:'bold',color:TYPE_COLOR[t],background:TYPE_BG[t],padding:'3px 8px',borderRadius:6,marginBottom:4,display:'inline-block'}}>
+                {TYPE_LABELS[t]} ({groups[t].length})
+              </div>
+              {groups[t].map(function(item){
+                var w=item.w; var i=item.i;
+                return <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:3,padding:'5px 8px',borderRadius:8,background:w.important?'#fef3c7':G50,border:'1px solid '+(w.important?AM:G200)}}>
+                  <div onClick={function(){toggleImportant(i,false);}} title="Fett/wichtig" style={{width:22,height:22,borderRadius:4,border:'2px solid '+(w.important?AM:G200),background:w.important?AM:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    {w.important&&<span style={{color:'white',fontSize:11,fontWeight:'bold'}}>⭐</span>}
+                  </div>
+                  <input value={w.word} onChange={function(e){editWord(i,'word',e.target.value);}}
+                    style={{flex:1,padding:'3px 6px',fontSize:12,border:'1px solid '+G200,borderRadius:5,outline:'none',minWidth:60}}/>
+                  <span style={{color:G400,fontSize:11}}>=</span>
+                  <input value={w.clue} onChange={function(e){editWord(i,'clue',e.target.value);}}
+                    style={{flex:1,padding:'3px 6px',fontSize:12,border:'1px solid '+G200,borderRadius:5,outline:'none',minWidth:60}}/>
+                  <select value={w.type||'other'} onChange={function(e){editWord(i,'type',e.target.value);}}
+                    style={{fontSize:10,padding:'2px 3px',border:'1px solid '+G200,borderRadius:4,background:TYPE_BG[w.type||'other'],color:TYPE_COLOR[w.type||'other']}}>
+                    <option value="verb">Verb</option>
+                    <option value="noun">Subst.</option>
+                    <option value="adjective">Adj.</option>
+                    <option value="phrase">Phrase</option>
+                    <option value="other">Sonst.</option>
+                  </select>
+                  <button onClick={function(){removeWord(i);}} style={{width:22,height:22,borderRadius:4,border:'none',background:'#fef2f2',color:RE,cursor:'pointer',fontSize:12,flexShrink:0}}>✕</button>
+                </div>;
+              })}
+            </div>
+          );
+        });
+        return <div>{sections}</div>;
+      })()}
       <button onClick={addWord} style={BtnStyle(G100,G600,{width:'100%',padding:'7px',fontSize:12,marginTop:4})}>+ Vokabel hinzufügen</button>
     </div>}
 
@@ -3197,7 +3279,7 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
       var b64=reader.result.split(',')[1];
       fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':window._ANTHROPIC_KEY||'','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        headers:{'Content-Type':'application/json','x-api-key':(window._ANTHROPIC_KEY||(function(){try{return sessionStorage.getItem('_ak')||'';}catch(e){return '';}}())),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
           {type:'text',text:`Analysiere diese Schulbuch-Seite für einen Englisch-Vokabeltrainer.
@@ -3236,7 +3318,9 @@ SÄTZE:
 - Bunte Überschriften/Titel => IGNORIEREN
 
 FORMAT - NUR JSON, kein Markdown:
-{"title":"Kurzer Seitentitel","words":[{"word":"Where is ...?","clue":"Wo ist ...?","important":true},{"word":"red","clue":"rot","important":true},{"word":"birthday","clue":"Geburtstag","important":false}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}` }
+{"title":"Kurzer Seitentitel","words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"red","clue":"rot","important":true,"type":"adjective"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"},{"word":"Where is ...?","clue":"Wo ist ...?","important":true,"type":"phrase"}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}
+
+Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adjective" (Adjektive), "phrase" (Wendungen/Phrasen), "other" (sonstiges)` }
         ]}]})}).then(function(resp){return resp.json();}).then(function(d){
         var txt=d.content.map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
         var parsed=JSON.parse(txt);
