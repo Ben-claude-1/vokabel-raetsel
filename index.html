@@ -3527,7 +3527,8 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   var [selP, setSelP] = useState(null);
   var [results, setResults] = useState([]);
   var [selLsProgress, setSelLsProgress] = useState([]); // Leiterspiel progress for selected user
-  var [lsDetailPot, setLsDetailPot] = useState(null); // which pot is open in admin view
+  var [lsDetailPot, setLsDetailPot] = useState(null);
+  var [openTopicId, setOpenTopicId] = useState(null); // which topic is expanded in chapter list
   var [loading, setLoading] = useState(false);
   var [imgLoading, setImgLoading] = useState(false);
   var [imgMsg, setImgMsg] = useState('');
@@ -3593,45 +3594,41 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
         headers:{'Content-Type':'application/json','x-api-key':(window._ANTHROPIC_KEY||(function(){try{return sessionStorage.getItem('_ak')||'';}catch(e){return '';}}())),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-          {type:'text',text:`Analysiere diese Schulbuch-Seite für einen Englisch-Vokabeltrainer.
+          {type:'text',text:`Analysiere diese Schulbuch-Seite aus einem englischen Schulbuch für einen Vokabeltrainer.
 
-LAYOUT DER SEITE:
-Vokabeln sind zwischen horizontalen Trennlinien (durchgehende Linien von links bis rechts) angeordnet.
-Zwischen zwei Trennlinien steht ein Block mit:
-  - Englische Vokabel (manchmal fett gedruckt)
-  - Lautschrift /.../ - entweder auf derselben Zeile ODER direkt darunter auf der nächsten Zeile
-  - Deutsche Übersetzung
-  - Optional: Ein Beispielsatz
+LAYOUT:
+Die Seite zeigt Vokabeln zwischen horizontalen Trennlinien. Jeder Vokabelblock enthält:
+- Englische Vokabel (kann einzelnes Wort ODER Phrase sein, z.B. "in the road", "Where is ...?", "in front of a shop")
+- Lautschrift /.../ - auf derselben Zeile ODER direkt auf der nächsten Zeile darunter
+- Deutsche Übersetzung
+- Optional: Beispielsatz
 
-VOKABELN ERKENNEN - Lautschrift-Regel:
-Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthält - egal ob auf derselben Zeile oder direkt darunter.
-Beispiele:
-  - "birthday /ˈbɜːθdeɪ/  Geburtstag" => Vokabel "birthday"
-  - "Where is ...?" auf Zeile 1, dann "/weər ɪz/" auf Zeile 2 => Vokabel "Where is ...?"
-  - "red" auf Zeile 1, dann "/red/" auf Zeile 2, dann "rot" => Vokabel "red"
+ERKENNUNGSREGEL - Lautschrift bestimmt ob es eine Vokabel ist:
+Wenn nach einem englischen Wort/einer Phrase eine Lautschrift /.../ steht (auf gleicher oder naechster Zeile), ist es eine Vokabel.
+Auch Phrasen wie "in the road", "in a car", "in front of a shop", "Where is...?" mit Lautschrift danach sind Vokabeln!
+Das kleine Zeichen ° vor einer Zeile bedeutet: es ist eine zusaetzliche Vokabel/Phrase.
 
-IMPORTANT-FLAG - Fettdruck erkennen:
-- important:true wenn die englische Vokabel FETT gedruckt ist (die Buchstaben haben einen dickeren, schwereren Strich als normaler Text)
-- important:false wenn die Vokabel in normaler Schriftstärke steht
-- WICHTIG: Alle Vokabeln stehen in SCHWARZEM Text. Prüfe nur ob der schwarze Text fett oder normal ist.
-- Das Wort "red" (= die Farbe Rot) ist ein normales schwarzes Wort - prüfe ob ES fett gedruckt ist
-- Das Wort "orange" (= die Farbe Orange) ist ein normales schwarzes Wort - prüfe ob ES fett gedruckt ist
-- Niemals die Wortbedeutung (Farbe) mit der Schriftfarbe verwechseln
+FETTDRUCK - important Flag:
+Schaue dir jeden Vokabel-Eintrag genau an. Ist die englische Vokabel FETT gedruckt (dickere Buchstaben als normaler Text)?
+- important:true = FETT (dick, schwer, betont)
+- important:false = normal (duenn, leicht)
+Typische fette Woerter in Schulbuechern: Hauptvokabeln am Seitenrand wie "can", "car", "the", "to play", "bus", "yes"
+Typische NICHT fette: ergaenzende Phrasen mit ° davor, Aufgaben, Beispielsaetze
 
-VERBEN:
-- Immer mit "to": "to play", "to sing", "to be"
-- Wenn nur Verbstamm fett => ganzes Verb important:true
+VERBEN: Immer mit "to": "to see", "to play", "to be". Wenn Verbstamm fett ist, ganzes Verb important:true.
 
-SÄTZE:
-- Nur aufnehmen wenn im Block eine fett gedruckte Vokabel vorkommt
-- Feld "vocabWord": das englische Vokabelwort des Blocks
-- Aufgaben wie "What can you see?", "Read and..." => IGNORIEREN
-- Bunte Überschriften/Titel => IGNORIEREN
+IGNORIERLISTE:
+- Aufgabenanweisungen wie "What can you see?", "Find the children.", "Spell your name."
+- Bunte Ueberschriften (gruene, teal Schrift) wie "Welcome to Camden Town!"
+- Seitenzahlen, Hinweistexte in Kaesten, "Pick-up:" Abschnitte wenn sie nur Beispiele sind
+- ABER: Vokabeln im Pick-up-Abschnitt MIT Lautschrift = aufnehmen! z.B. "red /red/" ist eine Vokabel
+
+SAETZE: Nur aufnehmen wenn im Block eine fette Vokabel vorkommt. Feld "vocabWord" = die verknuepfte Vokabel.
+
+Erlaubte Werte fuer "type": "verb", "noun", "adjective", "phrase", "other"
 
 FORMAT - NUR JSON, kein Markdown:
-{"title":"Kurzer Seitentitel","words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"red","clue":"rot","important":true,"type":"adjective"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"},{"word":"Where is ...?","clue":"Wo ist ...?","important":true,"type":"phrase"}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}
-
-Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adjective" (Adjektive), "phrase" (Wendungen/Phrasen), "other" (sonstiges)` }
+{"title":"Kurzer Titel","words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"in the road","clue":"auf der Strasse","important":false,"type":"phrase"},{"word":"red","clue":"rot","important":true,"type":"adjective"}],"sentences":[{"text":"I can play basketball.","translation":"Ich kann Basketball spielen.","important":true,"vocabWord":"to play"}]}` }
         ]}]})}).then(function(resp){return resp.json();}).then(function(d){
           // Check for API error (wrong key, quota exceeded, etc.)
           if(!d.content||!Array.isArray(d.content)){
@@ -4015,15 +4012,45 @@ Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adje
                     {!kap.is_builtin&&<button onClick={function(){delCh(kap);}} style={BtnStyle('#fee2e2',RE,{padding:'3px 8px',fontSize:10})}>🗑</button>}
                   </div>
                   {kapTopics.map(function(t){
-                    return <div key={t.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 24px',borderTop:'1px solid '+G100,background:'white'}}>
-                      <span>{t.icon}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12,fontWeight:'bold',color:G600}}>{t.title}</div>
-                        <div style={{fontSize:10,color:G400}}>{t.words.length}V · {t.words.filter(function(w){return w.important;}).length}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
+                    var isOpen = openTopicId === t.id;
+                    var impCount = t.words.filter(function(w){return w.important;}).length;
+                    return <div key={t.id} style={{borderTop:'1px solid '+G100}}>
+                      {/* Topic header - clickable to expand */}
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 24px',background:isOpen?TL:'white',cursor:'pointer'}}
+                        onClick={function(){setOpenTopicId(isOpen?null:t.id);}}>
+                        <span style={{fontSize:12}}>{isOpen?'▼':'▶'}</span>
+                        <span>{t.icon}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:12,fontWeight:'bold',color:isOpen?T:G600}}>{t.title}</div>
+                          <div style={{fontSize:10,color:G400}}>{t.words.length}V · {impCount}⭐ · {(t.sentences||[]).filter(function(s){return s.important;}).length}/{(t.sentences||[]).length} Sätze</div>
+                        </div>
+                        <button onClick={function(e){e.stopPropagation();var n=prompt('Neuer Name:',t.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+t.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===t.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
+                          style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
+                        {!t.is_builtin&&<button onClick={function(e){e.stopPropagation();delCh(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>}
                       </div>
-                      <button onClick={function(){var n=prompt('Neuer Name:',t.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+t.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===t.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
-                        style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
-                      {!t.is_builtin&&<button onClick={function(){delCh(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>}
+                      {/* Expanded word list */}
+                      {isOpen&&<div style={{padding:'6px 16px 10px 40px',background:'#f9fafb',borderTop:'1px solid '+G100}}>
+                        {t.words.length===0&&<div style={{color:G400,fontSize:11,padding:'4px 0'}}>Keine Vokabeln</div>}
+                        {t.words.map(function(w,wi){
+                          var wType=w.type||'';
+                          var typeColor={'verb':'#1e40af','noun':'#7c3aed','adjective':'#065f46','phrase':'#c2410c'}[wType]||G400;
+                          var typeBg={'verb':'#dbeafe','noun':'#f3e8ff','adjective':'#d1fae5','phrase':'#fff7ed'}[wType]||G100;
+                          return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'3px 0',borderBottom:'1px solid '+G50,fontSize:12}}>
+                            <span style={{minWidth:14,color:AM}}>{w.important?'⭐':''}</span>
+                            <span style={{fontWeight:'bold',flex:1,color:G900}}>{w.word}</span>
+                            <span style={{color:G400,flex:1}}>{w.clue}</span>
+                            {wType&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:4,background:typeBg,color:typeColor}}>{wType}</span>}
+                          </div>;
+                        })}
+                        {(t.sentences||[]).filter(function(s){return s.important;}).length>0&&<div style={{marginTop:6,borderTop:'1px solid '+G200,paddingTop:4}}>
+                          <div style={{fontSize:10,color:G400,marginBottom:3}}>Verknüpfte Sätze:</div>
+                          {(t.sentences||[]).filter(function(s){return s.important;}).map(function(s,si){
+                            return <div key={si} style={{fontSize:11,color:'#065f46',padding:'2px 0'}}>
+                              ⭐ {s.text} <span style={{color:G400}}>— {s.translation}</span>
+                            </div>;
+                          })}
+                        </div>}
+                      </div>}
                     </div>;
                   })}
                   {kapTopics.length===0&&<div style={{padding:'8px 24px',color:G400,fontSize:11}}>Noch keine Themenbereiche.</div>}
