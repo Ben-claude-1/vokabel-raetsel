@@ -767,53 +767,188 @@ function SentenceLearner({ chapters, player, onDone }) {
 }
 
 // ── Progress Stats View ───────────────────────────────────────
-function ProgressStats({ chapters, player }) {
-  var [progressMap, setProgressMap] = useState({});
+var POT_PTS_CUM={1:10,2:30,3:60,4:100,5:160};
+var POT_ICON={0:'⬜',1:'🔴',2:'🟠',3:'🟡',4:'🔵',5:'✅'};
+var POT_LABEL={1:'Topf 1',2:'Topf 2',3:'Topf 3',4:'Topf 4',5:'Gelernt'};
+var POT_COL={1:RE,2:'#f97316',3:AM,4:T,5:GR};
+function ProgressStats({ chapters, player, allCategories }) {
+  var [learnedSet, setLearnedSet] = useState({});
+  var [potMap, setPotMap] = useState({});
   var [loading, setLoading] = useState(true);
+  var [expanded, setExpanded] = useState({});
+  var [viewMode, setViewMode] = useState('chapters');
 
   useEffect(function(){
     if(!player) return;
-    PROGRESS.getAll(player.id).then(function(m){setProgressMap(m);setLoading(false);});
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!UUID.test(player.id)){setLoading(false);return;}
+    sbGet('ls_progress','player_id=eq.'+player.id+'&select=data').then(function(rows){
+      var learned={};
+      var pots={};
+      (Array.isArray(rows)?rows:[]).forEach(function(row){
+        var data={};
+        try{data=JSON.parse(row.data||'{}');}catch(e){}
+        var p=data.pots||{};
+        [1,2,3,4,5].forEach(function(pot){
+          (p[pot]||[]).forEach(function(w){
+            if(!pots[w.word]||pots[w.word]<pot) pots[w.word]=pot;
+            if(pot===5) learned[w.word]=true;
+          });
+        });
+      });
+      setLearnedSet(learned);
+      setPotMap(pots);
+      setLoading(false);
+    });
   },[]);
 
-  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
+  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Daten…</div>;
 
+  function toggle(id){setExpanded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
+
+  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
   var allWords=[];
-  chapters.forEach(function(ch){ ch.words.forEach(function(w){ allWords.push(Object.assign({},w,{chapTitle:ch.title,chapColor:ch.color})); }); });
-  var byColor={green:[],yellow:[],red:[],new:[]};
-  allWords.forEach(function(w){ byColor[getWordColor(progressMap[w.word]||[])].push(w); });
+  chapters.forEach(function(ch){ch.words.forEach(function(w){allWords.push(w);});});
+  var totalWords=allWords.length;
+  var totalLearned=allWords.filter(function(w){return !!learnedSet[w.word];}).length;
+  var overallPct=totalWords>0?Math.round(totalLearned/totalWords*100):0;
+  var totalPoints=player.total_score||0;
+
+  var catMap={};
+  (allCategories||[]).forEach(function(cat){
+    catMap[cat.id]={name:cat.name,icon:cat.icon||'🏷',bg:cat.bg||G100,text:cat.text||G600,total:0,learned:0};
+  });
+  allWords.forEach(function(w){
+    (w.cats||[]).forEach(function(cid){
+      if(!catMap[cid]) catMap[cid]={name:cid,icon:'🏷',bg:G100,text:G600,total:0,learned:0};
+      catMap[cid].total++;
+      if(learnedSet[w.word]) catMap[cid].learned++;
+    });
+  });
+  var catList=Object.keys(catMap).filter(function(k){return catMap[k].total>0;}).map(function(k){return Object.assign({id:k},catMap[k]);});
+  catList.sort(function(a,b){return (b.learned/Math.max(b.total,1))-(a.learned/Math.max(a.total,1));});
+
+  function pctColor(p){return p>=80?GR:p>=50?AM:RE;}
 
   return(
     <div>
-      <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
-        {[['green','🟢','Sicher'],['yellow','🟡','Üben'],['red','🔴','Schwach'],['new','⬜','Neu']].map(function(x){
-          return <div key={x[0]} style={{flex:'1 1 70px',textAlign:'center',padding:'10px 6px',background:COLOR_BG[x[0]],borderRadius:10}}>
-            <div style={{fontSize:22,fontWeight:'bold',color:COLOR_FG[x[0]]}}>{byColor[x[0]].length}</div>
-            <div style={{fontSize:10,color:G400}}>{x[2]}</div>
-          </div>;
+      <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:16,color:'white',marginBottom:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <div>
+            <div style={{fontSize:28,fontWeight:'bold'}}>{overallPct}%</div>
+            <div style={{fontSize:11,opacity:0.8}}>{totalLearned} / {totalWords} Vokabeln gelernt</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:28,fontWeight:'bold'}}>{totalPoints} Pkt</div>
+            <div style={{fontSize:11,opacity:0.8}}>Gesamt-Punkte</div>
+          </div>
+        </div>
+        <div style={{height:8,background:'rgba(255,255,255,0.25)',borderRadius:4,overflow:'hidden'}}>
+          <div style={{height:'100%',width:overallPct+'%',background:'white',borderRadius:4,transition:'width 0.5s'}}/>
+        </div>
+        <div style={{display:'flex',gap:10,marginTop:10,fontSize:11,opacity:0.85}}>
+          <span>✅ Gelernt: {totalLearned}</span>
+          <span>|</span>
+          <span>⬜ Offen: {totalWords-totalLearned}</span>
+        </div>
+      </div>
+
+      <div style={{display:'flex',gap:6,marginBottom:12}}>
+        {[['chapters','📚 Kapitel'],['categories','🏷️ Kategorien']].map(function(tab){
+          return <button key={tab[0]} onClick={function(){setViewMode(tab[0]);}}
+            style={{flex:1,padding:'7px',borderRadius:8,border:'2px solid '+(viewMode===tab[0]?T:G200),background:viewMode===tab[0]?TL:'white',cursor:'pointer',fontWeight:'bold',fontSize:12,color:viewMode===tab[0]?T:G600,touchAction:'manipulation'}}>
+            {tab[1]}
+          </button>;
         })}
       </div>
-      {['red','yellow','green','new'].map(function(color){
-        if(!byColor[color].length) return null;
-        return(
-          <div key={color} style={{marginBottom:12}}>
-            <div style={{fontWeight:'bold',fontSize:13,color:COLOR_FG[color],marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
-              <span style={{width:10,height:10,borderRadius:'50%',background:COLOR_DOT[color],display:'inline-block'}}/>
-              {color==='green'?'Sicher (letzte 4 alle richtig)':color==='yellow'?'Üben (gemischt)':color==='red'?'Schwach (meist falsch)':'Noch nicht geübt'}
-            </div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
-              {byColor[color].map(function(w,i){
-                return(
-                  <div key={i} style={{padding:'4px 8px',borderRadius:12,background:COLOR_BG[color],border:'1px solid '+COLOR_DOT[color]+'44',fontSize:11}}>
-                    <span style={{fontWeight:'bold',color:COLOR_FG[color]}}>{w.word}</span>
-                    <span style={{color:G400,marginLeft:4}}>{w.clue}</span>
+
+      {viewMode==='chapters'&&(
+        <div>
+          {topLevel.map(function(kap){
+            var children=chapters.filter(function(c){return c.parent_id===kap.id;});
+            var kapWords=[];
+            children.forEach(function(ch){ch.words.forEach(function(w){kapWords.push(w);});});
+            var kapTotal=kapWords.length;
+            var kapLearned=kapWords.filter(function(w){return !!learnedSet[w.word];}).length;
+            var kapPct=kapTotal>0?Math.round(kapLearned/kapTotal*100):0;
+            var kapOpen=expanded[kap.id];
+            return(
+              <div key={kap.id} style={{marginBottom:10,border:'2px solid '+(kapOpen?kap.color||T:G200),borderRadius:12,overflow:'hidden'}}>
+                <div onClick={function(){toggle(kap.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'11px 12px',background:kapOpen?(kap.color||T)+'15':'white',cursor:'pointer'}}>
+                  <span style={{fontSize:20}}>{kap.icon}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:'bold',fontSize:13,color:kap.color||T}}>{kap.title}</div>
+                    <div style={{fontSize:10,color:G400,marginTop:1}}>{kapLearned}/{kapTotal} Vokabeln gelernt</div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+                  <div style={{fontWeight:'bold',fontSize:18,color:pctColor(kapPct),marginRight:4}}>{kapPct}%</div>
+                  <span style={{color:G400,fontSize:11}}>{kapOpen?'▲':'▼'}</span>
+                </div>
+                <div style={{height:5,background:G100}}>
+                  <div style={{height:'100%',width:kapPct+'%',background:pctColor(kapPct),transition:'width 0.5s'}}/>
+                </div>
+
+                {kapOpen&&children.map(function(ch){
+                  var chTotal=ch.words.length;
+                  var chLearned=ch.words.filter(function(w){return !!learnedSet[w.word];}).length;
+                  var chPct=chTotal>0?Math.round(chLearned/chTotal*100):0;
+                  var chOpen=expanded[ch.id];
+                  return(
+                    <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
+                      <div onClick={function(){toggle(ch.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px 8px 18px',cursor:'pointer',background:chOpen?ch.color+'12':'#fafafa'}}>
+                        <span style={{fontSize:15}}>{ch.icon}</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</div>
+                          <div style={{fontSize:10,color:G400}}>{chLearned}/{chTotal}</div>
+                        </div>
+                        <div style={{width:50,height:4,background:G200,borderRadius:2,overflow:'hidden',marginRight:6}}>
+                          <div style={{height:'100%',width:chPct+'%',background:pctColor(chPct)}}/>
+                        </div>
+                        <span style={{fontSize:11,fontWeight:'bold',color:pctColor(chPct),minWidth:32,textAlign:'right'}}>{chPct}%</span>
+                        <span style={{color:G400,fontSize:10,marginLeft:4}}>{chOpen?'▲':'▼'}</span>
+                      </div>
+                      {chOpen&&(
+                        <div style={{padding:'4px 8px 8px 24px',background:'#fafafa'}}>
+                          {ch.words.map(function(w,i){
+                            var pot=potMap[w.word]||0;
+                            return(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 6px',borderBottom:'1px solid '+G100,borderRadius:6}}>
+                                <span style={{fontSize:13}}>{POT_ICON[pot]}</span>
+                                <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',flex:1,color:G900}}>{w.word}</span>
+                                <span style={{fontSize:10,color:G400,marginRight:4}}>{w.clue}</span>
+                                {pot>0&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:POT_COL[pot]+'22',color:POT_COL[pot],fontWeight:'bold',whiteSpace:'nowrap'}}>{POT_LABEL[pot]}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {viewMode==='categories'&&(
+        <div>
+          {catList.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Kategorien zugewiesen.</div>}
+          {catList.map(function(cat){
+            var pct=cat.total>0?Math.round(cat.learned/cat.total*100):0;
+            return(
+              <div key={cat.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',marginBottom:5,background:'white',borderRadius:10,border:'1px solid '+G200,boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
+                <span style={{fontSize:18}}>{cat.icon}</span>
+                <span style={{fontSize:12,fontWeight:'bold',flex:1,color:G600}}>{cat.name}</span>
+                <span style={{fontSize:11,color:G400,minWidth:40,textAlign:'right'}}>{cat.learned}/{cat.total}</span>
+                <div style={{width:70,height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
+                  <div style={{height:'100%',width:pct+'%',background:pctColor(pct),transition:'width 0.5s'}}/>
+                </div>
+                <span style={{fontSize:12,fontWeight:'bold',color:pctColor(pct),minWidth:36,textAlign:'right'}}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1363,7 +1498,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
             {/* Avatar with status dot */}
             <div style={{position:'relative',flexShrink:0}}>
               <div style={{width:44,height:44,borderRadius:'50%',
-                background:isInactive?G300:ac,
+                background:isInactive?G400:ac,
                 display:'flex',alignItems:'center',justifyContent:'center',
                 fontWeight:'bold',color:'white',fontSize:19,
                 border:'2px solid '+(isInactive?G200:'white'),
@@ -2295,12 +2430,21 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         np.pots[pot].splice(widx,1); word.streak=0; word.wrongStreak=0;
         // totalCorrect/totalWrong preserved across pot moves
         var nextPot=Math.min(pot+1,5); np.pots[nextPot].push(word);
-        // Award 1 point when word reaches Pot 5 (learned!)
-        if(nextPot===5&&player){
-          var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if(UUID.test(player.id)){
-            var newScore=(player.total_score||0)+1;
-            sbPatch('players',{total_score:newScore,total_correct:(player.total_correct||0)+1},'id=eq.'+player.id);
+        // Award points when word reaches a new highest pot (maxPot tracks highest ever reached)
+        // Note system: Topf1=Note5(+10), Topf2=Note4(+20), Topf3=Note3(+30), Topf4=Note2(+40), Topf5=Note1(+50)+gelernt(+10)
+        var POT_PTS={1:10,2:20,3:30,4:40,5:60};
+        var prevMax=word.maxPot||0;
+        if(nextPot>prevMax){
+          word.maxPot=nextPot;
+          if(player){
+            var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if(UUID.test(player.id)){
+              var pts=POT_PTS[nextPot]||0;
+              var newScore=(player.total_score||0)+pts;
+              var newCorrect=(player.total_correct||0)+1;
+              sbPatch('players',{total_score:newScore,total_correct:newCorrect},'id=eq.'+player.id);
+              setPlayer(function(pl){return Object.assign({},pl,{total_score:newScore,total_correct:newCorrect});});
+            }
           }
         }
         var newGr=lsGrade(lsPercent(np,gradeSettings),gradeSettings);
@@ -3159,7 +3303,7 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapt
                 <span style={{fontSize:12,color:G600}}>{d.clue}</span>
                 <span style={{marginLeft:'auto',fontSize:10,color:G400}}>Topf {d.pot}</span>
               </div>
-              <div style={{fontSize:12,color:G700,marginBottom:2}}>
+              <div style={{fontSize:12,color:G600,marginBottom:2}}>
                 <span style={{color:G400}}>Spieler: </span><strong>{d.player_name}</strong>
                 <span style={{color:G400,marginLeft:8}}>Antwort: </span>
                 <span style={{background:'#fee2e2',color:RE,padding:'1px 7px',borderRadius:5,fontWeight:'bold'}}>"{d.typed_answer}"</span>
@@ -3692,7 +3836,7 @@ function saveChapterWords(chapterId, newWords, setChapters) {
 }
 
 
-function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories, allRuns }) {
+function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories, setAllCategories, allRuns }) {
   var [tab, setTab] = useState('users');
   var [players, setPlayers] = useState([]);
   var [selP, setSelP] = useState(null);
@@ -3711,6 +3855,13 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   var [targetChapter, setTargetChapter] = useState('');
   var [targetKapitel, setTargetKapitel] = useState(''); // parent Kapitel for new topic
   var fileRef = useRef();
+  var catLogRef = useRef(null);
+  var scoreLogRef = useRef(null);
+  var [catJobLog, setCatJobLog] = useState([]);
+  var [catJobRunning, setCatJobRunning] = useState(false);
+  var [catJobPct, setCatJobPct] = useState(0);
+  var [scoreJobLog, setScoreJobLog] = useState([]);
+  var [scorePreview, setScorePreview] = useState(null);
 
   // Use allUsers from App state (loaded from Supabase on startup)
   useEffect(function(){
@@ -3754,6 +3905,112 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   var totalW=chapters.reduce(function(s,ch){return s+ch.words.length;},0);
   var learnedW=selP?new Set(results.filter(function(r){return r.correct;}).map(function(r){return r.word;})).size:0;
   var overallPct=selP?Math.round(learnedW/totalW*100):0;
+
+  // ── Category auto-assignment via Claude API ──────────────────
+  var CAT_DEF='greetings=Begruessung, zahlen=Zahlen, farben=Farben, familie=Familie, koerper=Koerper, kleidung=Kleidung, essen=Essen, sport=Sport, schule=Schule, zuhause=Zuhause, transport=Transport, monate=Monate, freizeit=Freizeit, einkaufen=Einkaufen, kommunikation=Kommunikation, natur=Natur, gefuehle=Gefuehle, ort=Ort, grammatik=Grammatik';
+  function appendCatLog(msg) { setCatJobLog(function(p){return p.concat([msg]);});  setTimeout(function(){if(catLogRef.current)catLogRef.current.scrollTop=catLogRef.current.scrollHeight;},50); }
+  function appendScoreLog(msg) { setScoreJobLog(function(p){return p.concat([msg]);}); setTimeout(function(){if(scoreLogRef.current)scoreLogRef.current.scrollTop=scoreLogRef.current.scrollHeight;},50); }
+
+  function runCatAssignment(forceAll) {
+    if(catJobRunning) return;
+    var key=window._ANTHROPIC_KEY||(function(){try{return sessionStorage.getItem('_ak')||'';}catch(e){return '';}}());
+    if(!key){setCatJobLog(['Kein API-Key. Bitte im Upload-Bereich eintragen.']);return;}
+    var topicChs=chapters.filter(function(c){return !!c.parent_id;});
+    var toProcess=topicChs.filter(function(ch){
+      if(forceAll) return ch.words.length>0;
+      return ch.words.some(function(w){return !w.cats||w.cats.length===0;});
+    });
+    if(!toProcess.length){setCatJobLog(['Alle Vokabeln haben bereits Kategorien!']);return;}
+    setCatJobRunning(true);setCatJobPct(0);
+    setCatJobLog(['Start: '+toProcess.length+' Kapitel...']);
+    var processed=0; var totalUpdated=0;
+    function next(idx){
+      if(idx>=toProcess.length){
+        appendCatLog('Fertig! '+totalUpdated+' Vokabeln kategorisiert.');
+        setCatJobPct(100);setCatJobRunning(false);return;
+      }
+      var ch=toProcess[idx];
+      var needsCat=forceAll?ch.words:ch.words.filter(function(w){return !w.cats||w.cats.length===0;});
+      if(!needsCat.length){processed++;setCatJobPct(Math.round(processed/toProcess.length*100));next(idx+1);return;}
+      appendCatLog('"'+ch.title+'" - '+needsCat.length+' Vokabeln...');
+      var wordList=needsCat.map(function(w){return w.word+' = '+w.clue;}).join('\n');
+      var prompt='Weise jeder Vokabel 1-3 passende Kategorie-IDs zu ('+CAT_DEF+'). Nur JSON, kein Markdown:\n{"assignments":[{"word":"birthday","cats":["freizeit","familie"]}]}\n\nVokabeln:\n'+wordList;
+      fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+        var res; try{res=JSON.parse(txt);}catch(e){res={assignments:[]};}
+        var amap={}; (res.assignments||[]).forEach(function(a){amap[a.word.toLowerCase()]=a.cats||[];});
+        var changed=0;
+        var newWords=ch.words.map(function(w){
+          if(forceAll||!w.cats||w.cats.length===0){var cats=amap[w.word.toLowerCase()];if(cats&&cats.length){changed++;return Object.assign({},w,{cats:cats});}}
+          return w;
+        });
+        totalUpdated+=changed;
+        return sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+ch.id).then(function(){
+          setChapters(function(prev){return prev.map(function(c){return c.id===ch.id?Object.assign({},c,{words:newWords}):c;});});
+          appendCatLog('OK: "'+ch.title+'" - '+changed+' zugewiesen');
+          processed++;setCatJobPct(Math.round(processed/toProcess.length*100));
+          setTimeout(function(){next(idx+1);},800);
+        });
+      })
+      .catch(function(e){appendCatLog('Fehler "'+ch.title+'": '+e.message);processed++;setCatJobPct(Math.round(processed/toProcess.length*100));setTimeout(function(){next(idx+1);},500);});
+    }
+    next(0);
+  }
+
+  // ── Score recalculation ──────────────────────────────────────
+  var POT_CUM_MAP={1:10,2:30,3:60,4:100,5:160};
+  function runScorePreview() {
+    setScoreJobLog(['Lade Daten...']); setScorePreview(null);
+    Promise.all([
+      sbGet('players','select=id,name,total_score,is_admin&order=name.asc'),
+      sbGet('ls_progress','select=player_id,data')
+    ]).then(function(r){
+      var pls=r[0]||[]; var allProg=r[1]||[];
+      var preview=pls.map(function(p){
+        var myProg=allProg.filter(function(x){return x.player_id===p.id;});
+        var wmp={};
+        myProg.forEach(function(row){
+          var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+          var pots=data.pots||{};
+          [1,2,3,4,5].forEach(function(pot){
+            (pots[pot]||[]).forEach(function(w){
+              var mp=w.maxPot?Math.max(w.maxPot,pot):pot;
+              if(!wmp[w.word]||wmp[w.word]<mp) wmp[w.word]=mp;
+            });
+          });
+        });
+        var newScore=0; var learned=0;
+        Object.keys(wmp).forEach(function(word){var mp=wmp[word];newScore+=POT_CUM_MAP[mp]||0;if(mp===5)learned++;});
+        return {id:p.id,name:p.name,oldScore:p.total_score||0,newScore:newScore,learned:learned,isAdmin:p.is_admin};
+      });
+      setScorePreview(preview);
+      setScoreJobLog(['Vorschau geladen - '+preview.length+' Spieler']);
+    }).catch(function(e){setScoreJobLog(['Fehler: '+e.message]);});
+  }
+  function runScoreSave() {
+    if(!scorePreview||!scorePreview.length) return;
+    if(!confirm('Punkte fuer alle '+scorePreview.length+' Spieler speichern?')) return;
+    appendScoreLog('Speichere...');
+    function saveNext(idx){
+      if(idx>=scorePreview.length){
+        appendScoreLog('Fertig! Alle Punkte gespeichert.');
+        setScorePreview(null);
+        sbGet('players','select=id,name,is_admin,is_active,total_score,total_correct,total_wrong,puzzles_completed&order=created_at.asc').then(function(rows){
+          if(Array.isArray(rows)&&rows.length&&setAllUsers) setAllUsers(rows);
+        });
+        return;
+      }
+      var p=scorePreview[idx];
+      sbPatch('players',{total_score:p.newScore},'id=eq.'+p.id).then(function(){
+        appendScoreLog(''+p.name+': '+p.oldScore+' -> '+p.newScore+' Pkt ('+p.learned+' gelernt)');
+        setTimeout(function(){saveNext(idx+1);},120);
+      }).catch(function(e){appendScoreLog('Fehler '+p.name+': '+e.message);setTimeout(function(){saveNext(idx+1);},120);});
+    }
+    saveNext(0);
+  }
 
   function uploadImg(file) {
     if(!file) return;
@@ -4088,6 +4345,58 @@ FORMAT - NUR JSON, kein Markdown:
               onCreated={function(r){alert('Lauf "'+r.name+'" erstellt!');}}/>
           </div>
           <div style={{marginTop:16}}><LeitersSpielAdminOverview allUsers={allUsers} gradeSettings={gradeSettings} chapters={chapters} setChapters={setChapters}/></div>
+
+          {/* SCORE RECALCULATION */}
+          <div style={{marginTop:16,padding:14,background:G50,borderRadius:12,border:'1px solid '+G200}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:4}}>📊 Punkte neu berechnen</div>
+            <div style={{fontSize:11,color:G400,marginBottom:10}}>
+              Berechnet Total-Punkte neu basierend auf Leiterspiel-Fortschritt.
+              Topf 1=10, Topf 2=30, Topf 3=60, Topf 4=100, Topf 5=160 Pkt (kumulativ)
+            </div>
+            <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+              <button onClick={runScorePreview} style={BtnStyle(G100,G600,{touchAction:'manipulation'})}>
+                Vorschau laden
+              </button>
+              {scorePreview&&scorePreview.length>0&&(
+                <button onClick={runScoreSave} style={BtnStyle(RE,'white',{touchAction:'manipulation'})}>
+                  Punkte speichern
+                </button>
+              )}
+            </div>
+            {scorePreview&&scorePreview.length>0&&(
+              <div style={{marginBottom:10,background:'white',borderRadius:8,border:'1px solid '+G200,overflow:'hidden'}}>
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead>
+                    <tr style={{background:G50}}>
+                      <th style={{padding:'6px 10px',textAlign:'left',color:G600}}>Spieler</th>
+                      <th style={{padding:'6px 10px',textAlign:'right',color:G600}}>Alt</th>
+                      <th style={{padding:'6px 10px',textAlign:'right',color:G600}}>Neu</th>
+                      <th style={{padding:'6px 10px',textAlign:'right',color:G600}}>Diff</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scorePreview.map(function(p){
+                      var diff=p.newScore-p.oldScore;
+                      return <tr key={p.id} style={{borderTop:'1px solid '+G100}}>
+                        <td style={{padding:'5px 10px',fontWeight:'bold'}}>{p.name}{p.isAdmin?' 👑':''}</td>
+                        <td style={{padding:'5px 10px',textAlign:'right',color:G400}}>{p.oldScore}</td>
+                        <td style={{padding:'5px 10px',textAlign:'right',fontWeight:'bold',color:T}}>{p.newScore}</td>
+                        <td style={{padding:'5px 10px',textAlign:'right',fontWeight:'bold',color:diff>0?GR:diff<0?RE:G400}}>{diff>0?'+':''}{diff}</td>
+                      </tr>;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {scoreJobLog.length>0&&(
+              <div ref={scoreLogRef} style={{maxHeight:120,overflowY:'auto',background:'white',border:'1px solid '+G200,borderRadius:8,padding:'8px 10px',fontSize:11,fontFamily:'monospace',lineHeight:1.9}}>
+                {scoreJobLog.map(function(msg,i){
+                  var col=msg.indexOf('Fertig')===0||msg.indexOf('->  ')>=0?'#065f46':msg.indexOf('Fehler')>=0?RE:G600;
+                  return <div key={i} style={{color:col}}>{msg}</div>;
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -4100,9 +4409,44 @@ FORMAT - NUR JSON, kein Markdown:
       {/* CATEGORIES TAB */}
       {tab==='categories'&&(
         <div>
-          <div style={{fontSize:12,color:G500,marginBottom:10,padding:'8px 10px',background:'#fef3c7',borderRadius:8,border:'1px solid #fde68a'}}>
+          <div style={{fontSize:12,color:G600,marginBottom:10,padding:'8px 10px',background:'#fef3c7',borderRadius:8,border:'1px solid #fde68a'}}>
             🏷️ Kategorien sind unabhängig von Kapiteln - sie sind Quer-Tags die allen Vokabeln zugewiesen werden können.
             Jede Vokabel sollte mindestens eine Kategorie haben.
+          </div>
+
+          {/* AUTO-ASSIGN SECTION */}
+          <div style={{marginBottom:14,padding:14,background:G50,borderRadius:12,border:'1px solid '+G200}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>🤖 Automatisch zuweisen (Claude API)</div>
+            <div style={{fontSize:11,color:G400,marginBottom:10}}>
+              {(function(){
+                var total=chapters.filter(function(c){return !!c.parent_id;}).reduce(function(s,c){return s+c.words.length;},0);
+                var withCat=chapters.filter(function(c){return !!c.parent_id;}).reduce(function(s,c){return s+c.words.filter(function(w){return w.cats&&w.cats.length>0;}).length;},0);
+                return total+' Vokabeln total - '+withCat+' haben Kategorien - '+(total-withCat)+' fehlen noch';
+              })()}
+            </div>
+            <div style={{display:'flex',gap:8,marginBottom:10,flexWrap:'wrap'}}>
+              <button onClick={function(){runCatAssignment(false);}} disabled={catJobRunning}
+                style={BtnStyle(T,'white',{opacity:catJobRunning?0.5:1,touchAction:'manipulation'})}>
+                {catJobRunning?'Laeuft...':'🏷️ Fehlende zuweisen'}
+              </button>
+              <button onClick={function(){runCatAssignment(true);}} disabled={catJobRunning}
+                style={BtnStyle('#7c3aed','white',{opacity:catJobRunning?0.5:1,touchAction:'manipulation'})}>
+                Alle neu zuweisen
+              </button>
+            </div>
+            {catJobPct>0&&catJobPct<100&&(
+              <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden',marginBottom:8}}>
+                <div style={{height:'100%',width:catJobPct+'%',background:T,borderRadius:3,transition:'width 0.3s'}}/>
+              </div>
+            )}
+            {catJobLog.length>0&&(
+              <div ref={catLogRef} style={{maxHeight:140,overflowY:'auto',background:'white',border:'1px solid '+G200,borderRadius:8,padding:'8px 10px',fontSize:11,fontFamily:'monospace',lineHeight:1.9}}>
+                {catJobLog.map(function(msg,i){
+                  var col=msg.indexOf('OK')===0||msg.indexOf('Fertig')===0?'#065f46':msg.indexOf('Fehler')===0||msg.indexOf('Kein')===0?RE:G600;
+                  return <div key={i} style={{color:col}}>{msg}</div>;
+                })}
+              </div>
+            )}
           </div>
           <div style={{marginBottom:10}}>
             {(allCategories||[]).map(function(c,i){
@@ -4820,7 +5164,7 @@ function App() {
   // Progress stats
   if(screen==='progress') return(
     <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📈 Mein Fortschritt' player={player}>
-      <ProgressStats chapters={chapters} player={player}/>
+      <ProgressStats chapters={chapters} player={player} allCategories={allCategories}/>
     </Shell>
   );
 
