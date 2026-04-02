@@ -317,10 +317,15 @@ function normalizeAnswer(s) {
   return s.trim().toLowerCase()
     .replace(/^(to|die|der|das|ein|eine|einen|einem|einer|ich|sie|er|es|wir|ihr)\s+/i, '')
     .replace(/[.,!?;:]/g, '')
-    .replace(/\s*\([^)]*\)\s*/g, ' ') // remove parenthetical groups
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
     .replace(/[()]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+// Proper nouns (months, names) start with uppercase - require exact case
+function isProperNoun(correct) {
+  var core = correct.split(/[,;/]+/)[0].trim().replace(/\([^)]*\)/g,'').trim();
+  return core.length > 0 && core[0] === core[0].toUpperCase() && core[0] !== core[0].toLowerCase();
 }
 // Generate all variants from a word with parentheticals:
 // "(irgend)ein(e)" → ["ein","eine","irgendein","irgendeine","(irgend)ein(e)"]
@@ -369,32 +374,49 @@ function wordVariants(raw) {
 }
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
-  var t = typed.trim().toLowerCase();
-  var tN = normalizeAnswer(t);
+  var t = typed.trim();
+  var tLower = t.toLowerCase();
   var corrects = correct.split(/[,;\/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
 
-  // Check if any correct answer is a "to-verb" (starts with "to ")
   function isToVerb(c){ return /^to\s+/i.test(c.trim()); }
   function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
 
-  // First pass: exact match (including "to X" === "to X")
   var allVariants = [];
   corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
-  for (var i=0;i<allVariants.length;i++) {
-    if (allVariants[i]===t || allVariants[i]===tN) return 'correct';
+
+  // Proper nouns (months, names): first letter must be uppercase ("August" not "august")
+  if (isProperNoun(correct)) {
+    // Require that typed word starts with uppercase
+    if (t.length === 0 || t[0] !== t[0].toUpperCase() || t[0] === t[0].toLowerCase()) {
+      return 'wrong'; // lowercase start = wrong for proper nouns
+    }
+    // Then check case-insensitive match
+    var tLow2 = tLower;
+    var tN2 = normalizeAnswer(tLow2);
+    for (var pi=0;pi<allVariants.length;pi++) {
+      var av2 = allVariants[pi].toLowerCase();
+      if (av2===tLow2 || av2===tN2) return 'correct';
+    }
+    return 'wrong';
   }
 
-  // Second pass: "to-verb" typed without "to" → partial
+  // Case-insensitive for regular words
+  var tN = normalizeAnswer(tLower);
+  for (var i=0;i<allVariants.length;i++) {
+    var av = allVariants[i].toLowerCase();
+    if (av===tLower || av===tN) return 'correct';
+  }
+
+  // "to-verb" typed without "to" → partial
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) {
-      var base = stripTo(corrects[k]);
-      var baseN = normalizeAnswer(base);
-      if (t===base || tN===base || t===baseN || tN===baseN) return 'partial'; // missing "to"
+      var base = normalizeAnswer(stripTo(corrects[k]));
+      if (tN===base) return 'partial';
     }
   }
 
-  // Third pass: general partial (substring match)
-  var allNorm = corrects.map(normalizeAnswer);
+  // General partial (substring)
+  var allNorm = corrects.map(function(c){return normalizeAnswer(c.toLowerCase());});
   for (var j=0;j<allNorm.length;j++) {
     var v=allNorm[j];
     if (v && tN && (v.includes(tN)||tN.includes(v))) return 'partial';
@@ -3417,7 +3439,7 @@ FORMAT - NUR JSON, kein Markdown:
 {"title":"Kurzer Seitentitel","words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"red","clue":"rot","important":true,"type":"adjective"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"},{"word":"Where is ...?","clue":"Wo ist ...?","important":true,"type":"phrase"}],"sentences":[{"text":"Where is the cat?","translation":"Wo ist die Katze?","important":true,"vocabWord":"Where is ...?"}]}
 
 Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adjective" (Adjektive), "phrase" (Wendungen/Phrasen), "other" (sonstiges)` }
-        }).then(function(resp){return resp.json();}).then(function(d){
+        ]}]})}).then(function(resp){return resp.json();}).then(function(d){
           // Check for API error (wrong key, quota exceeded, etc.)
           if(!d.content||!Array.isArray(d.content)){
             var apiErr=(d.error&&(d.error.message||d.error.type))||JSON.stringify(d).slice(0,150);
