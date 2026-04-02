@@ -1479,7 +1479,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
           return <button key={cat.id} onClick={function(){startWithCat(cat.id);}}
             style={{padding:'10px 5px',borderRadius:10,border:'2px solid '+G200,background:'white',cursor:'pointer',textAlign:'center',touchAction:'manipulation'}}>
             <div style={{fontSize:18,marginBottom:3}}>{cat.icon}</div>
-            <div style={{fontSize:9,fontWeight:'bold',color:G700}}>{cat.name}</div>
+            <div style={{fontSize:9,fontWeight:'bold',color:G600}}>{cat.name}</div>
             <div style={{fontSize:9,color:G400}}>{cnt} V</div>
           </button>;
         })}
@@ -3538,7 +3538,7 @@ function CategoryPicker({ wordCats, onChange, allCategories }) {
   return (
     <span ref={wrapRef} style={{position:'relative',display:'inline-flex',flexWrap:'wrap',gap:3,alignItems:'center'}}>
       {cats.map(function(cid) {
-        var c = allCats.find(function(x){return x.id===cid;}) || {name:cid,icon:'🏷️',bg:G100,text:G500};
+        var c = allCats.find(function(x){return x.id===cid;}) || {name:cid,icon:'🏷️',bg:G100,text:G400};
         return (
           <span key={cid} style={{display:'inline-flex',alignItems:'center',gap:2,padding:'2px 6px',borderRadius:99,fontSize:9,fontWeight:'bold',background:c.bg,color:c.text,cursor:'pointer',whiteSpace:'nowrap'}}
             onClick={function(){toggle(cid);}}>
@@ -3547,14 +3547,14 @@ function CategoryPicker({ wordCats, onChange, allCategories }) {
         );
       })}
       <button onClick={function(){setOpen(!open);setSearch('');}}
-        style={{display:'inline-flex',alignItems:'center',padding:'2px 6px',borderRadius:99,fontSize:9,fontWeight:'bold',background:G100,color:G500,border:'1.5px dashed '+G300,cursor:'pointer',whiteSpace:'nowrap',touchAction:'manipulation'}}>
+        style={{display:'inline-flex',alignItems:'center',padding:'2px 6px',borderRadius:99,fontSize:9,fontWeight:'bold',background:G100,color:G400,border:'1.5px dashed '+G200,cursor:'pointer',whiteSpace:'nowrap',touchAction:'manipulation'}}>
         + Kategorie
       </button>
       {open && (
         <div style={{position:'absolute',top:'calc(100% + 3px)',left:0,zIndex:800,background:'white',border:'1.5px solid '+T,borderRadius:10,padding:7,minWidth:220,boxShadow:'0 6px 20px rgba(0,0,0,.14)'}}>
           <input value={search} onChange={function(e){setSearch(e.target.value);}} autoFocus
             placeholder="Kategorie suchen..."
-            style={{width:'100%',padding:'5px 8px',fontSize:11,border:'1.5px solid '+G300,borderRadius:6,outline:'none',fontFamily:'inherit',marginBottom:5}}/>
+            style={{width:'100%',padding:'5px 8px',fontSize:11,border:'1.5px solid '+G200,borderRadius:6,outline:'none',fontFamily:'inherit',marginBottom:5}}/>
           <div style={{maxHeight:160,overflowY:'auto'}}>
             {assigned.length > 0 && <div style={{fontSize:9,color:G400,fontWeight:'bold',padding:'0 4px 3px',textTransform:'uppercase',letterSpacing:.7}}>Zugewiesen</div>}
             {assigned.map(function(c) {
@@ -4348,7 +4348,7 @@ FORMAT - NUR JSON, kein Markdown:
                             <div style={{fontSize:10,color:G400,marginBottom:3}}>Verknüpfte Sätze:</div>
                             {(t.sentences||[]).filter(function(s){return s.important;}).map(function(s,si){
                               return <div key={si} style={{fontSize:11,color:'#065f46',padding:'2px 0'}}>
-                                ⭐ {s.text} <span style={{color:G400}}>— {s.translation}</span>
+                                ⭐ {s.text} <span style={{color:G400}}>- {s.translation}</span>
                               </div>;
                             })}
                           </div>}
