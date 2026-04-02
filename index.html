@@ -330,52 +330,42 @@ function isProperNoun(correct) {
 // Generate all variants from a word with parentheticals:
 // "(irgend)ein(e)" → ["ein","eine","irgendein","irgendeine","(irgend)ein(e)"]
 function wordVariants(raw) {
-  var w = raw.trim().toLowerCase();
-  var variants = [w, normalizeAnswer(w)];
-  // Core: remove all parenthetical content - "zweite(r,s)" -> "zweite"
+  // Preserve original case - generate all valid forms of a word
+  var w = raw.trim();
+  var variants = [w];
+  // Core without parentheticals: "zweite(r,s)" -> "zweite"
   var core = w.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
-  if (core) variants.push(core, normalizeAnswer(core));
-  // Expand optional parentheticals as individual alternatives
-  // "(mit)bringen" -> ["bringen","mitbringen"]
-  // "zweite(r,s)" -> ["zweite","zweiter","zweites"] (split by comma inside parens)
+  if (core && core!==w) variants.push(core);
+  // Expand comma-separated parens: "erste(r,s)" -> ["erste","erster","erstes"]
   var parts = w.split(/(\([^)]*\))/);
   var optionals = [];
-  var base = [];
+  var base2 = [];
   parts.forEach(function(p){
     if(/^\([^)]*\)$/.test(p)){
-      // Split comma-separated options inside parens: "(r,s)" -> ["r","s",""]
       var inner = p.slice(1,-1);
-      var options = inner.indexOf(',') >= 0
-        ? [''].concat(inner.split(','))  // empty = without, each part = with
-        : [inner, ''];                   // just two choices: with or without
-      optionals.push({pos:base.length, options:options});
-      base.push('');
-    } else {
-      base.push(p);
-    }
+      var opts2 = inner.indexOf(',') >= 0 ? [''].concat(inner.split(',')) : [inner,''];
+      optionals.push({pos:base2.length, options:opts2});
+      base2.push('');
+    } else { base2.push(p); }
   });
-  // Generate all combos
-  function combo(opts, idx, current) {
-    if(idx >= opts.length) {
-      var v = base.slice();
-      opts.forEach(function(o,i){ v[o.pos]=current[i]; });
-      var joined = v.join('').replace(/\s+/g,' ').trim();
-      if(joined) variants.push(joined, normalizeAnswer(joined));
+  function combo2(opts,idx,cur){
+    if(idx>=opts.length){
+      var v2=base2.slice();
+      opts.forEach(function(o,i){v2[o.pos]=cur[i];});
+      var joined=v2.join('').replace(/\s+/g,' ').trim();
+      if(joined) variants.push(joined);
       return;
     }
-    opts[idx].options.forEach(function(opt){
-      combo(opts, idx+1, current.concat([opt]));
-    });
+    opts[idx].options.forEach(function(opt){combo2(opts,idx+1,cur.concat([opt]));});
   }
-  if(optionals.length > 0 && optionals.length <= 3) combo(optionals, 0, []);
-  // Deduplicate
-  var seen = {};
-  return variants.filter(function(v){if(!v||seen[v])return false;seen[v]=1;return true;});
+  if(optionals.length>0&&optionals.length<=3) combo2(optionals,0,[]);
+  // Deduplicate preserving case
+  var seen2={};
+  return variants.filter(function(v){if(!v||seen2[v])return false;seen2[v]=1;return true;});
 }
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
-  var tLower = t.toLowerCase();
   var corrects = correct.split(/[,;\/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
 
   function isToVerb(c){ return /^to\s+/i.test(c.trim()); }
@@ -384,43 +374,21 @@ function checkAnswer(typed, correct) {
   var allVariants = [];
   corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
 
-  // Proper nouns (months, names): first letter must be uppercase ("August" not "august")
-  if (isProperNoun(correct)) {
-    // Require that typed word starts with uppercase
-    if (t.length === 0 || t[0] !== t[0].toUpperCase() || t[0] === t[0].toLowerCase()) {
-      return 'wrong'; // lowercase start = wrong for proper nouns
-    }
-    // Then check case-insensitive match
-    var tLow2 = tLower;
-    var tN2 = normalizeAnswer(tLow2);
-    for (var pi=0;pi<allVariants.length;pi++) {
-      var av2 = allVariants[pi].toLowerCase();
-      if (av2===tLow2 || av2===tN2) return 'correct';
-    }
-    return 'wrong';
-  }
-
-  // Case-insensitive for regular words
-  var tN = normalizeAnswer(tLower);
+  // CASE-SENSITIVE: exact match required for all words
   for (var i=0;i<allVariants.length;i++) {
-    var av = allVariants[i].toLowerCase();
-    if (av===tLower || av===tN) return 'correct';
+    if (allVariants[i] === t) return 'correct';
   }
 
-  // "to-verb" typed without "to" → partial
+  // "to-verb" typed without "to" -> partial (e.g. typed "play" for "to play")
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) {
-      var base = normalizeAnswer(stripTo(corrects[k]));
-      if (tN===base) return 'partial';
+      var baseV = stripTo(corrects[k]);
+      if (baseV === t) return 'partial';
     }
   }
 
-  // General partial (substring)
-  var allNorm = corrects.map(function(c){return normalizeAnswer(c.toLowerCase());});
-  for (var j=0;j<allNorm.length;j++) {
-    var v=allNorm[j];
-    if (v && tN && (v.includes(tN)||tN.includes(v))) return 'partial';
-  }
+  // Wrong case: typed matches a variant but with different case -> still wrong
+  // (no fallback to case-insensitive)
   return 'wrong';
 }
 
@@ -1968,10 +1936,17 @@ function lsPickWord(progress, lastWord) {
   var cands=[];
   [1,2,3,4].forEach(function(pot){
     (progress.pots[pot]||[]).forEach(function(w){
+      if(w.disputeId) return; // skip pending dispute words
       if(!lastWord||w.word!==lastWord) cands.push({word:w,pot:pot});
     });
   });
   if(cands.length===0&&lastWord){
+    [1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){
+      if(!w.disputeId) cands.push({word:w,pot:pot});
+    });});
+  }
+  // Only fallback to pending words if nothing else
+  if(cands.length===0){
     [1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push({word:w,pot:pot});});});
   }
   return cands.length?shuffleArr(cands)[0]:null;
@@ -2128,6 +2103,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   var [saveErr,setSaveErr]=useState(false);
   var [celebration,setCelebration]=useState(null);
   var [view,setView]=useState('learn'); // 'learn'|'pots'
+  var [disputeSent,setDisputeSent]=useState(false);
   var [openPot,setOpenPot]=useState(null); // which pot is expanded
   var [quizAnswers,setQuizAnswers]=useState([]);
   var [typeInput,setTypeInput]=useState('');
@@ -2201,6 +2177,38 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
     }).catch(function(){ setSaving(false); setSaveErr(true); });
   }
 
+  function submitDispute() {
+    if(!currentItem||disputeSent||!player) return;
+    var word=currentItem.word;
+    var pot=currentItem.pot;
+    // Save dispute to DB
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var pid=UUID.test(player.id)?player.id:null;
+    var rid=UUID.test(run.id)?run.id:null;
+    sbPost('word_disputes',{
+      player_id:pid,
+      player_name:player.name,
+      run_id:rid,
+      word:word.word,
+      clue:word.clue,
+      typed_answer:result?result.typed:'',
+      pot:pot,
+      chapter_id:word.chapterId||word.topic||''
+    }).then(function(res){
+      if(res&&!res._err){
+        var dispId=res.id||('local_'+Date.now());
+        // Mark word as pending in progress
+        var np=JSON.parse(JSON.stringify(progress));
+        np.pots[pot]=np.pots[pot].map(function(w){
+          return w.word===word.word?Object.assign({},w,{disputeId:dispId}):w;
+        });
+        setProgress(np);
+        saveProgress(np);
+        setDisputeSent(true);
+      }
+    });
+  }
+
   function handleAnswer(isCorrect) {
     if(!currentItem||result) return;
     var np=JSON.parse(JSON.stringify(progress));
@@ -2251,7 +2259,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   }
 
   function next(){
-    setResult(null); setTypeInput('');
+    setResult(null); setTypeInput(''); setDisputeSent(false);
     var ni=lsPickWord(progress,currentItem&&currentItem.word?currentItem.word.word:null);
     setCurrentItem(ni);
   }
@@ -2421,6 +2429,17 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
           style={BtnStyle(G50,G900,{padding:'10px',fontSize:13,border:'2px solid '+G200,textAlign:'center',touchAction:'manipulation'})}>{a.word}</button>;
       })}
     </div>}
+    {result&&!result.correct&&<div style={{marginTop:6,marginBottom:2}}>
+      {disputeSent
+        ? <div style={{padding:'7px 10px',borderRadius:8,background:'#fef3c7',border:'1.5px solid #f59e0b',fontSize:11,color:'#92400e',textAlign:'center'}}>
+            ⏳ Anfrage gesendet - Wort pausiert bis Admin entscheidet
+          </div>
+        : <button onClick={submitDispute}
+            style={{width:'100%',padding:'8px',borderRadius:8,border:'1.5px dashed #f59e0b',background:'#fffbeb',color:'#92400e',cursor:'pointer',fontSize:12,touchAction:'manipulation'}}>
+            ❓ Meine Antwort war korrekt - Anfrage stellen
+          </button>
+      }
+    </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>→ Weiter</button>}
   </div>;
 
@@ -2446,6 +2465,17 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
                   setResult({correct:false,typed:typed||'?',expected:word.word});
                   handleAnswer(false);
                 }}/>}
+    {result&&!result.correct&&<div style={{marginTop:6,marginBottom:2}}>
+      {disputeSent
+        ? <div style={{padding:'7px 10px',borderRadius:8,background:'#fef3c7',border:'1.5px solid #f59e0b',fontSize:11,color:'#92400e',textAlign:'center'}}>
+            ⏳ Anfrage gesendet - Wort pausiert bis Admin entscheidet
+          </div>
+        : <button onClick={submitDispute}
+            style={{width:'100%',padding:'8px',borderRadius:8,border:'1.5px dashed #f59e0b',background:'#fffbeb',color:'#92400e',cursor:'pointer',fontSize:12,touchAction:'manipulation'}}>
+            ❓ Meine Antwort war korrekt - Anfrage stellen
+          </button>
+      }
+    </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
   </div>;
 
@@ -2502,6 +2532,17 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
             style={BtnStyle(AM,'white',{flex:1,padding:'12px'})}>✓ Prüfen</button>
         </div>
       </div>}
+    {result&&!result.correct&&<div style={{marginTop:6,marginBottom:2}}>
+      {disputeSent
+        ? <div style={{padding:'7px 10px',borderRadius:8,background:'#fef3c7',border:'1.5px solid #f59e0b',fontSize:11,color:'#92400e',textAlign:'center'}}>
+            ⏳ Anfrage gesendet - Wort pausiert bis Admin entscheidet
+          </div>
+        : <button onClick={submitDispute}
+            style={{width:'100%',padding:'8px',borderRadius:8,border:'1.5px dashed #f59e0b',background:'#fffbeb',color:'#92400e',cursor:'pointer',fontSize:12,touchAction:'manipulation'}}>
+            ❓ Meine Antwort war korrekt - Anfrage stellen
+          </button>
+      }
+    </div>}
       {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>→ Weiter</button>}
     </div>;
   }
@@ -2531,6 +2572,17 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
         placeholder="Deutsche Übersetzung…" style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
       <button onClick={function(){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.clue});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.clue});}handleAnswer(ok);}}
         style={BtnStyle(T,'white',{padding:'12px 16px'})}>✓</button>
+    </div>}
+    {result&&!result.correct&&<div style={{marginTop:6,marginBottom:2}}>
+      {disputeSent
+        ? <div style={{padding:'7px 10px',borderRadius:8,background:'#fef3c7',border:'1.5px solid #f59e0b',fontSize:11,color:'#92400e',textAlign:'center'}}>
+            ⏳ Anfrage gesendet - Wort pausiert bis Admin entscheidet
+          </div>
+        : <button onClick={submitDispute}
+            style={{width:'100%',padding:'8px',borderRadius:8,border:'1.5px dashed #f59e0b',background:'#fffbeb',color:'#92400e',cursor:'pointer',fontSize:12,touchAction:'manipulation'}}>
+            ❓ Meine Antwort war korrekt - Anfrage stellen
+          </button>
+      }
     </div>}
     {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>→ Weiter</button>}
   </div>;
@@ -2820,20 +2872,24 @@ function LeitersSpielGradeSettings({ settings, onSave }) {
 }
 
 // ── LeitersSpielAdminOverview - mit Spieler-Detail ───────────
-function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
+function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapters }) {
   var [runs,setRuns]=useState([]);
   var [allProg,setAllProg]=useState([]);
   var [loading,setLoading]=useState(true);
   var [selectedUser,setSelectedUser]=useState(null);
+  var [disputes,setDisputes]=useState([]);
+  var [lsTab,setLsTab]=useState('overview'); // 'overview'|'disputes'
 
   function reload(){
     setLoading(true);
     Promise.all([
       lsGetRuns(),
-      sbGet('ls_progress','select=id,player_id,run_id,data,updated_at&order=updated_at.desc')
+      sbGet('ls_progress','select=id,player_id,run_id,data,updated_at&order=updated_at.desc'),
+      sbGet('word_disputes','status=eq.pending&order=created_at.desc&select=id,player_id,player_name,run_id,word,clue,typed_answer,pot,chapter_id,created_at')
     ]).then(function(res){
       setRuns(Array.isArray(res[0])?res[0]:[]);
       setAllProg(Array.isArray(res[1])?res[1]:[]);
+      setDisputes(Array.isArray(res[2])?res[2]:[]);
       setLoading(false);
     });
   }
@@ -2916,14 +2972,150 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
     );
   }
 
+  // Dispute accept/reject handlers
+  function acceptDispute(d) {
+    // 1. Add typed_answer as valid alternative in chapter word data
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Find the chapter containing this word
+    var chaps = Array.isArray(chapters) ? chapters : [];
+    var targetChap = null;
+    var targetWordIdx = -1;
+    chaps.forEach(function(ch){
+      if(targetChap) return;
+      var ws = ch.words||[];
+      var wi = ws.findIndex(function(w){return w.word===d.word;});
+      if(wi>=0){ targetChap=ch; targetWordIdx=wi; }
+    });
+    if(targetChap && targetWordIdx>=0){
+      var newWords = (targetChap.words||[]).slice();
+      var oldClue = newWords[targetWordIdx].clue||'';
+      // Append typed_answer if not already in clue
+      if(oldClue.toLowerCase().indexOf(d.typed_answer.toLowerCase())<0){
+        newWords[targetWordIdx] = Object.assign({},newWords[targetWordIdx],{
+          clue: oldClue + '/' + d.typed_answer
+        });
+        sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+targetChap.id).then(function(){
+          if(setChapters) setChapters(function(prev){return prev.map(function(c){
+            return c.id===targetChap.id?Object.assign({},c,{words:newWords}):c;
+          });});
+        });
+      }
+    }
+    // 2. Move word up a pot in player's progress + remove disputeId
+    sbGet('ls_progress','player_id=eq.'+d.player_id+'&run_id=eq.'+d.run_id+'&select=id,data').then(function(rows){
+      if(!Array.isArray(rows)||!rows.length) return;
+      var row=rows[0];
+      var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+      var pots=data.pots||{};
+      var foundPot=null; var wordObj=null; var wordIdx=-1;
+      [1,2,3,4].forEach(function(pot){
+        if(foundPot) return;
+        var wi=(pots[pot]||[]).findIndex(function(w){return w.word===d.word;});
+        if(wi>=0){ foundPot=pot; wordObj=(pots[pot])[wi]; wordIdx=wi; }
+      });
+      if(foundPot&&wordObj){
+        pots[foundPot].splice(wordIdx,1);
+        var nextPot=Math.min(foundPot+1,5);
+        var cleaned=Object.assign({},wordObj); delete cleaned.disputeId;
+        cleaned.streak=0; cleaned.wrongStreak=0;
+        if(!pots[nextPot]) pots[nextPot]=[];
+        pots[nextPot].push(cleaned);
+        data.pots=pots;
+        sbPatch('ls_progress',{data:JSON.stringify(data)},'id=eq.'+row.id);
+      }
+    });
+    // 3. Mark dispute resolved
+    sbPatch('word_disputes',{status:'accepted',resolved_at:new Date().toISOString(),resolved_by:'admin'},'id=eq.'+d.id).then(function(){
+      setDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
+    });
+  }
+
+  function rejectDispute(d) {
+    // Move word down a pot + remove disputeId (as if wrong answer was processed)
+    sbGet('ls_progress','player_id=eq.'+d.player_id+'&run_id=eq.'+d.run_id+'&select=id,data').then(function(rows){
+      if(!Array.isArray(rows)||!rows.length) return;
+      var row=rows[0];
+      var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+      var pots=data.pots||{};
+      var foundPot=null; var wordObj=null; var wordIdx=-1;
+      [1,2,3,4].forEach(function(pot){
+        if(foundPot) return;
+        var wi=(pots[pot]||[]).findIndex(function(w){return w.word===d.word;});
+        if(wi>=0){ foundPot=pot; wordObj=(pots[pot])[wi]; wordIdx=wi; }
+      });
+      if(foundPot&&wordObj){
+        pots[foundPot].splice(wordIdx,1);
+        var cleaned=Object.assign({},wordObj); delete cleaned.disputeId;
+        // Move down if pot > 1
+        var downPot=foundPot>1?foundPot-1:1;
+        cleaned.streak=0; cleaned.wrongStreak=(cleaned.wrongStreak||0)+1;
+        if(!pots[downPot]) pots[downPot]=[];
+        pots[downPot].push(cleaned);
+        data.pots=pots;
+        sbPatch('ls_progress',{data:JSON.stringify(data)},'id=eq.'+row.id);
+      }
+    });
+    sbPatch('word_disputes',{status:'rejected',resolved_at:new Date().toISOString(),resolved_by:'admin'},'id=eq.'+d.id).then(function(){
+      setDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
+    });
+  }
+
   // Overview
   return (
     <div>
+      {/* Tab bar */}
+      <div style={{display:'flex',gap:6,marginBottom:10}}>
+        <button onClick={function(){setLsTab('overview');}} style={BtnStyle(lsTab==='overview'?T:G100,lsTab==='overview'?'white':G600,{flex:1,padding:'7px',fontSize:12})}>
+          📋 Läufe ({runs.length})
+        </button>
+        <button onClick={function(){setLsTab('disputes');reload();}} style={BtnStyle(lsTab==='disputes'?RE:G100,lsTab==='disputes'?'white':G600,{flex:1,padding:'7px',fontSize:12})}>
+          ❓ Anfragen {disputes.length>0&&<span style={{background:'white',color:RE,borderRadius:'50%',padding:'0 5px',fontWeight:'bold',fontSize:10,marginLeft:4}}>{disputes.length}</span>}
+        </button>
+        <button onClick={reload} style={{padding:'7px 10px',borderRadius:7,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600,fontSize:11}}>
+          🔄
+        </button>
+      </div>
+
+      {/* DISPUTES TAB */}
+      {lsTab==='disputes'&&<div>
+        {loading&&<div style={{textAlign:'center',color:G400,padding:16}}>Lade...</div>}
+        {!loading&&disputes.length===0&&<div style={{textAlign:'center',color:G400,padding:20,background:G50,borderRadius:10,fontSize:13}}>
+          ✅ Keine offenen Anfragen
+        </div>}
+        {!loading&&disputes.map(function(d){
+          return <div key={d.id} style={{marginBottom:10,border:'1.5px solid #fcd34d',borderRadius:12,overflow:'hidden',background:'#fffbeb'}}>
+            <div style={{padding:'10px 12px',borderBottom:'1px solid #fde68a'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{d.word}</span>
+                <span style={{fontSize:11,color:G400}}>=</span>
+                <span style={{fontSize:12,color:G600}}>{d.clue}</span>
+                <span style={{marginLeft:'auto',fontSize:10,color:G400}}>Topf {d.pot}</span>
+              </div>
+              <div style={{fontSize:12,color:G700,marginBottom:2}}>
+                <span style={{color:G400}}>Spieler: </span><strong>{d.player_name}</strong>
+                <span style={{color:G400,marginLeft:8}}>Antwort: </span>
+                <span style={{background:'#fee2e2',color:RE,padding:'1px 7px',borderRadius:5,fontWeight:'bold'}}>"{d.typed_answer}"</span>
+              </div>
+              <div style={{fontSize:10,color:G400}}>{new Date(d.created_at).toLocaleDateString('de-DE')}</div>
+            </div>
+            <div style={{padding:'8px 12px',display:'flex',gap:8}}>
+              <button onClick={function(){acceptDispute(d);}}
+                style={{flex:1,padding:'8px',borderRadius:8,background:GR,color:'white',border:'none',cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation'}}>
+                ✓ Akzeptieren - "{d.typed_answer}" als Alternative speichern
+              </button>
+              <button onClick={function(){rejectDispute(d);}}
+                style={{flex:1,padding:'8px',borderRadius:8,background:RE,color:'white',border:'none',cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation'}}>
+                ✗ Ablehnen - Wort runterstufen
+              </button>
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {/* OVERVIEW TAB */}
+      {lsTab==='overview'&&<div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
         <div style={{fontWeight:'bold',fontSize:14,color:G900}}>📋 Alle Läufe ({runs.length})</div>
-        <button onClick={reload} style={{fontSize:11,padding:'4px 10px',borderRadius:7,border:'1px solid '+G200,background:'white',cursor:'pointer',color:G600}}>
-          🔄 Aktualisieren
-        </button>
       </div>
       {runs.map(function(run){
         var prog=allProg.filter(function(p){return p.run_id===run.id;});
@@ -2958,6 +3150,7 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings }) {
           })}
         </div>;
       })}
+    </div>}
     </div>
   );
 }
@@ -3716,7 +3909,7 @@ Erlaubte Werte fur "type": "verb" (Verben mit "to"), "noun" (Substantive), "adje
             <LeitersSpielCreate player={player} chapters={chapters} isAdmin={true}
               onCreated={function(r){alert('Lauf "'+r.name+'" erstellt!');}}/>
           </div>
-          <div style={{marginTop:16}}><LeitersSpielAdminOverview allUsers={allUsers} gradeSettings={gradeSettings}/></div>
+          <div style={{marginTop:16}}><LeitersSpielAdminOverview allUsers={allUsers} gradeSettings={gradeSettings} chapters={chapters} setChapters={setChapters}/></div>
         </div>
       )}
 
