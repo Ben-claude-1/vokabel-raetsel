@@ -3211,7 +3211,7 @@ function RunEditor({ run, chapters, onClose, onSaved }) {
       var removeSet = new Set(toRemove.map(function(k){return k.split('|||')[1];}));
       function patchNext(idx, ok, fail){
         if(idx>=progRows.length){
-          setMsg('✅ Fertig! '+newWords.length+' Vokabeln im Lauf. '+ok+' Lernstände aktualisiert'+(fail?' ('+fail+' Fehler)':'');
+          setMsg('✅ Fertig! '+newWords.length+' Vokabeln im Lauf. '+ok+' Lernstände aktualisiert'+(fail?' ('+fail+' Fehler)':''));
           setSaving(false);
           if(onSaved) onSaved();
           return;
