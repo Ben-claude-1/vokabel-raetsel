@@ -5456,9 +5456,6 @@ function App() {
         if (b && (!c.words || c.words.length === 0)) return Object.assign({}, c, { words: b.words, sentences: b.sentences||[] });
         return c;
       });
-      // Add any BUILTIN not yet in DB
-      var dbIds = new Set(merged.map(function(c){ return c.id; }));
-      BUILTIN.forEach(function(b) { if (!dbIds.has(b.id)) merged.push(b); });
       setChapters(merged);
     });
   },[]);
