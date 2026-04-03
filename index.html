@@ -265,30 +265,36 @@ var SOLS = [
 // ── Quiz Utils ────────────────────────────────────────────────
 function shuffleArr(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
 
+// ── getWordType: uses stored .type field, falls back to heuristic ──────────
+function getWordType(w) {
+  // Use explicit type field if set
+  var t = (w.type||'').toLowerCase();
+  if(t==='verb') return 'verb';
+  if(t==='noun') return 'noun';
+  if(t==='adjective'||t==='adj') return 'adj';
+  if(t==='phrase') return 'phrase';
+  // Fallback heuristics
+  if((w.word||'').toLowerCase().startsWith('to ')) return 'verb';
+  var clue=(w.clue||'').toLowerCase();
+  if(clue.match(/(en|eln|ern)$/)&&!clue.match(/\s/)) return 'verb';
+  if(clue.match(/(lich|ig|isch|sam|haft|los|voll|bar|reich|arm|frei)$/)) return 'adj';
+  var word=(w.word||'').toLowerCase().replace(/^to /,'');
+  if(word.match(/(ful|less|ous|ive|ent|ant|al|ic|ble|tic|ary|ory)$/)) return 'adj';
+  var months=['january','february','march','april','may','june','july','august','september','october','november','december'];
+  if(months.indexOf(word)>=0) return 'month';
+  return 'noun';
+}
+
 function makeQuizRound(allWords, usedWords) {
   // Pick 3 words not yet used
   var pool = allWords.filter(function(w){ return !usedWords.has(w.word); });
   if (pool.length < 3) pool = allWords; // fallback
   var picked = shuffleArr(pool).slice(0, 3);
-  // Word type detection for matching distractors
-  function wType(w) {
-    var word = (w.word||'').toLowerCase().replace(/^to /, '');
-    var clue = (w.clue||'').toLowerCase();
-    // Verb: starts with "to " or German infinitive ends with "en"
-    if((w.word||'').toLowerCase().startsWith('to ')) return 'verb';
-    if(clue.match(/(en|eln|ern)$/) && !clue.match(/\s/)) return 'verb';
-    // Adjective: German clue ends in typical adj endings
-    if(clue.match(/(lich|ig|isch|sam|haft|los|voll|bar|reich|arm|frei)$/)) return 'adj';
-    if(word.match(/(ful|less|ous|ive|ent|ant|al|ic|ble|tic|ary|ory)$/)) return 'adj';
-    // Month = proper noun category
-    if(['january','february','march','april','may','june','july','august','september','october','november','december'].indexOf(word)>=0) return 'month';
-    return 'noun';
-  }
   return picked.map(function(correct) {
-    var cType = wType(correct);
-    // 1st priority: same type
-    var sameType = allWords.filter(function(w){ return w.word !== correct.word && wType(w)===cType; });
-    // 2nd priority: any word
+    var cType = getWordType(correct);
+    // Same word type distractors (strict: must have >= 3 same-type options)
+    var sameType = allWords.filter(function(w){ return w.word !== correct.word && getWordType(w)===cType; });
+    // Fallback: any word
     var anyOther = allWords.filter(function(w){ return w.word !== correct.word; });
     var pool = sameType.length >= 3 ? sameType : anyOther;
     var distractors = shuffleArr(pool).slice(0,3);
@@ -2321,7 +2327,7 @@ function CelebrationPopup({ newGrade, onClose }) {
 }
 
 // ── LeitersSpielSession - 5-Topf mit persistentem Speichern ──
-function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBack }) {
+function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allChapters, onBack }) {
   var ss=streakSettings||DEFAULT_STREAK;
   var [progress,setProgress]=useState(null);
   var [progressId,setProgressId]=useState(null);
@@ -2371,19 +2377,16 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, onBac
   useEffect(function(){
     if(!currentItem||currentItem.pot!==1||!progress) return;
     var correct=currentItem.word;
-    // Try to find similar-type words as distractors
-    var allWords=words.filter(function(w){return w.word!==correct.word;});
-    // Heuristic: group by word ending / type
-    function getType(w){
-      var word=w.word.toLowerCase();
-      if(['ing','ed','ate','ise','ize','ify'].some(function(s){return word.endsWith(s);})) return 'verb';
-      if(['ful','less','ous','ive','ent','ant','al','tic'].some(function(s){return word.endsWith(s);})) return 'adj';
-      if(['tion','ment','ness','ity','ance','ence','er','or','ist'].some(function(s){return word.endsWith(s);})) return 'noun';
-      return 'other';
+    // Use all chapters words as distractor pool (wider selection)
+    var allVocab=[];
+    if(allChapters&&allChapters.length){
+      allChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){if(w.word!==correct.word)allVocab.push(w);});});
     }
-    var cType=getType(correct);
-    var similar=allWords.filter(function(w){return getType(w)===cType;});
-    var pool=similar.length>=3?similar:allWords;
+    if(!allVocab.length) allVocab=words.filter(function(w){return w.word!==correct.word;});
+    // Use getWordType for strict type matching
+    var cType=getWordType(correct);
+    var sameType=allVocab.filter(function(w){return getWordType(w)===cType;});
+    var pool=sameType.length>=3?sameType:allVocab;
     var distractors=shuffleArr(pool).slice(0,3);
     setQuizAnswers(shuffleArr([correct].concat(distractors)));
   },[currentItem]);
@@ -4434,7 +4437,9 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
       var plan2=[];
       topics.forEach(function(ch){
         var seen={};
-        ch.words.forEach(function(w){ var k=(w.word||'').toLowerCase().trim(); if(!k)return; if(!seen[k])seen[k]=[]; seen[k].push(w); });
+        // Normalize key: strip "to " prefix so "collect" and "to collect" are the same
+        function dedupKey(word){ return (word||'').toLowerCase().trim().replace(/^to\s+/,''); }
+        ch.words.forEach(function(w){ var k=dedupKey(w.word); if(!k)return; if(!seen[k])seen[k]=[]; seen[k].push(w); });
         var dupGroups=[];
         Object.keys(seen).forEach(function(key){
           var group=seen[key]; if(group.length<2) return;
@@ -4445,6 +4450,8 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
             if(w.cats&&w.cats.length>0) score+=4;
             if(w.important) score+=2;
             if(wpMap[(w.word||'').toLowerCase()]) score+=1;
+            // Prefer the version with "to " prefix for verbs
+            if((w.word||'').toLowerCase().startsWith('to ')) score+=3;
             if(score>bestScore){bestScore=score;keep=w;}
           });
           var merged=Object.assign({},keep);
@@ -4452,6 +4459,11 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
           group.forEach(function(w){(w.cats||[]).forEach(function(c){allCats[c]=1;});});
           merged.cats=Object.keys(allCats);
           merged.important=group.some(function(w){return w.important;});
+          // If any variant has "to " prefix, use it
+          var withTo=group.filter(function(w){return (w.word||'').toLowerCase().startsWith('to ');});
+          if(withTo.length>0&&!(merged.word||'').toLowerCase().startsWith('to ')){
+            merged=Object.assign({},merged,{word:withTo[0].word});
+          }
           dupGroups.push({key:key,group:group,keep:keep,merged:merged,remove:group.filter(function(w){return w!==keep;})});
         });
         if(dupGroups.length>0) plan2.push({chapterId:ch.id,chapterTitle:ch.title,dupGroups:dupGroups,allWords:ch.words,prog:prog});
@@ -4484,8 +4496,9 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
       sbGet('chapters','id=eq.'+ch.chapterId+'&select=words').then(function(fresh){
         var freshWords=[]; if(fresh&&fresh[0]){var w=fresh[0].words;if(typeof w==='string'){try{w=JSON.parse(w);}catch(e){w=[];}}freshWords=Array.isArray(w)?w:[];}else{freshWords=ch.allWords;}
         var keepMap={}; ch.dupGroups.forEach(function(g){keepMap[g.key]=g.merged;});
+        function execDedupKey(word){ return (word||'').toLowerCase().trim().replace(/^to /,''); }
         var seenKeys={}; var newWords=[];
-        freshWords.forEach(function(w){ var k=(w.word||'').toLowerCase().trim(); if(!k)return; if(keepMap[k]){if(!seenKeys[k]){seenKeys[k]=true;newWords.push(keepMap[k]);}}else{newWords.push(w);}});
+        freshWords.forEach(function(w){ var k=execDedupKey(w.word); if(!k)return; if(keepMap[k]){if(!seenKeys[k]){seenKeys[k]=true;newWords.push(keepMap[k]);}}else{newWords.push(w);}});
         newWords.sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
         sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+ch.chapterId).then(function(){
           setChapters(function(prev){return prev.map(function(c){return c.id===ch.chapterId?Object.assign({},c,{words:newWords}):c;});});
@@ -5848,7 +5861,7 @@ function App() {
     );
     if(lsRun) return (
       <Shell showBack={true} onBack={function(){setLsRun(null);}} title={'🎯 '+lsRun.name} player={player}>
-        <LeitersSpielSession run={lsRun} player={player} gradeSettings={gradeSettings} streakSettings={streakSettings} onBack={function(){setLsRun(null);}}/>
+        <LeitersSpielSession run={lsRun} player={player} gradeSettings={gradeSettings} streakSettings={streakSettings} allChapters={chapters} onBack={function(){setLsRun(null);}}/>
       </Shell>
     );
     return (
