@@ -2057,7 +2057,7 @@ function BrowseChapter({ ch }) {
               <button onClick={function(){setShowSent(true);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?ch.color:G200),background:showSent?ch.color+'15':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?ch.color:G600}}>💬 Sätze ({sentCount})</button>
             </div>
           )}
-          {!showSent&&ch.words.map(function(w,i){
+          {!showSent&&ch.words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}).map(function(w,i){
             return(
               <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}>
                 <span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span>
@@ -3827,10 +3827,16 @@ function naturalSort(a, b) {
 
 
 // ── saveChapterWords: patch words array back to Supabase ──
+function sortWords(words) {
+  return words.slice().sort(function(a,b){
+    return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());
+  });
+}
 function saveChapterWords(chapterId, newWords, setChapters) {
-  sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+chapterId).then(function(){
+  var sorted = sortWords(newWords);
+  sbPatch('chapters',{words:JSON.stringify(sorted)},'id=eq.'+chapterId).then(function(){
     setChapters(function(prev){return prev.map(function(c){
-      return c.id===chapterId?Object.assign({},c,{words:newWords}):c;
+      return c.id===chapterId?Object.assign({},c,{words:sorted}):c;
     });});
   });
 }
@@ -3856,6 +3862,9 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   var [targetKapitel, setTargetKapitel] = useState(''); // parent Kapitel for new topic
   var fileRef = useRef();
   var catLogRef = useRef(null);
+  var [moveSrcId, setMoveSrcId] = useState(null);
+  var [moveSelected, setMoveSelected] = useState({});
+  var [moveTgtId, setMoveTgtId] = useState('');
   var scoreLogRef = useRef(null);
   var [catJobLog, setCatJobLog] = useState([]);
   var [catJobRunning, setCatJobRunning] = useState(false);
@@ -4010,6 +4019,23 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
       }).catch(function(e){appendScoreLog('Fehler '+p.name+': '+e.message);setTimeout(function(){saveNext(idx+1);},120);});
     }
     saveNext(0);
+  }
+
+  function executeMove() {
+    if(!moveSrcId||!moveTgtId||moveSrcId===moveTgtId) return;
+    var src=chapters.find(function(c){return c.id===moveSrcId;});
+    var tgt=chapters.find(function(c){return c.id===moveTgtId;});
+    if(!src||!tgt) return;
+    var selected=moveSelected;
+    var moving=src.words.filter(function(w){return !!selected[w.word];});
+    if(!moving.length){alert('Keine Vokabeln ausgewaehlt.');return;}
+    var newSrc=src.words.filter(function(w){return !selected[w.word];});
+    var newTgt=tgt.words.concat(moving);
+    saveChapterWords(moveSrcId,newSrc,setChapters);
+    saveChapterWords(moveTgtId,newTgt,setChapters);
+    setMoveSrcId(null);
+    setMoveSelected({});
+    setMoveTgtId('');
   }
 
   function uploadImg(file) {
@@ -4607,25 +4633,62 @@ FORMAT - NUR JSON, kein Markdown:
                         </div>
                         <button onClick={function(e){e.stopPropagation();var n=prompt('Neuer Name:',t.title);if(!n||!n.trim())return;sbPatch('chapters',{title:n.trim()},'id=eq.'+t.id).then(function(){setChapters(function(prev){return prev.map(function(c){return c.id===t.id?Object.assign({},c,{title:n.trim()}):c;});});});}}
                           style={BtnStyle(G100,G600,{padding:'2px 6px',fontSize:10})}>✏️</button>
+                        <button onClick={function(e){e.stopPropagation();if(moveSrcId===t.id){setMoveSrcId(null);setMoveSelected({});setMoveTgtId('');}else{setMoveSrcId(t.id);setMoveSelected({});setMoveTgtId('');setOpenTopicId(t.id);}}}
+                          style={BtnStyle(moveSrcId===t.id?AM:G100,moveSrcId===t.id?'white':G600,{padding:'2px 6px',fontSize:10,touchAction:'manipulation'})}>
+                          {moveSrcId===t.id?'✕':'🔀'}
+                        </button>
                         {!t.is_builtin&&<button onClick={function(e){e.stopPropagation();delCh(t);}} style={BtnStyle('#fee2e2',RE,{padding:'2px 6px',fontSize:10})}>🗑</button>}
                       </div>
+                      {/* Move panel */}
+                      {moveSrcId===t.id&&(function(){
+                        var otherTopics=chapters.filter(function(c){return !!c.parent_id&&c.id!==t.id;}).slice().sort(naturalSort);
+                        var selCount=Object.keys(moveSelected).filter(function(k){return !!moveSelected[k];}).length;
+                        return <div style={{padding:'8px 12px',background:'#fffbeb',borderTop:'1px solid #fde68a'}}>
+                          <div style={{fontSize:11,color:'#92400e',fontWeight:'bold',marginBottom:6}}>
+                            🔀 Verschieben - {selCount} Vokabel{selCount!==1?'n':''} ausgewählt
+                          </div>
+                          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                            <select value={moveTgtId} onChange={function(e){setMoveTgtId(e.target.value);}}
+                              style={{flex:1,padding:'6px 8px',fontSize:12,border:'1.5px solid '+AM,borderRadius:7,outline:'none',background:'white'}}>
+                              <option value=''>-- Ziel-Themenbereich --</option>
+                              {otherTopics.map(function(ot){
+                                var par=chapters.find(function(p){return p.id===ot.parent_id;});
+                                return <option key={ot.id} value={ot.id}>{par?par.title+' > ':''}{ot.title} ({ot.words.length}V)</option>;
+                              })}
+                            </select>
+                            <button onClick={executeMove} disabled={selCount===0||!moveTgtId}
+                              style={BtnStyle(selCount>0&&moveTgtId?T:G200,selCount>0&&moveTgtId?'white':G400,{padding:'7px 14px',fontSize:12,opacity:selCount===0||!moveTgtId?0.5:1,touchAction:'manipulation'})}>
+                              Verschieben →
+                            </button>
+                            <button onClick={function(){
+                              var all={};
+                              t.words.forEach(function(w){all[w.word]=true;});
+                              setMoveSelected(all);
+                            }} style={BtnStyle(G100,G600,{padding:'5px 10px',fontSize:11,touchAction:'manipulation'})}>
+                              Alle
+                            </button>
+                            <button onClick={function(){setMoveSelected({});}} style={BtnStyle(G100,G600,{padding:'5px 10px',fontSize:11,touchAction:'manipulation'})}>
+                              Keine
+                            </button>
+                          </div>
+                        </div>;
+                      })()}
                       {/* Expanded editable word list */}
                       {isOpen&&(function(){
                         var allCatsForAdmin = allCategories || [];
-                        function patchW(wi,field,val){
-                          var nw=t.words.slice();
-                          nw[wi]=Object.assign({},nw[wi]);
-                          nw[wi][field]=val;
+                        var isMoveMode = moveSrcId===t.id;
+                        var sortedWords = t.words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
+                        function patchW(w,field,val){
+                          var nw=t.words.map(function(x){return x.word===w.word?Object.assign({},x,{[field]:val}):x;});
                           saveChapterWords(t.id,nw,setChapters);
                         }
-                        function toggleImp(wi){
-                          var nw=t.words.slice();
-                          nw[wi]=Object.assign({},nw[wi],{important:!nw[wi].important});
+                        function toggleImp(w){
+                          var nw=t.words.map(function(x){return x.word===w.word?Object.assign({},x,{important:!x.important}):x;});
                           saveChapterWords(t.id,nw,setChapters);
                         }
-                        function deleteW(wi){
-                          if(!confirm('Vokabel "'+t.words[wi].word+'" löschen?')) return;
-                          var nw=t.words.filter(function(_,i){return i!==wi;});
+                        function deleteW(w){
+                          if(!confirm('Vokabel "'+w.word+'" löschen?')) return;
+                          var nw=t.words.filter(function(x){return x.word!==w.word;});
                           saveChapterWords(t.id,nw,setChapters);
                         }
                         function addWord(){
@@ -4635,31 +4698,38 @@ FORMAT - NUR JSON, kein Markdown:
                         return <div style={{padding:'4px 0 10px 0',background:'#f9fafb',borderTop:'1px solid '+G100}}>
                           {/* Column headers */}
                           <div style={{display:'flex',gap:4,padding:'3px 8px 3px 24px',fontSize:9,color:G400,fontWeight:'bold',textTransform:'uppercase',letterSpacing:1}}>
+                            {isMoveMode&&<div style={{width:22}}></div>}
                             <div style={{width:20}}></div>
                             <div style={{flex:2}}>Englisch</div>
                             <div style={{flex:3}}>Deutsch (/ für Alternativen)</div>
                             <div style={{width:70}}>Typ</div>
                             <div style={{width:22}}></div>
                           </div>
-                          {t.words.map(function(w,wi){
+                          {sortedWords.map(function(w){
                             var wType=w.type||'noun';
                             var typeBg={'verb':'#dbeafe','noun':'#f3e8ff','adjective':'#d1fae5','phrase':'#fff7ed','other':'#f1f5f9'}[wType]||G100;
                             var typeColor={'verb':'#1e40af','noun':'#7c3aed','adjective':'#065f46','phrase':'#c2410c','other':'#475569'}[wType]||G400;
-                            return <div key={wi} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px 3px 24px',borderBottom:'1px solid '+G50}}>
+                            var isSelected=isMoveMode&&!!moveSelected[w.word];
+                            return <div key={w.word} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px 3px 24px',borderBottom:'1px solid '+G50,background:isSelected?'#fef9c3':'transparent'}}>
+                              {/* Move checkbox */}
+                              {isMoveMode&&<div onClick={function(){setMoveSelected(function(prev){var n=Object.assign({},prev);n[w.word]=!n[w.word];return n;});}}
+                                style={{width:18,height:18,borderRadius:4,border:'2px solid '+(isSelected?AM:G200),background:isSelected?AM:'white',cursor:'pointer',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',touchAction:'manipulation'}}>
+                                {isSelected&&<span style={{color:'white',fontSize:11,fontWeight:'bold'}}>✓</span>}
+                              </div>}
                               {/* Important toggle */}
-                              <button onClick={function(){toggleImp(wi);}} title="Wichtigkeit umschalten"
+                              <button onClick={function(){toggleImp(w);}} title="Wichtigkeit umschalten"
                                 style={{width:20,height:20,padding:0,border:'none',background:'none',cursor:'pointer',fontSize:13,flexShrink:0}}>
                                 {w.important?'⭐':'☆'}
                               </button>
                               {/* English word */}
-                              <input value={w.word||''} onChange={function(e){patchW(wi,'word',e.target.value);}}
+                              <input value={w.word||''} onChange={function(e){patchW(w,'word',e.target.value);}}
                                 style={{flex:2,padding:'2px 5px',fontSize:12,border:'1px solid '+G200,borderRadius:4,outline:'none',fontWeight:'bold',color:G900}}/>
                               {/* German / alternatives */}
-                              <input value={w.clue||''} onChange={function(e){patchW(wi,'clue',e.target.value);}}
+                              <input value={w.clue||''} onChange={function(e){patchW(w,'clue',e.target.value);}}
                                 placeholder="Übersetzung / Alternative"
                                 style={{flex:3,padding:'2px 5px',fontSize:12,border:'1px solid '+G200,borderRadius:4,outline:'none',color:G600}}/>
                               {/* Type selector */}
-                              <select value={wType} onChange={function(e){patchW(wi,'type',e.target.value);}}
+                              <select value={wType} onChange={function(e){patchW(w,'type',e.target.value);}}
                                 style={{width:70,fontSize:10,padding:'2px 3px',border:'1px solid '+G200,borderRadius:4,background:typeBg,color:typeColor}}>
                                 <option value="verb">Verb</option>
                                 <option value="noun">Subst.</option>
@@ -4668,25 +4738,25 @@ FORMAT - NUR JSON, kein Markdown:
                                 <option value="other">Sonst.</option>
                               </select>
                               {/* Categories */}
-                              <span style={{flex:2,minWidth:80}}>
+                              {!isMoveMode&&<span style={{flex:2,minWidth:80}}>
                                 <CategoryPicker
                                   wordCats={w.cats||[]}
-                                  onChange={function(newCats){patchW(wi,'cats',newCats);}}
+                                  onChange={function(newCats){patchW(w,'cats',newCats);}}
                                   allCategories={allCatsForAdmin}
                                 />
-                              </span>
+                              </span>}
                               {/* Delete */}
-                              <button onClick={function(){deleteW(wi);}} title="Löschen"
-                                style={{width:22,height:22,padding:0,border:'none',background:'none',cursor:'pointer',color:RE,fontSize:14,flexShrink:0}}>✕</button>
+                              {!isMoveMode&&<button onClick={function(){deleteW(w);}} title="Löschen"
+                                style={{width:22,height:22,padding:0,border:'none',background:'none',cursor:'pointer',color:RE,fontSize:14,flexShrink:0}}>✕</button>}
                             </div>;
                           })}
                           {/* Add new word */}
-                          <div style={{padding:'6px 8px 2px 44px'}}>
+                          {!isMoveMode&&<div style={{padding:'6px 8px 2px 44px'}}>
                             <button onClick={addWord}
                               style={{fontSize:11,padding:'4px 10px',borderRadius:6,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',touchAction:'manipulation'}}>
                               + Neue Vokabel
                             </button>
-                          </div>
+                          </div>}
                           {/* Sentences */}
                           {(t.sentences||[]).filter(function(s){return s.important;}).length>0&&<div style={{margin:'6px 24px 0',borderTop:'1px solid '+G200,paddingTop:4}}>
                             <div style={{fontSize:10,color:G400,marginBottom:3}}>Verknüpfte Sätze:</div>
