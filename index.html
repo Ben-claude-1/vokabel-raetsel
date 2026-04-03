@@ -3109,6 +3109,281 @@ function LeitersSpielGradeSettings({ settings, onSave }) {
   </div>;
 }
 
+// ── RunEditor - Lauf bearbeiten (Vokabeln hinzufügen/entfernen) ──
+function RunEditor({ run, chapters, onClose, onSaved }) {
+  var [runName, setRunName] = useState(run.name||'');
+  var [selectedKeys, setSelectedKeys] = useState(null); // null = loading
+  var [progRows, setProgRows] = useState([]);
+  var [saving, setSaving] = useState(false);
+  var [msg, setMsg] = useState('');
+  var [expandedKap, setExpandedKap] = useState({});
+  var [expandedTopic, setExpandedTopic] = useState({});
+  var [onlyImportant, setOnlyImportant] = useState(true);
+  var [filterText, setFilterText] = useState('');
+
+  // Load current run words + all progress rows for this run
+  useEffect(function(){
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var runWords = [];
+    try { runWords = JSON.parse(run.words||'[]'); } catch(e) {}
+    var keys = new Set(runWords.map(function(w){ return (w.chapterId||'')+'|||'+(w.word||''); }));
+    setSelectedKeys(keys);
+    if(UUID.test(run.id)){
+      sbGet('ls_progress','run_id=eq.'+run.id+'&select=id,player_id,data').then(function(rows){
+        setProgRows(Array.isArray(rows)?rows:[]);
+      });
+    }
+  },[]);
+
+  if(selectedKeys===null) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
+
+  var topicChs = chapters.filter(function(c){return !!c.parent_id;});
+  var topLevel  = chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+
+  // Compute stats
+  var originalKeys = new Set();
+  try { JSON.parse(run.words||'[]').forEach(function(w){ originalKeys.add((w.chapterId||'')+'|||'+(w.word||'')); }); } catch(e) {}
+  var toAdd    = [];
+  var toRemove = [];
+  selectedKeys.forEach(function(k){ if(!originalKeys.has(k)) toAdd.push(k); });
+  originalKeys.forEach(function(k){ if(!selectedKeys.has(k)) toRemove.push(k); });
+
+  function toggle(chId, w) {
+    var k = chId+'|||'+w.word;
+    setSelectedKeys(function(prev){
+      var next = new Set(prev);
+      if(next.has(k)) next.delete(k); else next.add(k);
+      return next;
+    });
+  }
+  function selectAll(chId, words) {
+    setSelectedKeys(function(prev){
+      var next = new Set(prev);
+      words.forEach(function(w){ next.add(chId+'|||'+w.word); });
+      return next;
+    });
+  }
+  function deselectAll(chId, words) {
+    setSelectedKeys(function(prev){
+      var next = new Set(prev);
+      words.forEach(function(w){ next.delete(chId+'|||'+w.word); });
+      return next;
+    });
+  }
+  function selectTopic(topicId, important) {
+    var ch = chapters.find(function(c){return c.id===topicId;});
+    if(!ch) return;
+    var words = important ? ch.words.filter(function(w){return w.important;}) : ch.words;
+    selectAll(topicId, words);
+  }
+  function selectKapitel(kapId, important) {
+    var topics = topicChs.filter(function(c){return c.parent_id===kapId;});
+    topics.forEach(function(t){
+      var words = important ? t.words.filter(function(w){return w.important;}) : t.words;
+      selectAll(t.id, words);
+    });
+  }
+
+  function doSave() {
+    setSaving(true); setMsg('Speichere Lauf…');
+    // Build new words array from selectedKeys
+    var newWords = [];
+    selectedKeys.forEach(function(k){
+      var parts = k.split('|||');
+      var chId = parts[0]; var wordStr = parts[1];
+      var ch = chapters.find(function(c){return c.id===chId;});
+      if(!ch) return;
+      var w = ch.words.find(function(x){return x.word===wordStr;});
+      if(!w) return;
+      newWords.push({word:w.word, clue:w.clue, chapterId:chId, chapTitle:ch.title, important:w.important||false});
+    });
+    newWords.sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
+
+    // Patch run
+    sbPatch('ls_runs',{
+      name: runName.trim()||run.name,
+      words: JSON.stringify(newWords),
+      word_count: newWords.length
+    },'id=eq.'+run.id).then(function(){
+      setMsg('Lauf gespeichert. Aktualisiere '+progRows.length+' Lernstände…');
+      // For each progress row: add new words to pot1, remove deleted words
+      var addSet = new Set(toAdd.map(function(k){return k.split('|||')[1];}));
+      var removeSet = new Set(toRemove.map(function(k){return k.split('|||')[1];}));
+      function patchNext(idx, ok, fail){
+        if(idx>=progRows.length){
+          setMsg('✅ Fertig! '+newWords.length+' Vokabeln im Lauf. '+ok+' Lernstände aktualisiert'+(fail?' ('+fail+' Fehler)'):'');
+          setSaving(false);
+          if(onSaved) onSaved();
+          return;
+        }
+        var row=progRows[idx];
+        var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+        var pots=data.pots||{1:[],2:[],3:[],4:[],5:[]};
+        if(!pots[1])pots[1]=[]; if(!pots[2])pots[2]=[]; if(!pots[3])pots[3]=[]; if(!pots[4])pots[4]=[]; if(!pots[5])pots[5]=[];
+        var changed = false;
+        // Remove deleted words from all pots
+        if(removeSet.size>0){
+          [1,2,3,4,5].forEach(function(pot){
+            var before=pots[pot].length;
+            pots[pot]=pots[pot].filter(function(w){return !removeSet.has(w.word);});
+            if(pots[pot].length!==before) changed=true;
+          });
+        }
+        // Add new words to pot 1 (only if not already in any pot)
+        if(addSet.size>0){
+          var inPots=new Set();
+          [1,2,3,4,5].forEach(function(pot){pots[pot].forEach(function(w){inPots.add(w.word);});});
+          newWords.filter(function(w){return addSet.has(w.word)&&!inPots.has(w.word);}).forEach(function(w){
+            pots[1].push({word:w.word,clue:w.clue,chapterId:w.chapterId||'',streak:0,wrongStreak:0});
+            changed=true;
+          });
+        }
+        if(!changed){patchNext(idx+1,ok,fail);return;}
+        data.pots=pots;
+        sbPatch('ls_progress',{data:JSON.stringify(data),updated_at:new Date().toISOString()},'id=eq.'+row.id)
+          .then(function(){setTimeout(function(){patchNext(idx+1,ok+1,fail);},80);})
+          .catch(function(){setTimeout(function(){patchNext(idx+1,ok,fail+1);},80);});
+      }
+      patchNext(0,0,0);
+    }).catch(function(e){setMsg('Fehler: '+e.message);setSaving(false);});
+  }
+
+  return (
+    <div>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+        <button onClick={onClose} style={BtnStyle(G100,G600,{fontSize:12})}>← Zurück</button>
+        <span style={{fontWeight:'bold',fontSize:15,color:G900,flex:1}}>✏️ Lauf bearbeiten</span>
+      </div>
+
+      {/* Run name */}
+      <div style={{marginBottom:12}}>
+        <input value={runName} onChange={function(e){setRunName(e.target.value);}}
+          style={{width:'100%',padding:'9px 12px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
+      </div>
+
+      {/* Stats bar */}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+        <span style={{padding:'4px 10px',background:TL,borderRadius:8,fontSize:12,fontWeight:'bold',color:T}}>
+          {selectedKeys.size} ausgewählt
+        </span>
+        {toAdd.length>0&&<span style={{padding:'4px 10px',background:'#d1fae5',borderRadius:8,fontSize:12,fontWeight:'bold',color:'#065f46'}}>
+          +{toAdd.length} neu
+        </span>}
+        {toRemove.length>0&&<span style={{padding:'4px 10px',background:'#fee2e2',borderRadius:8,fontSize:12,fontWeight:'bold',color:RE}}>
+          -{toRemove.length} entfernt
+        </span>}
+        <span style={{padding:'4px 10px',background:G100,borderRadius:8,fontSize:11,color:G600}}>
+          {progRows.length} Lernstände
+        </span>
+      </div>
+
+      {/* Filter options */}
+      <div style={{display:'flex',gap:8,marginBottom:10,alignItems:'center',flexWrap:'wrap'}}>
+        <input value={filterText} onChange={function(e){setFilterText(e.target.value);}}
+          placeholder="Vokabel suchen…"
+          style={{flex:1,minWidth:120,padding:'6px 10px',fontSize:13,border:'1px solid '+G200,borderRadius:7,outline:'none'}}/>
+        <div onClick={function(){setOnlyImportant(!onlyImportant);}}
+          style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:12,color:G600,userSelect:'none'}}>
+          <div style={{width:18,height:18,borderRadius:4,border:'2px solid '+(onlyImportant?T:G200),background:onlyImportant?T:'white',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            {onlyImportant&&<span style={{color:'white',fontSize:11}}>✓</span>}
+          </div>
+          Nur ⭐
+        </div>
+      </div>
+
+      {/* Kapitel tree */}
+      <div style={{maxHeight:440,overflowY:'auto',border:'1px solid '+G200,borderRadius:10,marginBottom:12}}>
+        {topLevel.map(function(kap){
+          var kapTopics = topicChs.filter(function(c){return c.parent_id===kap.id;});
+          var kapOpen = !!expandedKap[kap.id];
+          var kapTotal = kapTopics.reduce(function(s,t){return s+(onlyImportant?t.words.filter(function(w){return w.important;}).length:t.words.length);},0);
+          var kapSel = kapTopics.reduce(function(s,t){
+            var ws=onlyImportant?t.words.filter(function(w){return w.important;}):t.words;
+            return s+ws.filter(function(w){return selectedKeys.has(t.id+'|||'+w.word);}).length;
+          },0);
+          return <div key={kap.id}>
+            {/* Kapitel header */}
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:G50,borderBottom:'1px solid '+G200,cursor:'pointer'}}
+              onClick={function(){setExpandedKap(function(p){var n=Object.assign({},p);n[kap.id]=!n[kap.id];return n;});}}>
+              <span style={{fontSize:16}}>{kap.icon}</span>
+              <span style={{fontWeight:'bold',fontSize:13,color:kap.color||T,flex:1}}>{kap.title}</span>
+              <span style={{fontSize:11,color:G400}}>{kapSel}/{kapTotal}</span>
+              <button onClick={function(e){e.stopPropagation();selectKapitel(kap.id,onlyImportant);}}
+                style={{fontSize:10,padding:'2px 7px',borderRadius:5,border:'1px solid '+T,background:TL,color:T,cursor:'pointer',touchAction:'manipulation'}}>
+                Alle
+              </button>
+              <span style={{color:G400,fontSize:11}}>{kapOpen?'▲':'▼'}</span>
+            </div>
+            {/* Topics */}
+            {kapOpen&&kapTopics.map(function(t){
+              var tOpen=!!expandedTopic[t.id];
+              var tWords=onlyImportant?t.words.filter(function(w){return w.important;}):t.words;
+              var tFiltered=filterText.trim()?tWords.filter(function(w){return (w.word+''+w.clue).toLowerCase().includes(filterText.toLowerCase());}):tWords;
+              var tSel=tWords.filter(function(w){return selectedKeys.has(t.id+'|||'+w.word);}).length;
+              return <div key={t.id} style={{borderBottom:'1px solid '+G100}}>
+                {/* Topic header */}
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px 7px 24px',cursor:'pointer',background:tOpen?TL:'white'}}
+                  onClick={function(){setExpandedTopic(function(p){var n=Object.assign({},p);n[t.id]=!n[t.id];return n;});}}>
+                  <span style={{fontSize:14}}>{t.icon}</span>
+                  <span style={{fontSize:12,fontWeight:'bold',color:t.color||T,flex:1}}>{t.title}</span>
+                  <span style={{fontSize:11,color:G400}}>{tSel}/{tWords.length}</span>
+                  <button onClick={function(e){e.stopPropagation();selectTopic(t.id,onlyImportant);}}
+                    style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+T,background:TL,color:T,cursor:'pointer',touchAction:'manipulation'}}>
+                    Alle
+                  </button>
+                  <button onClick={function(e){e.stopPropagation();deselectAll(t.id,tWords);}}
+                    style={{fontSize:10,padding:'2px 6px',borderRadius:5,border:'1px solid '+G200,background:G50,color:G600,cursor:'pointer',touchAction:'manipulation'}}>
+                    Keine
+                  </button>
+                  <span style={{color:G400,fontSize:10}}>{tOpen?'▲':'▼'}</span>
+                </div>
+                {/* Words */}
+                {tOpen&&tFiltered.map(function(w){
+                  var k=t.id+'|||'+w.word;
+                  var sel=selectedKeys.has(k);
+                  var isNew=sel&&!originalKeys.has(k);
+                  var isRemoved=!sel&&originalKeys.has(k);
+                  return <div key={w.word} onClick={function(){toggle(t.id,w);}}
+                    style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px 5px 40px',borderBottom:'1px solid '+G50,cursor:'pointer',background:isNew?'#f0fdf4':isRemoved?'#fef2f2':'white'}}>
+                    <div style={{width:17,height:17,borderRadius:4,border:'2px solid '+(sel?T:G200),background:sel?T:'white',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {sel&&<span style={{color:'white',fontSize:11,fontWeight:'bold'}}>✓</span>}
+                    </div>
+                    <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',flex:1,color:isRemoved?RE:G900}}>
+                      {w.important?'⭐ ':''}{w.word}
+                    </span>
+                    <span style={{fontSize:11,color:G400}}>{w.clue}</span>
+                    {isNew&&<span style={{fontSize:9,color:'#065f46',background:'#d1fae5',padding:'1px 5px',borderRadius:5,fontWeight:'bold'}}>NEU</span>}
+                    {isRemoved&&<span style={{fontSize:9,color:RE,background:'#fee2e2',padding:'1px 5px',borderRadius:5,fontWeight:'bold'}}>ENTFERNT</span>}
+                  </div>;
+                })}
+              </div>;
+            })}
+          </div>;
+        })}
+      </div>
+
+      {/* Info about what will happen */}
+      {(toAdd.length>0||toRemove.length>0)&&<div style={{padding:'8px 12px',background:'#fef9c3',borderRadius:8,border:'1px solid #fde68a',marginBottom:10,fontSize:11,color:'#92400e'}}>
+        {toAdd.length>0&&<div>✅ {toAdd.length} neue Vokabeln → werden in Topf 1 aller Lernstände eingefügt</div>}
+        {toRemove.length>0&&<div>🗑 {toRemove.length} Vokabeln entfernt → werden aus allen Töpfen aller Lernstände gelöscht</div>}
+        <div style={{marginTop:3}}>Bestehende Vokabeln bleiben in ihrem aktuellen Topf.</div>
+      </div>}
+
+      {msg&&<div style={{padding:'7px 12px',background:msg.startsWith('✅')?'#d1fae5':msg.startsWith('Fehler')?'#fee2e2':G50,borderRadius:8,fontSize:12,color:msg.startsWith('✅')?'#065f46':msg.startsWith('Fehler')?RE:G600,marginBottom:10}}>{msg}</div>}
+
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={doSave} disabled={saving||(toAdd.length===0&&toRemove.length===0&&runName.trim()===run.name)}
+          style={BtnStyle(T,'white',{flex:2,padding:'11px',fontSize:14,opacity:(saving||(toAdd.length===0&&toRemove.length===0&&runName.trim()===run.name))?0.5:1,touchAction:'manipulation'})}>
+          {saving?'Speichere…':'💾 Speichern'}
+        </button>
+        <button onClick={onClose} style={BtnStyle(G100,G600,{flex:1,padding:'11px',fontSize:13,touchAction:'manipulation'})}>
+          Abbrechen
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── LeitersSpielAdminOverview - mit Spieler-Detail ───────────
 function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapters }) {
   var [runs,setRuns]=useState([]);
@@ -3117,6 +3392,7 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapt
   var [selectedUser,setSelectedUser]=useState(null);
   var [disputes,setDisputes]=useState([]);
   var [lsTab,setLsTab]=useState('overview'); // 'overview'|'disputes'
+  var [editRun,setEditRun]=useState(null);
 
   function reload(){
     setLoading(true);
@@ -3139,6 +3415,9 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapt
   },[]);
 
   if(loading) return <div style={{textAlign:'center',padding:20,color:G400}}>Lade…</div>;
+
+  // Edit run view
+  if(editRun) return <RunEditor run={editRun} chapters={chapters} onClose={function(){setEditRun(null);}} onSaved={function(){setEditRun(null);reload();}}/>;
 
   // Detail view
   if(selectedUser){
@@ -3358,9 +3637,15 @@ function LeitersSpielAdminOverview({ allUsers, gradeSettings, chapters, setChapt
       {runs.map(function(run){
         var prog=allProg.filter(function(p){return p.run_id===run.id;});
         return <div key={run.id} style={{marginBottom:10,border:'1.5px solid '+G200,borderRadius:12,overflow:'hidden'}}>
-          <div style={{padding:'10px 12px',background:G50,fontWeight:'bold',fontSize:13,color:T,display:'flex',justifyContent:'space-between'}}>
+          <div style={{padding:'10px 12px',background:G50,fontWeight:'bold',fontSize:13,color:T,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <span>{run.is_admin_run?'📋 ':''}{run.name}</span>
-            <span style={{fontSize:11,color:G400,fontWeight:'normal'}}>{run.word_count}V</span>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:11,color:G400,fontWeight:'normal'}}>{run.word_count}V</span>
+              <button onClick={function(e){e.stopPropagation();setEditRun(run);}}
+                style={{fontSize:11,padding:'3px 9px',borderRadius:6,border:'1px solid '+T,background:TL,color:T,cursor:'pointer',fontWeight:'bold',touchAction:'manipulation'}}>
+                ✏️ Bearbeiten
+              </button>
+            </div>
           </div>
           {!prog.length&&<div style={{padding:'8px 12px',fontSize:12,color:G400}}>Noch kein Spieler gestartet</div>}
           {prog.map(function(p){
