@@ -1159,6 +1159,7 @@ function QuizSolo({ chapters, onDone }) {
 // ══════════════════════════════════════════════════════════════
 function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   var [phase, setPhase] = useState("setup");
+  var [selectedKapitel, setSelectedKapitel] = useState([]); // [] = alle
   var [tab, setTab] = useState("users"); // "users" | "code"
   var [gameId, setGameId] = useState(null);
   var [gameData, setGameData] = useState(null);
@@ -1207,7 +1208,8 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   },[gameData]);
 
   function challengeUser(targetUser){
-    var generated = makeAllRounds(chapters);
+    var chapSrc = selectedKapitel.length>0 ? chapters.filter(function(c){ return selectedKapitel.indexOf(c.id)>=0 || selectedKapitel.indexOf(c.parent_id)>=0; }) : chapters;
+    var generated = makeAllRounds(chapSrc);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
     // whose_turn starts as 'p2' - challenged user plays first
     sbPost('quiz_duels',{
@@ -1226,7 +1228,8 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   }
 
   function createOpenGame(){
-    var generated = makeAllRounds(chapters);
+    var chapSrc = selectedKapitel.length>0 ? chapters.filter(function(c){ return selectedKapitel.indexOf(c.id)>=0 || selectedKapitel.indexOf(c.parent_id)>=0; }) : chapters;
+    var generated = makeAllRounds(chapSrc);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
     sbPost('quiz_duels',{
       code:code, player1_id:player.id, player1_name:player.name,
@@ -1418,7 +1421,30 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
       return colors[idx];
     }
 
+    var topLevelKapitel = chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
     return <div style={{padding:8}}>
+      {/* Kapitel-Auswahl */}
+      <div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200}}>
+        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>
+          📚 Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedKapitel.length===0?'Alle':selectedKapitel.length+' ausgewählt'})</span>
+        </div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+          <button onClick={function(){setSelectedKapitel([]);}}
+            style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(selectedKapitel.length===0?T:G200),background:selectedKapitel.length===0?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:selectedKapitel.length===0?T:G600,touchAction:'manipulation'}}>
+            Alle
+          </button>
+          {topLevelKapitel.map(function(kap){
+            var sel=selectedKapitel.indexOf(kap.id)>=0;
+            return <button key={kap.id} onClick={function(){
+              setSelectedKapitel(function(prev){
+                return sel?prev.filter(function(id){return id!==kap.id;}):prev.concat([kap.id]);
+              });
+            }} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(sel?kap.color||T:G200),background:sel?(kap.color||T)+'18':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:sel?kap.color||T:G600,touchAction:'manipulation'}}>
+              {kap.icon} {kap.title}
+            </button>;
+          })}
+        </div>
+      </div>
       {/* Pending challenges - highlighted at top */}
       {pendingChallenges.length>0&&<div style={{padding:12,background:'#fffbeb',borderRadius:12,
         border:'2px solid '+AM,marginBottom:14,boxShadow:'0 2px 8px rgba(245,158,11,0.15)'}}>
@@ -3877,7 +3903,13 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
   var [moveSelected, setMoveSelected] = useState({});
   var [moveTgtId, setMoveTgtId] = useState('');
   var scoreLogRef = useRef(null);
+  var dedupLogRef = useRef(null);
   var [catJobLog, setCatJobLog] = useState([]);
+  var [dedupLog, setDedupLog] = useState([]);
+  var [dedupPct, setDedupPct] = useState(0);
+  var [dedupPlan, setDedupPlan] = useState(null);
+  var [dedupRunning, setDedupRunning] = useState(false);
+  var [dedupPhase, setDedupPhase] = useState('idle');
   var [catJobRunning, setCatJobRunning] = useState(false);
   var [catJobPct, setCatJobPct] = useState(0);
   var [scoreJobLog, setScoreJobLog] = useState([]);
@@ -4049,6 +4081,164 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
     setMoveTgtId('');
   }
 
+  function dedupAddLog(msg, t) {
+    setDedupLog(function(p){ return p.concat([{msg: new Date().toLocaleTimeString('de')+'  '+msg, t: t||'info'}]); });
+    setTimeout(function(){ if(dedupLogRef.current) dedupLogRef.current.scrollTop=dedupLogRef.current.scrollHeight; }, 50);
+  }
+
+  function runDedupBackup() {
+    setDedupRunning(true);
+    setDedupLog([]);
+    dedupAddLog('Lade alle Kapitel und Lernstaende...');
+    Promise.all([
+      sbGet('chapters','select=id,title,parent_id,words,sentences&order=created_at.asc'),
+      sbGet('ls_progress','select=id,player_id,run_id,data,updated_at')
+    ]).then(function(res) {
+      var chs=res[0]||[]; var prog=res[1]||[];
+      var backup = JSON.stringify({created:new Date().toISOString(),chapters:chs,ls_progress:prog},null,2);
+      try {
+        var blob = new Blob([backup],{type:'application/json'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href=url; a.download='vokabel-backup-'+new Date().toISOString().slice(0,10)+'.json';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        dedupAddLog('Backup-Datei heruntergeladen: '+chs.length+' Kapitel, '+prog.length+' Lernstaende','ok');
+      } catch(e) { dedupAddLog('Download-Fehler: '+e.message,'warn'); }
+      setDedupRunning(false);
+    }).catch(function(e) { dedupAddLog('Fehler: '+e.message,'err'); setDedupRunning(false); });
+  }
+
+  function runDedupAnalyze() {
+    if(dedupRunning) return;
+    setDedupRunning(true);
+    setDedupPlan(null);
+    setDedupPhase('analyzing');
+    setDedupPct(0);
+    setDedupLog([]);
+    dedupAddLog('Lade Kapitel und Lernstaende...');
+    Promise.all([
+      sbGet('chapters','select=id,title,parent_id,words&order=created_at.asc'),
+      sbGet('ls_progress','select=id,player_id,run_id,data')
+    ]).then(function(res) {
+      var chs=res[0]||[]; var prog=res[1]||[];
+      dedupAddLog(''+chs.length+' Kapitel, '+prog.length+' Lernstaende geladen','ok');
+      setDedupPct(20);
+      // Parse topics
+      var topics=chs.filter(function(c){return !!c.parent_id;}).map(function(c){
+        var w=c.words; if(typeof w==='string'){try{w=JSON.parse(w);}catch(e){w=[];}} return Object.assign({},c,{words:Array.isArray(w)?w:[]});
+      });
+      // Build word progress map
+      var wpMap={};
+      prog.forEach(function(row){
+        var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+        var pots=data.pots||{};
+        [1,2,3,4,5].forEach(function(pot){
+          (pots[pot]||[]).forEach(function(w){
+            var k=(w.word||'').toLowerCase();
+            if(!wpMap[k]) wpMap[k]={maxPot:0,learnedByAny:false};
+            var mp=w.maxPot?Math.max(w.maxPot,pot):pot;
+            if(mp>wpMap[k].maxPot) wpMap[k].maxPot=mp;
+            if(pot===5) wpMap[k].learnedByAny=true;
+          });
+        });
+      });
+      setDedupPct(50);
+      // Find duplicates
+      var totalDups=0;
+      var plan2=[];
+      topics.forEach(function(ch){
+        var seen={};
+        ch.words.forEach(function(w){ var k=(w.word||'').toLowerCase().trim(); if(!k)return; if(!seen[k])seen[k]=[]; seen[k].push(w); });
+        var dupGroups=[];
+        Object.keys(seen).forEach(function(key){
+          var group=seen[key]; if(group.length<2) return;
+          totalDups+=group.length-1;
+          var bestScore=-1; var keep=group[0];
+          group.forEach(function(w){
+            var score=0;
+            if(w.cats&&w.cats.length>0) score+=4;
+            if(w.important) score+=2;
+            if(wpMap[(w.word||'').toLowerCase()]) score+=1;
+            if(score>bestScore){bestScore=score;keep=w;}
+          });
+          var merged=Object.assign({},keep);
+          var allCats={}; (keep.cats||[]).forEach(function(c){allCats[c]=1;});
+          group.forEach(function(w){(w.cats||[]).forEach(function(c){allCats[c]=1;});});
+          merged.cats=Object.keys(allCats);
+          merged.important=group.some(function(w){return w.important;});
+          dupGroups.push({key:key,group:group,keep:keep,merged:merged,remove:group.filter(function(w){return w!==keep;})});
+        });
+        if(dupGroups.length>0) plan2.push({chapterId:ch.id,chapterTitle:ch.title,dupGroups:dupGroups,allWords:ch.words,prog:prog});
+      });
+      setDedupPct(100);
+      if(totalDups===0){ dedupAddLog('Keine Duplikate gefunden - alles sauber!','ok'); setDedupPhase('idle'); }
+      else { dedupAddLog(''+totalDups+' Duplikate in '+plan2.length+' Themenbereichen gefunden','warn'); setDedupPhase('ready'); }
+      setDedupPlan({plan:plan2,totalDups:totalDups,progRows:prog,wpMap:wpMap});
+      setDedupRunning(false);
+    }).catch(function(e){ dedupAddLog('Fehler: '+e.message,'err'); setDedupRunning(false); setDedupPhase('idle'); });
+  }
+
+  function runDedupExecute() {
+    if(!dedupPlan||dedupRunning) return;
+    if(!confirm('Jetzt '+dedupPlan.totalDups+' Duplikate entfernen? Backup vorher erstellt?')) return;
+    setDedupRunning(true); setDedupPhase('executing'); setDedupPct(0);
+    var plan2=dedupPlan.plan; var progRows=dedupPlan.progRows;
+    dedupAddLog('Schritt A: '+plan2.length+' Themenbereiche bereinigen...');
+    var chapOk=0; var chapFail=0;
+    function execChap(ci){
+      if(ci>=plan2.length){
+        dedupAddLog('Kapitel fertig: '+chapOk+' OK, '+chapFail+' Fehler',chapFail>0?'warn':'ok');
+        setDedupPct(55);
+        dedupAddLog('Schritt B: Lernstaende bereinigen...');
+        execProg(0,0,0,0);
+        return;
+      }
+      var ch=plan2[ci];
+      setDedupPct(Math.round((ci/plan2.length)*50));
+      sbGet('chapters','id=eq.'+ch.chapterId+'&select=words').then(function(fresh){
+        var freshWords=[]; if(fresh&&fresh[0]){var w=fresh[0].words;if(typeof w==='string'){try{w=JSON.parse(w);}catch(e){w=[];}}freshWords=Array.isArray(w)?w:[];}else{freshWords=ch.allWords;}
+        var keepMap={}; ch.dupGroups.forEach(function(g){keepMap[g.key]=g.merged;});
+        var seenKeys={}; var newWords=[];
+        freshWords.forEach(function(w){ var k=(w.word||'').toLowerCase().trim(); if(!k)return; if(keepMap[k]){if(!seenKeys[k]){seenKeys[k]=true;newWords.push(keepMap[k]);}}else{newWords.push(w);}});
+        newWords.sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
+        sbPatch('chapters',{words:JSON.stringify(newWords)},'id=eq.'+ch.chapterId).then(function(){
+          setChapters(function(prev){return prev.map(function(c){return c.id===ch.chapterId?Object.assign({},c,{words:newWords}):c;});});
+          dedupAddLog('OK: '+ch.chapterTitle+' - '+ch.dupGroups.reduce(function(s,g){return s+g.remove.length;},0)+' entfernt','ok');
+          chapOk++;
+          setTimeout(function(){execChap(ci+1);},150);
+        }).catch(function(e){ dedupAddLog('Fehler '+ch.chapterTitle+': '+e.message,'err'); chapFail++; setTimeout(function(){execChap(ci+1);},150); });
+      }).catch(function(e){ dedupAddLog('Ladefehler '+ch.chapterTitle+': '+e.message,'err'); chapFail++; setTimeout(function(){execChap(ci+1);},150); });
+    }
+    function execProg(pi, ok2, skip2, fail2){
+      if(pi>=progRows.length){
+        setDedupPct(100);
+        dedupAddLog('Lernstaende: '+ok2+' aktualisiert, '+skip2+' unveraendert'+(fail2>0?', '+fail2+' Fehler':''),fail2>0?'warn':'ok');
+        dedupAddLog('FERTIG! Duplikate erfolgreich entfernt.','ok');
+        setDedupPhase('done'); setDedupRunning(false); setDedupPlan(null);
+        return;
+      }
+      setDedupPct(55+Math.round((pi/progRows.length)*43));
+      var row=progRows[pi];
+      var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){setTimeout(function(){execProg(pi+1,ok2,skip2+1,fail2);},40);return;}
+      var pots=data.pots||{}; var changed=false;
+      [1,2,3,4,5].forEach(function(pot){
+        var arr=pots[pot]||[]; if(!arr.length)return;
+        var seen2={}; var deduped=[];
+        arr.forEach(function(w){ var k=(w.word||'').toLowerCase();
+          if(!seen2[k]){seen2[k]=w;deduped.push(w);}
+          else{var ex=seen2[k];ex.maxPot=Math.max(ex.maxPot||0,w.maxPot||0);ex.streak=Math.max(ex.streak||0,w.streak||0);ex.totalCorrect=Math.max(ex.totalCorrect||0,w.totalCorrect||0);ex.totalWrong=Math.max(ex.totalWrong||0,w.totalWrong||0);changed=true;}
+        });
+        if(deduped.length!==arr.length){pots[pot]=deduped;changed=true;}
+      });
+      if(!changed){setTimeout(function(){execProg(pi+1,ok2,skip2+1,fail2);},40);return;}
+      sbPatch('ls_progress',{data:JSON.stringify(data),updated_at:new Date().toISOString()},'id=eq.'+row.id).then(function(){
+        setTimeout(function(){execProg(pi+1,ok2+1,skip2,fail2);},60);
+      }).catch(function(){ setTimeout(function(){execProg(pi+1,ok2,skip2,fail2+1);},60); });
+    }
+    execChap(0);
+  }
+
   function uploadImg(file) {
     if(!file) return;
     setImgLoading(true); setImgMsg('Bild wird analysiert…'); setDraft(null);
@@ -4180,7 +4370,8 @@ FORMAT - NUR JSON, kein Markdown:
           ['chapters','📚 Kapitel & Upload'],
           ['leiterspiel','🎯 Leiterspiel'],
           ['search','🔍 Vokabel-Suche'],
-          ['categories','🏷️ Kategorien']
+          ['categories','🏷️ Kategorien'],
+          ['bereinigung','🧹 Bereinigung']
         ];
         return tabList.map(function(pair){
           return <button key={pair[0]} onClick={function(){setTab(pair[0]);}} style={BtnStyle(tab===pair[0]?T:G100,tab===pair[0]?'white':G600,{padding:'7px 14px',fontSize:12})}>{pair[1]}</button>;
@@ -4788,6 +4979,124 @@ FORMAT - NUR JSON, kein Markdown:
           })()}
         </div>
       )}
+      {/* BEREINIGUNG TAB */}
+      {tab==='bereinigung'&&(
+        <div>
+          <div style={{fontSize:12,color:G600,marginBottom:12,padding:'8px 12px',background:'#fef9c3',borderRadius:8,border:'1px solid #fde68a'}}>
+            🧹 Findet doppelte Vokabeln in allen Themenbereichen, sichert Lernstaende und entfernt Duplikate.
+            <strong> Backup zuerst erstellen!</strong>
+          </div>
+
+          {/* Step 1: Backup */}
+          <div style={{padding:14,background:G50,borderRadius:12,border:'1px solid '+G200,marginBottom:12}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📦 Schritt 1 - Backup</div>
+            <div style={{fontSize:11,color:G400,marginBottom:10}}>Laedt alle Kapitel-Vokabeln und Lernstaende als JSON-Datei herunter. Falls etwas schieflaeuft kann der alte Stand wiederhergestellt werden.</div>
+            <button onClick={runDedupBackup} disabled={dedupRunning}
+              style={BtnStyle(T,'white',{opacity:dedupRunning?0.5:1,touchAction:'manipulation'})}>
+              💾 Backup herunterladen
+            </button>
+          </div>
+
+          {/* Step 2: Analyze */}
+          <div style={{padding:14,background:G50,borderRadius:12,border:'1px solid '+G200,marginBottom:12}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>🔍 Schritt 2 - Analysieren</div>
+            <div style={{fontSize:11,color:G400,marginBottom:10}}>Findet alle Duplikate. Zeigt Vorschau: was bleibt, was geloescht wird, welcher Lernstand erhalten bleibt.</div>
+            <button onClick={runDedupAnalyze} disabled={dedupRunning}
+              style={BtnStyle('#7c3aed','white',{opacity:dedupRunning?0.5:1,touchAction:'manipulation'})}>
+              {dedupRunning&&dedupPhase==='analyzing'?'Analysiere...':'🔍 Analysieren'}
+            </button>
+            {dedupPct>0&&dedupPct<100&&(
+              <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden',margin:'8px 0'}}>
+                <div style={{height:'100%',width:dedupPct+'%',background:'#7c3aed',borderRadius:3,transition:'width 0.3s'}}/>
+              </div>
+            )}
+
+            {/* Preview table */}
+            {dedupPlan&&dedupPlan.totalDups>0&&(
+              <div style={{marginTop:10}}>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+                  <span style={{padding:'4px 10px',background:'#fee2e2',borderRadius:8,fontSize:11,fontWeight:'bold',color:RE}}>
+                    {dedupPlan.totalDups} Duplikate
+                  </span>
+                  <span style={{padding:'4px 10px',background:'#dbeafe',borderRadius:8,fontSize:11,fontWeight:'bold',color:'#1e40af'}}>
+                    {dedupPlan.plan.length} Themenbereiche
+                  </span>
+                </div>
+                <div style={{maxHeight:300,overflowY:'auto',border:'1px solid '+G200,borderRadius:8}}>
+                  {dedupPlan.plan.map(function(ch){
+                    return <div key={ch.chapterId}>
+                      <div style={{padding:'6px 10px',background:'#f0fdf4',fontWeight:'bold',fontSize:11,color:T,borderBottom:'1px solid '+G200,position:'sticky',top:0}}>
+                        {ch.chapterTitle} - {ch.dupGroups.length} Duplikat{ch.dupGroups.length!==1?'e':''}
+                      </div>
+                      {ch.dupGroups.map(function(g){
+                        var prog=dedupPlan.wpMap[g.key];
+                        var progStr=prog?('Topf '+prog.maxPot+(prog.learnedByAny?' gelern':'')):'kein Lernstand';
+                        return <div key={g.key} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'6px 10px',borderBottom:'1px solid '+G50,fontSize:11}}>
+                          <div style={{flex:2}}>
+                            <strong>{g.keep.word}</strong><span style={{color:G400}}> = {g.keep.clue}</span>
+                          </div>
+                          <div style={{flex:2}}>
+                            {g.merged.important?'⭐ ':''}
+                            {(g.merged.cats||[]).length>0
+                              ? (g.merged.cats||[]).slice(0,3).map(function(c){return <span key={c} style={{display:'inline-block',padding:'1px 5px',borderRadius:99,fontSize:9,background:TL,color:T,margin:'1px'}}>{c}</span>;})
+                              : <span style={{color:RE,fontSize:10}}>keine Kat.</span>
+                            }
+                          </div>
+                          <div style={{flex:1,color:RE,fontSize:10}}>
+                            {g.remove.length} entfernt
+                          </div>
+                          <div style={{flex:1,color:G400,fontSize:10}}>{progStr}</div>
+                        </div>;
+                      })}
+                    </div>;
+                  })}
+                </div>
+              </div>
+            )}
+            {dedupPlan&&dedupPlan.totalDups===0&&(
+              <div style={{marginTop:8,padding:'10px 12px',background:'#d1fae5',borderRadius:8,fontSize:12,color:'#065f46',fontWeight:'bold'}}>
+                Keine Duplikate gefunden!
+              </div>
+            )}
+          </div>
+
+          {/* Step 3: Execute */}
+          {dedupPlan&&dedupPlan.totalDups>0&&(dedupPhase==='ready'||dedupPhase==='executing')&&(
+            <div style={{padding:14,background:'#fef2f2',borderRadius:12,border:'1px solid #fecaca',marginBottom:12}}>
+              <div style={{fontWeight:'bold',fontSize:13,color:RE,marginBottom:6}}>🧹 Schritt 3 - Bereinigen</div>
+              <div style={{fontSize:11,color:G600,marginBottom:10}}>
+                Entfernt die Duplikate permanent. Lernstaende werden zusammengefuehrt (bester Topf/Streak bleibt erhalten).
+              </div>
+              <button onClick={runDedupExecute} disabled={dedupRunning||dedupPhase!=='ready'}
+                style={BtnStyle(RE,'white',{opacity:(dedupRunning||dedupPhase!=='ready')?0.5:1,touchAction:'manipulation'})}>
+                {dedupRunning&&dedupPhase==='executing'?'Bereinige...':'Jetzt bereinigen'}
+              </button>
+              {dedupPct>0&&(
+                <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden',margin:'8px 0'}}>
+                  <div style={{height:'100%',width:dedupPct+'%',background:RE,borderRadius:3,transition:'width 0.3s'}}/>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Log */}
+          {dedupLog.length>0&&(
+            <div ref={dedupLogRef} style={{maxHeight:180,overflowY:'auto',background:'white',border:'1px solid '+G200,borderRadius:8,padding:'8px 10px',fontSize:11,fontFamily:'monospace',lineHeight:1.9}}>
+              {dedupLog.map(function(l,i){
+                var col=l.t==='ok'?'#065f46':l.t==='err'?RE:l.t==='warn'?AM:G600;
+                return <div key={i} style={{color:col}}>{l.msg}</div>;
+              })}
+            </div>
+          )}
+
+          {dedupPhase==='done'&&(
+            <div style={{marginTop:10,padding:'10px 12px',background:'#d1fae5',borderRadius:8,fontSize:12,color:'#065f46',fontWeight:'bold',textAlign:'center'}}>
+              ✅ Bereinigung abgeschlossen! Bitte Seite neu laden.
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
