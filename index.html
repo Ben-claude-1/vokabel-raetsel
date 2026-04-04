@@ -5706,18 +5706,7 @@ function GrammarAdmin() {
       ? 'Simple Present: I/you/we/they + Grundform, he/she/it + -s/-es. Verneinung: dont/doesnt.'
       : 'Present Progressive: am/is/are + Verb-ing. Verneinung: isnt/arent.';
     var verbList=GRAMMAR_VERBS.map(function(v){return v.word+'='+v.clue;}).join(', ');
-    var prompt='Englisch-Lehrer Klasse 5. Erstelle 10 VERSCHIEDENE Lueckentext-Aufgaben zum Thema: '+topicDE+'
-
-Vokabeln: '+verbList+'
-
-Regeln:
-- Genau eine Luecke (___) pro Satz, immer das Verb
-- 3 falsche Optionen = andere Formen DESSELBEN Verbs
-- Kurze Saetze, Mix aus positiv/Verneinung/Frage
-- Saetze muessen sich von bestehenden unterscheiden
-
-NUR JSON:
-{"exercises":[{"sentence":"She ___ every day.","correct":"trains","wrong":["train","training","is training"],"hint":"he/she/it: +s"}]}';
+    var prompt='Englisch-Lehrer Klasse 5. Erstelle 10 VERSCHIEDENE Lueckentext-Aufgaben zum Thema: '+topicDE+'\n\nVokabeln: '+verbList+'\n\nRegeln:\n- Genau eine Luecke (___) pro Satz, immer das Verb\n- 3 falsche Optionen = andere Formen DESSELBEN Verbs\n- Kurze Saetze, Mix aus positiv/Verneinung/Frage\n- Saetze muessen sich von bestehenden unterscheiden\n\nNUR JSON:\n{"exercises":[{"sentence":"She ___ every day.","correct":"trains","wrong":["train","training","is training"],"hint":"he/she/it: +s"}]}';
     fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})})
     .then(function(r){return r.json();})
     .then(function(d){
