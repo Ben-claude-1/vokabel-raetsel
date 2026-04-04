@@ -2128,7 +2128,7 @@ function lsSaveProgress(pid, rid, data, eid) {
 
 function lsInitProgress(words, sentences) {
   return {
-    pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[]},
+    pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[]},
     sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),
     bonusStarted:false, history:[], lastWord:null, streak:0
   };
@@ -2362,22 +2362,33 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
 
   // Build quiz answers for pot 1
   // REGEL: Deutsches Wort zeigen → 4 englische Optionen
-  // Ähnlichkeiten: Verben bei Verben, etc. (einfache Heuristik via Suffix)
+  // Distraktoren vom gleichen Worttyp — Typ wird aus Kapitel-Daten gelesen (nicht aus Fortschritt)
   useEffect(function(){
     if(!currentItem||currentItem.pot!==1||!progress) return;
     var correct=currentItem.word;
-    // Use all chapters words as distractor pool (wider selection)
+    // Enrich correct word with .type from chapter data (progress pots don't store type)
+    var enrichedCorrect=correct;
+    if(allChapters&&allChapters.length){
+      var found=null;
+      allChapters.forEach(function(ch){
+        if(found) return;
+        var cw=(ch.words||[]).find(function(w){return w.word===correct.word;});
+        if(cw) found=cw;
+      });
+      if(found) enrichedCorrect=Object.assign({},correct,{type:found.type||correct.type});
+    }
+    // Build distractor pool from all chapters (wider selection, better type coverage)
     var allVocab=[];
     if(allChapters&&allChapters.length){
       allChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){if(w.word!==correct.word)allVocab.push(w);});});
     }
     if(!allVocab.length) allVocab=words.filter(function(w){return w.word!==correct.word;});
-    // Use getWordType for strict type matching
-    var cType=getWordType(correct);
+    // Use enriched word for type detection — ensures noun stays noun, verb stays verb
+    var cType=getWordType(enrichedCorrect);
     var sameType=allVocab.filter(function(w){return getWordType(w)===cType;});
     var pool=sameType.length>=3?sameType:allVocab;
     var distractors=shuffleArr(pool).slice(0,3);
-    setQuizAnswers(shuffleArr([correct].concat(distractors)));
+    setQuizAnswers(shuffleArr([enrichedCorrect].concat(distractors)));
   },[currentItem]);
 
   // Focus type input
@@ -2907,7 +2918,7 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
     var key=ch.id+':'+w.word;
     var ex=selectedWords.find(function(x){return x.key===key;});
     if(ex) setSelectedWords(selectedWords.filter(function(x){return x.key!==key;}));
-    else setSelectedWords(selectedWords.concat([{key:key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title}]));
+    else setSelectedWords(selectedWords.concat([{key:key,word:w.word,clue:w.clue,type:w.type||'noun',chapterId:ch.id,chapTitle:ch.title}]));
   }
 
   function createRun(){
@@ -2937,7 +2948,7 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
             ch.words.filter(function(w){return w.important;}).forEach(function(w){
               var key=ch.id+':'+w.word;
               if(!selectedWords.find(function(x){return x.key===key;}))
-                allImp.push({key:key,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title});
+                allImp.push({key:key,word:w.word,clue:w.clue,type:w.type||'noun',chapterId:ch.id,chapTitle:ch.title});
             });
           });
           setSelectedWords(selectedWords.concat(allImp));
@@ -2967,13 +2978,13 @@ function LeitersSpielCreate({ player, chapters, onCreated, isAdmin }) {
               var impKeys=imp.map(function(w){return ch.id+':'+w.word;});
               var allSel=impKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
               if(allSel) setSelectedWords(selectedWords.filter(function(x){return !impKeys.includes(x.key);}));
-              else {var toAdd=imp.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd));}
+              else {var toAdd=imp.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,type:w.type||'noun',chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd));}
             }} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>⭐ Wichtige</button>
             <button onClick={function(){
               var allKeys=ch.words.map(function(w){return ch.id+':'+w.word;});
               var allSel=allKeys.every(function(k){return selectedWords.find(function(x){return x.key===k;});});
               if(allSel) setSelectedWords(selectedWords.filter(function(x){return !allKeys.includes(x.key);}));
-              else {var toAdd2=ch.words.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd2));}
+              else {var toAdd2=ch.words.filter(function(w){return !selectedWords.find(function(x){return x.key===ch.id+':'+w.word;});}).map(function(w){return{key:ch.id+':'+w.word,word:w.word,clue:w.clue,type:w.type||'noun',chapterId:ch.id,chapTitle:ch.title};});setSelectedWords(selectedWords.concat(toAdd2));}
             }} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>Alle</button>
           </div>
           {ch.words.map(function(w,i){
@@ -3187,7 +3198,7 @@ function RunEditor({ run, chapters, onClose, onSaved }) {
       if(!ch) return;
       var w = ch.words.find(function(x){return x.word===wordStr;});
       if(!w) return;
-      newWords.push({word:w.word, clue:w.clue, chapterId:chId, chapTitle:ch.title, important:w.important||false});
+      newWords.push({word:w.word, clue:w.clue, type:w.type||'noun', chapterId:chId, chapTitle:ch.title, important:w.important||false});
     });
     newWords.sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
 
@@ -3226,7 +3237,7 @@ function RunEditor({ run, chapters, onClose, onSaved }) {
           var inPots=new Set();
           [1,2,3,4,5].forEach(function(pot){pots[pot].forEach(function(w){inPots.add(w.word);});});
           newWords.filter(function(w){return addSet.has(w.word)&&!inPots.has(w.word);}).forEach(function(w){
-            pots[1].push({word:w.word,clue:w.clue,chapterId:w.chapterId||'',streak:0,wrongStreak:0});
+            pots[1].push({word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0});
             changed=true;
           });
         }
