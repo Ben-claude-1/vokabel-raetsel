@@ -2316,7 +2316,7 @@ function CelebrationPopup({ newGrade, onClose }) {
 }
 
 // ── LeitersSpielSession - 5-Topf mit persistentem Speichern ──
-function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allChapters, onBack }) {
+function LeitersSpielSession({ run, player, setPlayer, gradeSettings, streakSettings, allChapters, onBack }) {
   var ss=streakSettings||DEFAULT_STREAK;
   var [progress,setProgress]=useState(null);
   var [progressId,setProgressId]=useState(null);
@@ -2446,7 +2446,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     });
   }
 
-  function handleAnswer(isCorrect) {
+  function handleAnswer(isCorrect, resultObj) {
     if(!currentItem||result) return;
     var np=JSON.parse(JSON.stringify(progress));
     var pot=currentItem.pot;
@@ -2500,7 +2500,11 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     np.history=(np.history||[]).concat([{date:new Date().toISOString(),grade:lsGrade(lsPercent(np,gradeSettings),gradeSettings),percent:lsPercent(np,gradeSettings)}]).slice(-100);
 
     setProgress(np);
-    setResult({correct:isCorrect, typed:typeInput, expected:currentItem.pot===2?currentItem.word.word:currentItem.word.clue});
+    if(!resultObj){
+      var expected4 = currentItem.pot===3 ? currentItem.word.word : currentItem.word.clue;
+      resultObj = {correct:isCorrect, typed:typeInput, expected:expected4};
+    }
+    setResult(resultObj);
     // ← SOFORT in Supabase speichern
     saveProgress(np);
   }
@@ -2769,13 +2773,13 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
             })}
           </div>
           <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}}
+            onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';var r3=ca==='partial'?{correct:false,partial:true,typed:typeInput,expected:word.word}:(!ok?{correct:false,typed:typeInput,expected:word.word}:null);handleAnswer(ok,r3);}}}
             autoCapitalize="none" autoCorrect="off" spellCheck="false"
             type="text" inputMode="text"
             style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',opacity:0,fontSize:16,cursor:'text',textTransform:'none'}}/>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={function(){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.word});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.word});}handleAnswer(ok);}}
+          <button onClick={function(){var ca=checkAnswer(typeInput,word.word);var ok=ca==='correct';var r3b=ca==='partial'?{correct:false,partial:true,typed:typeInput,expected:word.word}:(!ok?{correct:false,typed:typeInput,expected:word.word}:null);handleAnswer(ok,r3b);}}
             style={BtnStyle(AM,'white',{flex:1,padding:'12px'})}>✓ Prüfen</button>
         </div>
       </div>}
@@ -2814,10 +2818,10 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     </div>
     {!result&&<div style={{display:'flex',gap:8,marginBottom:8}}>
       <input ref={typeInputRef} value={typeInput} onChange={function(e){setTypeInput(e.target.value);}}
-        onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.clue});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.clue});}handleAnswer(ok);}}}
+        onKeyDown={function(e){if(e.key==='Enter'){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';var r4=ca==='partial'?{correct:false,partial:true,typed:typeInput,expected:word.clue}:(!ok?{correct:false,typed:typeInput,expected:word.clue}:null);handleAnswer(ok,r4);}}}
         autoCapitalize="none" autoCorrect="off" spellCheck="false"
         placeholder="Deutsche Übersetzung…" style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-      <button onClick={function(){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';if(ca==='partial'){setResult({correct:false,partial:true,typed:typeInput,expected:word.clue});}else if(!ok){setResult({correct:false,typed:typeInput,expected:word.clue});}handleAnswer(ok);}}
+      <button onClick={function(){var ca=checkAnswer(typeInput,word.clue);var ok=ca==='correct';var r4b=ca==='partial'?{correct:false,partial:true,typed:typeInput,expected:word.clue}:(!ok?{correct:false,typed:typeInput,expected:word.clue}:null);handleAnswer(ok,r4b);}}
         style={BtnStyle(T,'white',{padding:'12px 16px'})}>✓</button>
     </div>}
     {result&&!result.correct&&<div style={{marginTop:6,marginBottom:2}}>
@@ -6421,7 +6425,7 @@ function App() {
     );
     if(lsRun) return (
       <Shell showBack={true} onBack={function(){setLsRun(null);}} title={'🎯 '+lsRun.name} player={player}>
-        <LeitersSpielSession run={lsRun} player={player} gradeSettings={gradeSettings} streakSettings={streakSettings} allChapters={chapters} onBack={function(){setLsRun(null);}}/>
+        <LeitersSpielSession run={lsRun} player={player} setPlayer={setPlayer} gradeSettings={gradeSettings} streakSettings={streakSettings} allChapters={chapters} onBack={function(){setLsRun(null);}}/>
       </Shell>
     );
     return (
