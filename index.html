@@ -666,7 +666,7 @@ function SentenceLearner({ chapters, player, onDone }) {
   var [input, setInput] = useState('');
   var [result, setResult] = useState(null);
   var [results, setResults] = useState([]);
-  var [direction, setDirection] = useState('en2de');
+  var [direction, setDirection] = useState('de2en');
   var inputRef = useRef();
 
   var chapWithSentences = useMemo(function(){
@@ -2370,25 +2370,30 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     var enrichedCorrect=correct;
     if(allChapters&&allChapters.length){
       var found=null;
+      var cNorm=normWordKey(correct.word);
       allChapters.forEach(function(ch){
         if(found) return;
-        var cw=(ch.words||[]).find(function(w){return w.word===correct.word;});
+        var cw=(ch.words||[]).find(function(w){return w.word===correct.word||normWordKey(w.word)===cNorm;});
         if(cw) found=cw;
       });
       if(found) enrichedCorrect=Object.assign({},correct,{type:found.type||correct.type});
     }
     // Build distractor pool from all chapters (wider selection, better type coverage)
     var allVocab=[];
+    var correctNorm=normWordKey(correct.word);
     if(allChapters&&allChapters.length){
-      allChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){if(w.word!==correct.word)allVocab.push(w);});});
+      allChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){if(normWordKey(w.word)!==correctNorm)allVocab.push(w);});});
     }
-    if(!allVocab.length) allVocab=words.filter(function(w){return w.word!==correct.word;});
+    if(!allVocab.length) allVocab=words.filter(function(w){return normWordKey(w.word)!==correctNorm;});
     // Use enriched word for type detection — ensures noun stays noun, verb stays verb
     var cType=getWordType(enrichedCorrect);
     var sameType=allVocab.filter(function(w){return getWordType(w)===cType;});
     var pool=sameType.length>=3?sameType:allVocab;
     var distractors=shuffleArr(pool).slice(0,3);
-    setQuizAnswers(shuffleArr([enrichedCorrect].concat(distractors)));
+    var answersToSet = shuffleArr([enrichedCorrect].concat(distractors)).map(function(a){
+      return Object.assign({},a,{_isCorrect: normWordKey(a.word)===normWordKey(enrichedCorrect.word)});
+    });
+    setQuizAnswers(answersToSet);
   },[currentItem]);
 
   // Focus type input
@@ -2445,8 +2450,9 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     if(!currentItem||result) return;
     var np=JSON.parse(JSON.stringify(progress));
     var pot=currentItem.pot;
-    var widx=np.pots[pot].findIndex(function(w){return w.word===currentItem.word.word;});
-    if(widx<0) return;
+    var ciNorm=normWordKey(currentItem.word.word);
+    var widx=np.pots[pot].findIndex(function(w){return w.word===currentItem.word.word||normWordKey(w.word)===ciNorm;});
+    if(widx<0){ console.warn('handleAnswer: word not found in pot',pot,currentItem.word.word); return; }
     var word=np.pots[pot][widx];
     var upT=(ss.upThresholds[pot]!==undefined)?ss.upThresholds[pot]:1;
     var dnT=(ss.downThresholds[pot]!==undefined)?ss.downThresholds[pot]:1;
@@ -2666,7 +2672,7 @@ function LeitersSpielSession({ run, player, gradeSettings, streakSettings, allCh
     </div>
     {!result&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
       {quizAnswers.map(function(a,i){
-        return <button key={i} onClick={function(){handleAnswer(a.word===word.word);}}
+        return <button key={i} onClick={function(){handleAnswer(!!a._isCorrect);}}
           style={BtnStyle(G50,G900,{padding:'10px',fontSize:13,border:'2px solid '+G200,textAlign:'center',touchAction:'manipulation'})}>{a.word}</button>;
       })}
     </div>}
@@ -4152,6 +4158,7 @@ function naturalSort(a, b) {
 
 
 // ── saveChapterWords: patch words array back to Supabase ──
+function normWordKey(w) { return (w||'').toLowerCase().trim().replace(/^to\s+/,''); }
 function sortWords(words) {
   return words.slice().sort(function(a,b){
     return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());
@@ -4669,7 +4676,8 @@ FORMAT - NUR JSON, kein Markdown:
           ['leiterspiel','🎯 Leiterspiel'],
           ['search','🔍 Vokabel-Suche'],
           ['categories','🏷️ Kategorien'],
-          ['bereinigung','🧹 Bereinigung']
+          ['bereinigung','🧹 Bereinigung'],
+          ['grammatik','📐 Grammatik']
         ];
         return tabList.map(function(pair){
           return <button key={pair[0]} onClick={function(){setTab(pair[0]);}} style={BtnStyle(tab===pair[0]?T:G100,tab===pair[0]?'white':G600,{padding:'7px 14px',fontSize:12})}>{pair[1]}</button>;
@@ -5277,6 +5285,14 @@ FORMAT - NUR JSON, kein Markdown:
           })()}
         </div>
       )}
+      {/* GRAMMATIK TAB */}
+      {tab==='grammatik'&&(
+        <div>
+          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:10}}>📐 Grammatik-Pool verwalten</div>
+          <GrammarAdmin/>
+        </div>
+      )}
+
       {/* BEREINIGUNG TAB */}
       {tab==='bereinigung'&&(
         <div>
@@ -5637,6 +5653,561 @@ function Shell({ children, showBack, onBack, title, rightBtn, player }) {
 }
 
 
+// ── Grammar: pool helpers ─────────────────────────────────────
+var GRAMMAR_KEYS = {sp:'grammar_exercises_sp', pp:'grammar_exercises_pp'};
+var GRAMMAR_VERBS = [
+  {word:'to play',clue:'spielen'},{word:'to celebrate',clue:'feiern'},
+  {word:'to sing',clue:'singen'},{word:'to bring',clue:'mitbringen'},
+  {word:'to take',clue:'mitnehmen'},{word:'to sleep',clue:'schlafen'},
+  {word:'to collect',clue:'sammeln'},{word:'to train',clue:'trainieren'},
+  {word:'to score',clue:'Tor schiessen'},{word:'to shop',clue:'einkaufen'},
+  {word:'to close',clue:'schliessen'},{word:'to plan',clue:'planen'},
+  {word:'to enjoy',clue:'geniessen'},{word:'to dream',clue:'traeumen'},
+  {word:'to put',clue:'setzen'},{word:'to have',clue:'haben'},
+  {word:'to ride',clue:'fahren'},{word:'to text',clue:'SMS senden'}
+];
+
+function loadGrammarPool(topic) {
+  return sbGet('settings','key=eq.'+GRAMMAR_KEYS[topic]+'&select=value').then(function(rows){
+    if(!rows||!rows.length||!rows[0].value) return [];
+    try{ return JSON.parse(rows[0].value); }catch(e){ return []; }
+  });
+}
+function saveGrammarPool(topic, pool) {
+  return sbPatch('settings',{value:JSON.stringify(pool),updated_at:new Date().toISOString()},'key=eq.'+GRAMMAR_KEYS[topic]).then(function(ok){
+    if(ok) return ok;
+    return sbPost('settings',{key:GRAMMAR_KEYS[topic],value:JSON.stringify(pool)});
+  });
+}
+
+// ── GrammarAdmin ─────────────────────────────────────────────
+function GrammarAdmin() {
+  var [spCount, setSpCount] = useState(null);
+  var [ppCount, setPpCount] = useState(null);
+  var [log, setLog] = useState([]);
+  var [pct, setPct] = useState(0);
+  var [running, setRunning] = useState(false);
+  var logRef = useRef(null);
+
+  function alog(msg,t){
+    setLog(function(p){return p.concat([{msg:msg,t:t||'info'}]);});
+    setTimeout(function(){if(logRef.current)logRef.current.scrollTop=logRef.current.scrollHeight;},40);
+  }
+
+  useEffect(function(){
+    loadGrammarPool('sp').then(function(p){setSpCount(p.length);});
+    loadGrammarPool('pp').then(function(p){setPpCount(p.length);});
+  },[]);
+
+  function genBatch(topic, existing, batchIdx, totalBatches, accum, onDone) {
+    var key=window._ANTHROPIC_KEY||(function(){try{return sessionStorage.getItem('_ak')||'';}catch(e){return '';}})();
+    if(!key){alog('Kein API-Key!','err');setRunning(false);return;}
+    var topicDE = topic==='sp'
+      ? 'Simple Present: I/you/we/they + Grundform, he/she/it + -s/-es. Verneinung: dont/doesnt.'
+      : 'Present Progressive: am/is/are + Verb-ing. Verneinung: isnt/arent.';
+    var verbList=GRAMMAR_VERBS.map(function(v){return v.word+'='+v.clue;}).join(', ');
+    var prompt='Englisch-Lehrer Klasse 5. Erstelle 10 VERSCHIEDENE Lueckentext-Aufgaben zum Thema: '+topicDE+'
+
+Vokabeln: '+verbList+'
+
+Regeln:
+- Genau eine Luecke (___) pro Satz, immer das Verb
+- 3 falsche Optionen = andere Formen DESSELBEN Verbs
+- Kurze Saetze, Mix aus positiv/Verneinung/Frage
+- Saetze muessen sich von bestehenden unterscheiden
+
+NUR JSON:
+{"exercises":[{"sentence":"She ___ every day.","correct":"trains","wrong":["train","training","is training"],"hint":"he/she/it: +s"}]}';
+    fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+      var match=txt.match(/\{[\s\S]*\}/);
+      if(!match)throw new Error('Kein JSON');
+      var parsed=JSON.parse(match[0]);
+      var batch=(parsed.exercises||[]).filter(function(ex){return ex.sentence&&ex.correct&&ex.wrong&&ex.wrong.length>=3;});
+      var newAccum=accum.concat(batch);
+      alog('Batch '+(batchIdx+1)+'/'+totalBatches+': '+batch.length+' Saetze','ok');
+      setPct(Math.round((batchIdx+1)/totalBatches*90));
+      setTimeout(function(){
+        if(batchIdx+1>=totalBatches){
+          onDone(newAccum);
+        } else {
+          genBatch(topic,existing,batchIdx+1,totalBatches,newAccum,onDone);
+        }
+      },600);
+    })
+    .catch(function(e){alog('Batch-Fehler: '+e.message,'err');setTimeout(function(){
+      if(batchIdx+1>=totalBatches){onDone(accum);}
+      else{genBatch(topic,existing,batchIdx+1,totalBatches,accum,onDone);}
+    },800);});
+  }
+
+  function generate(topic, addMore) {
+    setRunning(true);setPct(0);setLog([]);
+    alog('Lade bestehenden Pool...','info');
+    loadGrammarPool(topic).then(function(existing){
+      var start=addMore?existing:[];
+      var batches=10;
+      alog((addMore?'Ergaenze':'Erstelle')+' '+batches*10+' Saetze in '+batches+' Batches...','info');
+      genBatch(topic,start,0,batches,start,function(all){
+        saveGrammarPool(topic,all).then(function(){
+          setPct(100);
+          alog('Fertig! '+all.length+' Saetze im Pool gespeichert.','ok');
+          if(topic==='sp') setSpCount(all.length);
+          else setPpCount(all.length);
+          setRunning(false);
+        }).catch(function(e){alog('Speicher-Fehler: '+e.message,'err');setRunning(false);});
+      });
+    });
+  }
+
+  function clearPool(topic){
+    if(!confirm('Pool fuer '+(topic==='sp'?'Simple Present':'Present Progressive')+' loeschen?')) return;
+    saveGrammarPool(topic,[]).then(function(){
+      if(topic==='sp') setSpCount(0); else setPpCount(0);
+    });
+  }
+
+  return(
+    <div>
+      <div style={{fontSize:12,color:G600,marginBottom:12,padding:'8px 12px',background:'#fef9c3',borderRadius:8,border:'1px solid #fde68a'}}>
+        Grammatik-Pool: Saetze werden in der settings-Tabelle gespeichert und beim Spielen zufaellig ausgewaehlt.
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+        {[['sp','📘 Simple Present'],['pp','📗 Pres. Progressive']].map(function(pair){
+          var cnt=pair[0]==='sp'?spCount:ppCount;
+          return <div key={pair[0]} style={{padding:'12px',background:'white',borderRadius:10,border:'1px solid '+G200,textAlign:'center'}}>
+            <div style={{fontSize:24,marginBottom:4}}>{pair[1].split(' ')[0]}</div>
+            <div style={{fontSize:12,fontWeight:'bold',color:G600}}>{pair[1].slice(2)}</div>
+            <div style={{fontSize:22,fontWeight:'bold',color:cnt>0?T:G400,margin:'6px 0'}}>{cnt===null?'…':cnt}</div>
+            <div style={{fontSize:10,color:G400}}>Saetze im Pool</div>
+          </div>;
+        })}
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10}}>
+        {[
+          {label:'📘 SP: 100 erstellen',fn:function(){generate('sp',false);}},
+          {label:'📗 PP: 100 erstellen',fn:function(){generate('pp',false);}},
+          {label:'📘 SP: 10 hinzufuegen',fn:function(){generate('sp',true);}},
+          {label:'📗 PP: 10 hinzufuegen',fn:function(){generate('pp',true);}},
+        ].map(function(btn){
+          return <button key={btn.label} onClick={btn.fn} disabled={running}
+            style={BtnStyle(running?G200:T,'white',{fontSize:11,padding:'7px 12px',opacity:running?0.5:1,touchAction:'manipulation'})}>
+            {btn.label}
+          </button>;
+        })}
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:12}}>
+        <button onClick={function(){clearPool('sp');}} disabled={running}
+          style={BtnStyle('#fee2e2',RE,{fontSize:10,padding:'5px 10px',touchAction:'manipulation'})}>SP leeren</button>
+        <button onClick={function(){clearPool('pp');}} disabled={running}
+          style={BtnStyle('#fee2e2',RE,{fontSize:10,padding:'5px 10px',touchAction:'manipulation'})}>PP leeren</button>
+      </div>
+      {pct>0&&<div style={{height:6,background:G200,borderRadius:3,overflow:'hidden',marginBottom:8}}>
+        <div style={{height:'100%',width:pct+'%',background:T,borderRadius:3,transition:'width 0.3s'}}/>
+      </div>}
+      {log.length>0&&<div ref={logRef} style={{maxHeight:160,overflowY:'auto',background:'white',border:'1px solid '+G200,borderRadius:8,padding:'8px 10px',fontSize:11,fontFamily:'monospace',lineHeight:1.9}}>
+        {log.map(function(l,i){
+          var col=l.t==='ok'?'#065f46':l.t==='err'?RE:G600;
+          return <div key={i} style={{color:col}}>{l.msg}</div>;
+        })}
+      </div>}
+    </div>
+  );
+}
+
+// ── GrammarGame ───────────────────────────────────────────────
+var GRAMMAR_FALLBACK = {
+  sp:[
+    {sentence:"She ___ football every Saturday.",correct:"plays",wrong:["play","playing","is playing"],hint:"he/she/it: +s"},
+    {sentence:"They ___ to school every day.",correct:"go",wrong:["goes","going","are going"],hint:"I/we/they: Grundform"},
+    {sentence:"He ___ his homework after school.",correct:"does",wrong:["do","doing","is doing"],hint:"he/she/it: +s (do-does)"},
+    {sentence:"We ___ football on Sundays.",correct:"play",wrong:["plays","playing","are playing"],hint:"I/we/they: Grundform"},
+    {sentence:"She ___ not like basketball.",correct:"does",wrong:["do","is","are"],hint:"he/she/it: does not"},
+    {sentence:"___ your brother train every day?",correct:"Does",wrong:["Do","Is","Are"],hint:"he/she/it: Does...?"},
+    {sentence:"My parents ___ by bus.",correct:"go",wrong:["goes","going","are going"],hint:"I/we/they: Grundform"},
+    {sentence:"Emma ___ her friends at weekends.",correct:"meets",wrong:["meet","meeting","is meeting"],hint:"he/she/it: +s"}
+  ],
+  pp:[
+    {sentence:"She ___ football right now.",correct:"is playing",wrong:["plays","play","played"],hint:"she + jetzt: is + -ing"},
+    {sentence:"They ___ at the moment.",correct:"are training",wrong:["train","trains","trained"],hint:"they + jetzt: are + -ing"},
+    {sentence:"Look! He ___ his bike!",correct:"is riding",wrong:["rides","ride","rode"],hint:"Look! = gerade jetzt"},
+    {sentence:"We ___ for the bus right now.",correct:"are waiting",wrong:["wait","waits","waited"],hint:"we + jetzt: are + -ing"},
+    {sentence:"___ you listening to music?",correct:"Are",wrong:["Do","Does","Is"],hint:"Progressive Frage: Are...?"},
+    {sentence:"He ___ not playing today.",correct:"is",wrong:["does","do","are"],hint:"he + Progressive: is not"},
+    {sentence:"My friends ___ in the park now.",correct:"are celebrating",wrong:["celebrate","celebrates","celebrated"],hint:"they + jetzt: are + -ing"},
+    {sentence:"She ___ her room at the moment.",correct:"is cleaning",wrong:["cleans","clean","cleaned"],hint:"she + jetzt: is + -ing"}
+  ]
+};
+
+// ── Grammar progress: load/save per player ────────────────────
+function grammarProgKey(pid) { return 'gp_'+pid; }
+function grammarLoadProg(pid) {
+  return sbGet('settings','key=eq.'+grammarProgKey(pid)+'&select=value').then(function(rows){
+    if(!rows||!rows.length||!rows[0].value) return {sessions:[],ruleStats:{}};
+    try{ return JSON.parse(rows[0].value); }catch(e){ return {sessions:[],ruleStats:{}}; }
+  });
+}
+function grammarSaveProg(pid, data) {
+  var val = JSON.stringify(data);
+  return sbPatch('settings',{value:val,updated_at:new Date().toISOString()},'key=eq.'+grammarProgKey(pid))
+    .then(function(ok){
+      if(ok) return ok;
+      return sbPost('settings',{key:grammarProgKey(pid),value:val});
+    });
+}
+
+// ── Weighted question selection (spaced repetition) ───────────
+function grammarPickQuestions(pool, ruleStats, count) {
+  if(!pool||pool.length===0) return [];
+  var weighted = [];
+  pool.forEach(function(q){
+    var rule = q.hint||'';
+    var stats = ruleStats[rule]||{correct:0,wrong:0};
+    var total = stats.correct + stats.wrong;
+    var mastery = total>0 ? stats.correct/total : 0.5;
+    var weight = mastery>=0.8 ? 1 : mastery>=0.6 ? 2 : mastery>=0.4 ? 3 : 4;
+    for(var w=0;w<weight;w++) weighted.push(q);
+  });
+  var picked = shuffle(weighted);
+  var seen = {};
+  var result = [];
+  for(var i=0;i<picked.length&&result.length<count;i++){
+    var key = picked[i].sentence;
+    if(!seen[key]){ seen[key]=true; result.push(picked[i]); }
+  }
+  while(result.length<count&&result.length<pool.length){
+    var extra=shuffle(pool).find(function(q){return !seen[q.sentence];});
+    if(!extra) break;
+    seen[extra.sentence]=true; result.push(extra);
+  }
+  return result.map(function(q){return Object.assign({},q,{options:shuffle([q.correct].concat(q.wrong))});});
+}
+
+// ── GrammarProgress ───────────────────────────────────────────
+function GrammarProgress({ player, onBack }) {
+  var [data, setData] = useState(null);
+  var [loading, setLoading] = useState(true);
+  useEffect(function(){
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!player||!UUID.test(player.id)){setLoading(false);return;}
+    grammarLoadProg(player.id).then(function(d){setData(d);setLoading(false);});
+  },[]);
+  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade...</div>;
+  if(!data||(!data.sessions.length&&!Object.keys(data.ruleStats||{}).length)){
+    return <div style={{padding:16}}>
+      <div style={{textAlign:'center',color:G400,padding:30}}>Noch keine Statistik vorhanden. Spiele zuerst ein paar Runden!</div>
+      <button onClick={onBack} style={BtnStyle(T,'white',{width:'100%',padding:12,touchAction:'manipulation'})}>Zurueck</button>
+    </div>;
+  }
+  var sessions = (data.sessions||[]).slice(-20).reverse();
+  var ruleStats = data.ruleStats||{};
+  var rules = Object.keys(ruleStats).sort(function(a,b){
+    var sa=ruleStats[a]; var sb=ruleStats[b];
+    var ma=(sa.correct+sa.wrong)>0?sa.correct/(sa.correct+sa.wrong):1;
+    var mb=(sb.correct+sb.wrong)>0?sb.correct/(sb.correct+sb.wrong):1;
+    return ma-mb;
+  });
+  return <div style={{padding:8}}>
+    <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:14}}>📈 Mein Grammatik-Fortschritt</div>
+    {/* Rule mastery */}
+    {rules.length>0&&<div style={{marginBottom:16}}>
+      <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:8}}>Regel-Beherrschung</div>
+      {rules.map(function(rule){
+        var s=ruleStats[rule]; var total=s.correct+s.wrong;
+        var pct=total>0?Math.round(s.correct/total*100):0;
+        var col=pct>=80?GR:pct>=60?AM:RE;
+        return <div key={rule} style={{marginBottom:7}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:3}}>
+            <span style={{color:G600,flex:1}}>{rule}</span>
+            <span style={{fontWeight:'bold',color:col,minWidth:42,textAlign:'right'}}>{pct}%</span>
+            <span style={{color:G400,fontSize:10,marginLeft:8}}>{s.correct}/{total}</span>
+          </div>
+          <div style={{height:8,background:G200,borderRadius:4,overflow:'hidden'}}>
+            <div style={{height:'100%',width:pct+'%',background:col,borderRadius:4,transition:'width 0.5s'}}/>
+          </div>
+        </div>;
+      })}
+    </div>}
+    {/* Session history */}
+    {sessions.length>0&&<div style={{marginBottom:12}}>
+      <div style={{fontWeight:'bold',fontSize:13,color:G600,marginBottom:8}}>Letzte Sessions</div>
+      {sessions.map(function(s,i){
+        var pct2=s.total>0?Math.round(s.score/s.total*100):0;
+        var col2=pct2>=75?GR:pct2>=50?AM:RE;
+        var date=new Date(s.ts).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
+        return <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',marginBottom:4,background:'white',borderRadius:8,border:'1px solid '+G200}}>
+          <span style={{fontSize:10,color:G400,minWidth:32}}>{date}</span>
+          <span style={{fontSize:11,color:G600,flex:1}}>{s.topic==='sp'?'Simple Present':'Pres. Progressive'}</span>
+          <div style={{width:60,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
+            <div style={{height:'100%',width:pct2+'%',background:col2,borderRadius:3}}/>
+          </div>
+          <span style={{fontSize:12,fontWeight:'bold',color:col2,minWidth:36,textAlign:'right'}}>{s.score}/{s.total}</span>
+        </div>;
+      })}
+    </div>}
+    <button onClick={onBack} style={BtnStyle(T,'white',{width:'100%',padding:12,fontSize:14,touchAction:'manipulation'})}>Zurueck</button>
+  </div>;
+}
+
+// ── GrammarGame ───────────────────────────────────────────────
+function GrammarGame({ player, onDone, onProgress }) {
+  var [phase, setPhase] = useState('select');
+  var [topic, setTopic] = useState(null);
+  var [questions, setQuestions] = useState([]);
+  var [results, setResults] = useState([]);
+  var [loadErr, setLoadErr] = useState('');
+  var [qIdx, setQIdx] = useState(0);
+  var [chosen, setChosen] = useState(null);
+  var [analysisText, setAnalysisText] = useState('');
+  var [analysisLoading, setAnalysisLoading] = useState(false);
+  var letters = ["A","B","C","D"];
+  var topicLabel = topic==='sp'?'Simple Present':'Present Progressive';
+
+  function startTopic(t) {
+    setTopic(t); setPhase('loading'); setLoadErr('');
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var hasPlayer = player && UUID.test(player.id);
+    Promise.all([
+      loadGrammarPool(t),
+      hasPlayer ? grammarLoadProg(player.id) : Promise.resolve({sessions:[],ruleStats:{}})
+    ]).then(function(res){
+      var pool=res[0]; var prog=res[1];
+      var src = pool.length>=8 ? pool : GRAMMAR_FALLBACK[t];
+      var qs = grammarPickQuestions(src, prog.ruleStats||{}, 8);
+      setQuestions(qs); setResults([]); setQIdx(0); setChosen(null); setAnalysisText('');
+      setPhase('quiz');
+    }).catch(function(e){
+      setLoadErr(e.message);
+      var qs = grammarPickQuestions(GRAMMAR_FALLBACK[t], {}, 8);
+      setQuestions(qs); setResults([]); setQIdx(0); setChosen(null); setAnalysisText('');
+      setPhase('quiz');
+    });
+  }
+
+  function pick(opt) {
+    if(chosen!==null) return;
+    setChosen(opt);
+    var q=questions[qIdx];
+    setResults(function(r){return r.concat([{ok:opt===q.correct,chosen:opt,correct:q.correct,hint:q.hint,sentence:q.sentence}]);});
+  }
+
+  function next() {
+    if(qIdx+1>=questions.length){ finishQuiz(); return; }
+    setQIdx(function(i){return i+1;}); setChosen(null);
+  }
+
+  function finishQuiz() {
+    var finalResults = results;
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(player && UUID.test(player.id)){
+      grammarLoadProg(player.id).then(function(prog){
+        var ruleStats = Object.assign({},prog.ruleStats||{});
+        finalResults.forEach(function(r){
+          var rule=r.hint||'unknown';
+          if(!ruleStats[rule]) ruleStats[rule]={correct:0,wrong:0};
+          if(r.ok) ruleStats[rule].correct++; else ruleStats[rule].wrong++;
+        });
+        var session = {ts:Date.now(),topic:topic,score:finalResults.filter(function(r){return r.ok;}).length,total:finalResults.length};
+        var sessions=(prog.sessions||[]).concat([session]).slice(-50);
+        grammarSaveProg(player.id,{sessions:sessions,ruleStats:ruleStats});
+      });
+    }
+    setPhase('results');
+  }
+
+  function getClaudeAnalysis() {
+    var wrongs = results.filter(function(r){return !r.ok;});
+    if(!wrongs.length){setAnalysisText('Perfekt! Keine Fehler - weiter so!');return;}
+    setAnalysisLoading(true); setAnalysisText('');
+    var key=window._ANTHROPIC_KEY||(function(){try{return sessionStorage.getItem('_ak')||'';}catch(e){return '';}})();
+    var wrongList=wrongs.map(function(r){return '"'+r.sentence.replace('___','___')+'" - Richtig: "'+r.correct+'", Antwort: "'+r.chosen+'" (Regel: '+r.hint+')';}).join('\n');
+    var prompt='Du bist ein freundlicher Englisch-Lehrer fuer Klasse 5. Emma hat bei '+topicLabel+' folgende Fehler gemacht:\n\n'+wrongList+'\n\nAnalysiere in 2-3 kurzen Saetzen auf Deutsch (Schuelerniveau):\n1. Was wurde noch nicht verstanden?\n2. Ein konkreter Merksatz als Tipp\nSei ermutigend und kurz.';
+    fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(d){
+      var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim();
+      setAnalysisText(txt||'Analyse nicht verfuegbar.');
+      setAnalysisLoading(false);
+    }).catch(function(){setAnalysisText('Analyse konnte nicht geladen werden.');setAnalysisLoading(false);});
+  }
+
+  if(phase==='select') return(
+    <div style={{padding:8}}>
+      <div style={{textAlign:'center',marginBottom:20,paddingTop:4}}>
+        <div style={{fontSize:40}}>📐</div>
+        <div style={{fontSize:17,fontWeight:'bold',color:G900,marginTop:6}}>Grammatik-Trainer</div>
+        <div style={{fontSize:12,color:G400,marginTop:2}}>Waehle ein Thema</div>
+      </div>
+      {[
+        {id:'sp',icon:'📘',title:'Simple Present',sub:'play - plays - dont - doesnt',color:T},
+        {id:'pp',icon:'📗',title:'Present Progressive',sub:'am/is/are + -ing',color:'#7c3aed'}
+      ].map(function(t){
+        return <button key={t.id} onClick={function(){startTopic(t.id);}}
+          style={{display:'block',width:'100%',textAlign:'left',padding:16,background:'white',
+            border:'2px solid '+t.color+'50',borderRadius:14,cursor:'pointer',marginBottom:12,touchAction:'manipulation'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:32}}>{t.icon}</span>
+            <div>
+              <div style={{fontWeight:'bold',fontSize:16,color:t.color}}>{t.title}</div>
+              <div style={{fontSize:12,color:G400,marginTop:2}}>{t.sub}</div>
+            </div>
+          </div>
+        </button>;
+      })}
+      {onProgress&&<button onClick={onProgress}
+        style={BtnStyle(G100,G600,{width:'100%',padding:11,fontSize:13,marginTop:4,touchAction:'manipulation'})}>
+        Mein Fortschritt ansehen
+      </button>}
+    </div>
+  );
+
+  if(phase==='loading') return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Aufgaben...</div>;
+
+  if(phase==='results'){
+    var correct2=results.filter(function(r){return r.ok;}).length;
+    var pct2=Math.round(correct2/questions.length*100);
+    var wrongs2=results.filter(function(r){return !r.ok;});
+    // A: Rule breakdown
+    var ruleBreakdown={};
+    results.forEach(function(r){
+      var rule=r.hint||'Sonstige';
+      if(!ruleBreakdown[rule]) ruleBreakdown[rule]={correct:0,wrong:0};
+      if(r.ok) ruleBreakdown[rule].correct++; else ruleBreakdown[rule].wrong++;
+    });
+    var ruleList=Object.keys(ruleBreakdown).sort(function(a,b){
+      var ra=ruleBreakdown[a]; var rb=ruleBreakdown[b];
+      var ma=ra.correct/(ra.correct+ra.wrong); var mb=rb.correct/(rb.correct+rb.wrong);
+      return ma-mb;
+    });
+    return <div style={{padding:8}}>
+      <div style={{background:'linear-gradient(135deg,'+T+',#134e4a)',borderRadius:16,padding:'20px',color:'white',textAlign:'center',marginBottom:14}}>
+        <div style={{fontSize:44,marginBottom:6}}>{pct2>=88?'🏆':pct2>=63?'👍':'📚'}</div>
+        <div style={{fontSize:26,fontWeight:'bold'}}>{correct2} / {questions.length} richtig</div>
+        <div style={{fontSize:13,opacity:0.8,marginTop:3}}>{topicLabel} - {pct2}%</div>
+        <div style={{height:6,background:'rgba(255,255,255,0.25)',borderRadius:3,overflow:'hidden',marginTop:10}}>
+          <div style={{height:'100%',width:pct2+'%',background:'white',borderRadius:3}}/>
+        </div>
+      </div>
+      {/* A: Rule breakdown */}
+      {ruleList.length>0&&<div style={{marginBottom:12,padding:'10px 12px',background:'white',borderRadius:10,border:'1px solid '+G200}}>
+        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:8}}>Regel-Auswertung</div>
+        {ruleList.map(function(rule){
+          var s=ruleBreakdown[rule]; var total=s.correct+s.wrong;
+          var pctR=Math.round(s.correct/total*100);
+          var col=pctR>=80?GR:pctR>=60?AM:RE;
+          return <div key={rule} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
+            <span style={{fontSize:10,width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,display:'inline-block'}}/>
+            <span style={{fontSize:12,flex:1,color:G600}}>{rule}</span>
+            <div style={{width:50,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
+              <div style={{height:'100%',width:pctR+'%',background:col}}/>
+            </div>
+            <span style={{fontSize:11,fontWeight:'bold',color:col,minWidth:32,textAlign:'right'}}>{pctR}%</span>
+          </div>;
+        })}
+      </div>}
+      {/* B: Claude analysis button */}
+      {wrongs2.length>0&&<div style={{marginBottom:12}}>
+        {!analysisText&&!analysisLoading&&<button onClick={getClaudeAnalysis}
+          style={BtnStyle('#7c3aed','white',{width:'100%',padding:10,fontSize:13,touchAction:'manipulation'})}>
+          Warum war das falsch? (KI-Analyse)
+        </button>}
+        {analysisLoading&&<div style={{textAlign:'center',padding:12,color:G400,fontSize:12}}>Analysiere Fehler...</div>}
+        {analysisText&&<div style={{padding:'10px 14px',background:'#f3e8ff',borderRadius:10,border:'1px solid #d8b4fe',fontSize:13,color:'#581c87',lineHeight:1.5}}>
+          <div style={{fontWeight:'bold',fontSize:11,color:'#7c3aed',marginBottom:5}}>KI-Fehleranalyse</div>
+          {analysisText}
+        </div>}
+      </div>}
+      {/* Detail list */}
+      {results.map(function(r,i){
+        return <div key={i} style={{marginBottom:6,padding:'8px 10px',borderRadius:8,
+          background:r.ok?'#d1fae5':'#fee2e2',border:'1px solid '+(r.ok?'#86efac':'#fecaca')}}>
+          <div style={{fontSize:12,color:G900,marginBottom:r.ok?0:2}}>{r.sentence.replace('___','['+r.correct+']')}</div>
+          {!r.ok&&<div style={{fontSize:11,color:RE}}>Deine Antwort: <strong>{r.chosen}</strong></div>}
+          {r.hint&&<div style={{fontSize:11,color:G600,marginTop:1}}>Regel: {r.hint}</div>}
+        </div>;
+      })}
+      <div style={{display:'flex',gap:7,marginTop:12}}>
+        <button onClick={function(){startTopic(topic);}}
+          style={BtnStyle(T,'white',{flex:2,padding:11,fontSize:13,touchAction:'manipulation'})}>
+          Nochmal
+        </button>
+        {onProgress&&<button onClick={onProgress}
+          style={BtnStyle('#7c3aed','white',{flex:1,padding:11,fontSize:12,touchAction:'manipulation'})}>
+          Verlauf
+        </button>}
+        <button onClick={onDone}
+          style={BtnStyle(G100,G600,{flex:1,padding:11,fontSize:12,touchAction:'manipulation'})}>
+          Menue
+        </button>
+      </div>
+    </div>;
+  }
+
+  var q=questions[qIdx];
+  if(!q) return null;
+  var parts=q.sentence.split('___');
+  return <div style={{padding:8}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+      <span style={{fontSize:12,color:G400,flex:1}}>{topicLabel}</span>
+      <span style={{fontSize:11,color:G400}}>{qIdx+1} / {questions.length}</span>
+    </div>
+    <div style={{display:'flex',gap:5,justifyContent:'center',marginBottom:14}}>
+      {questions.map(function(_,i){
+        var r2=results[i];
+        return <div key={i} style={{width:22,height:7,borderRadius:4,background:r2?(r2.ok?GR:RE):i===qIdx?AM:G200}}/>;
+      })}
+    </div>
+    <div style={{textAlign:'center',padding:'22px 16px',background:G50,borderRadius:16,marginBottom:12,border:'2px solid '+G200}}>
+      <div style={{fontSize:11,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Richtige Form einsetzen:</div>
+      <div style={{fontSize:18,lineHeight:1.9,color:G900}}>
+        {parts[0]}
+        {chosen
+          ? <span style={{fontWeight:'bold',fontFamily:'monospace',padding:'2px 8px',borderRadius:6,
+              color:chosen===q.correct?T:RE,background:chosen===q.correct?TL:'#fee2e2'}}>{chosen}</span>
+          : <span style={{display:'inline-block',minWidth:90,borderBottom:'3px solid '+T,marginBottom:2}}> </span>
+        }
+        {parts[1]}
+      </div>
+    </div>
+    {chosen&&<div style={{padding:'9px 14px',borderRadius:10,marginBottom:12,fontSize:13,
+      background:chosen===q.correct?'#d1fae5':'#fef9c3',
+      border:'1px solid '+(chosen===q.correct?GR:AM),
+      color:chosen===q.correct?'#065f46':'#92400e'}}>
+      <strong>{chosen===q.correct?'Richtig!':'Richtig: "'+q.correct+'"'}</strong>
+      {q.hint?' - '+q.hint:''}
+    </div>}
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+      {q.options.map(function(opt,i){
+        var ic=opt===q.correct; var ih=opt===chosen;
+        var bg='white',brd='2px solid '+G200,col=G900,db=G200,dc=G600;
+        if(chosen){
+          if(ic)     {bg='#d1fae5';brd='2px solid '+GR;col='#065f46';db=GR;dc='white';}
+          else if(ih){bg='#fee2e2';brd='2px solid '+RE;col='#991b1b';db=RE;dc='white';}
+          else       {bg=G50;col=G400;}
+        }
+        return <button key={i} onClick={function(){if(!chosen)pick(opt);}}
+          style={{padding:'14px 10px',background:bg,border:brd,borderRadius:12,
+            cursor:chosen?'default':'pointer',textAlign:'left',touchAction:'manipulation'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{width:24,height:24,borderRadius:'50%',background:db,color:dc,
+              display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:'bold',flexShrink:0}}>
+              {letters[i]}
+            </span>
+            <span style={{fontSize:14,fontWeight:'bold',color:col,fontFamily:'monospace'}}>{opt}</span>
+          </div>
+        </button>;
+      })}
+    </div>
+    {chosen&&<button onClick={next}
+      style={BtnStyle(T,'white',{width:'100%',marginTop:14,padding:13,fontSize:15,touchAction:'manipulation'})}>
+      {qIdx+1>=questions.length?'Auswertung':'Weiter'}
+    </button>}
+  </div>;
+}
+
+
 // ── App ───────────────────────────────────────────────────────
 function App() {
   // Restore API key from session
@@ -5890,6 +6461,7 @@ function App() {
           {icon:'🏆',label:'Rangliste',sub:'Punkte & Vergleich',screen:'leaderboard'},
           {icon:'📊',label:'Auswertung',sub:'Fehler & Nachübung',screen:'stats',dis:!hasWordRes},
           {icon:'📖',label:'Alle Kapitel',sub:'Vokabeln & Sätze',screen:'browse'},
+          {icon:'📐',label:'Grammatik',sub:'Simple Present · Prog.',screen:'grammar',new2:true},
           {icon:'🎯',label:'Leiterspiel',sub:'4 Töpfe · Fortschritt sichern',screen:'leiterspiel',highlight:true},
         ].map(function(item){
           return(
@@ -5903,6 +6475,18 @@ function App() {
           );
         })}
       </div>
+    </Shell>
+  );
+
+  if(screen==='grammarProgress') return(
+    <Shell showBack={true} onBack={function(){goScreen('grammar');}} title='📈 Grammatik-Fortschritt' player={player}>
+      <GrammarProgress player={player} onBack={function(){goScreen('grammar');}}/>
+    </Shell>
+  );
+
+  if(screen==='grammar') return(
+    <Shell showBack={true} onBack={function(){goScreen('menu');}} title='📐 Grammatik' player={player}>
+      <GrammarGame player={player} onDone={function(){goScreen('menu');}} onProgress={function(){goScreen('grammarProgress');}}/>
     </Shell>
   );
 
