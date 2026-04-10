@@ -2246,7 +2246,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   useEffect(function(){
     Promise.all([
       sbGet('settings','key=eq.ls_runs').then(function(d){ var r=[]; if(d&&d[0]){try{r=JSON.parse(d[0].value);}catch(e){}} return r; }),
-      sbGet('profiles','select=id,name,total_score,total_correct,total_wrong,is_active').then(function(d){return Array.isArray(d)?d:[];})
+      sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_active').then(function(d){return Array.isArray(d)?d:[];})
     ]).then(function(res){ setRuns(res[0]); setAllUsers(res[1]); setLoading(false); });
   },[]);
   function deleteRun(runId){
@@ -2684,7 +2684,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
               </div>
               <button onClick={function(){
                 var active=u.is_active!==false;
-                sbPatch('profiles',{is_active:!active},'id=eq.'+u.id).then(function(){
+                sbPatch('players',{is_active:!active},'id=eq.'+u.id).then(function(){
                   setAllUsers(function(prev){return prev.map(function(x){return x.id===u.id?Object.assign({},x,{is_active:!active}):x;});});
                 });
               }} style={{padding:'4px 10px',borderRadius:6,border:'1px solid '+G200,background:u.is_active!==false?GR:RE,color:'white',cursor:'pointer',fontSize:10,fontWeight:'bold'}}>
@@ -2749,9 +2749,10 @@ function LoginScreen({ onLogin }) {
     hashPw(pw).then(function(hash){
       var local=KNOWN_USERS.find(function(u){return u.name.toLowerCase()===name.trim().toLowerCase()&&u.password_hash===hash;});
       if(local){ onLogin(local); setLoading(false); return; }
-      sbGet('profiles','name=ilike.'+encodeURIComponent(name.trim())).then(function(d){
+      sbGet('players','name=ilike.'+encodeURIComponent(name.trim())+'&select=*').then(function(d){
         var user=Array.isArray(d)&&d[0];
         if(!user){setErr('Nutzer nicht gefunden');setLoading(false);return;}
+        if(user.is_active===false){setErr('Konto gesperrt. Bitte Admin kontaktieren.');setLoading(false);return;}
         if(user.password_hash===hash){
           onLogin(user); setLoading(false);
         } else {
@@ -2802,7 +2803,7 @@ function RegisterScreen({ onRegister, onBack }) {
     if(pw.length<4){setErr('Passwort mind. 4 Zeichen');return;}
     setLoading(true); setErr('');
     hashPw(pw).then(function(hash){
-      sbPost('profiles',{name:name.trim(),password_hash:hash,total_score:0,total_correct:0,total_wrong:0,is_admin:false}).then(function(res){
+      sbPost('players',{name:name.trim(),password_hash:hash,total_score:0,total_correct:0,total_wrong:0,is_admin:false}).then(function(res){
         if(res&&res._err){setErr('Fehler beim Registrieren');setLoading(false);return;}
         onRegister(res||{name:name.trim(),id:null});
         setLoading(false);
@@ -3143,7 +3144,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(!player||!pts) return;
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(UUID.test(player.id)){
-      sbPatch('profiles',{total_score:(player.total_score||0)+pts},'id=eq.'+player.id).then(function(){
+      sbPatch('players',{total_score:(player.total_score||0)+pts},'id=eq.'+player.id).then(function(){
         setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
         setAllUsers(function(prev){return prev.map(function(u){return u.id===player.id?Object.assign({},u,{total_score:(u.total_score||0)+pts}):u;});});
       });
@@ -3331,11 +3332,13 @@ function App() {
         setChapters(merged);
       }
     });
-    var p2 = sbGet('profiles','select=id,name,total_score,total_correct,total_wrong,is_admin,is_active').then(function(d){
+    var p2 = sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_admin,is_active').then(function(d){
       if(Array.isArray(d)&&d.length>0) setAllUsers(d);
     });
-    var p3 = sbGet('categories','select=id,name,icon,bg,text').then(function(d){
-      if(Array.isArray(d)) setAllCategories(d);
+    var p3 = sbGet('settings','key=eq.word_categories&select=value').then(function(d){
+      if(Array.isArray(d)&&d.length>0){
+        try{var cats=JSON.parse(d[0].value||'[]');if(Array.isArray(cats)&&cats.length>0)setAllCategories(cats);}catch(e){}
+      }
     });
     if(!UUID.test(user.id)){
       p1; p2; p3;
