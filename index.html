@@ -1154,10 +1154,6 @@ function BuchstabenSession({ words, onDone }) {
   </div>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-  </script>
-</body>
-</html>
 
 function QuizSolo({ chapters, onDone }) {
   var allRounds = useMemo(function(){ return makeAllRounds(chapters); }, []);
@@ -2226,37 +2222,6 @@ function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, grade
     </div>
   );
 }
-
-// ── Leiterspiel utils ─────────────────────────────────────────
-var DEFAULT_STREAK={required:[2,2,3,3,4],pots:5};
-function lsGetRuns(){ try{ var s=localStorage.getItem('ls_runs'); return s?JSON.parse(s):[]; }catch(e){return [];} }
-function lsGetProgress(runId,pid){ try{ var s=localStorage.getItem('ls_prog_'+runId+'_'+pid); return s?JSON.parse(s):null; }catch(e){return null;} }
-function lsSaveProgress(runId,pid,data){ try{ localStorage.setItem('ls_prog_'+runId+'_'+pid,JSON.stringify(data)); }catch(e){} }
-function lsInitProgress(run,pid,streak){
-  var pots={1:[],2:[],3:[],4:[],5:[]};
-  (run.words||[]).forEach(function(w){ (pots[w.pot]||(pots[w.pot]=[])).push({word:w.word,clue:w.clue}); });
-  var data={runId:run.id,playerId:pid,pots:pots,streak:streak||DEFAULT_STREAK,currentPot:1,totalCorrect:0,totalWrong:0,sessions:[]};
-  lsSaveProgress(run.id,pid,data); return data;
-}
-function lsPercent(data){
-  var total=0,done=0;
-  [1,2,3,4,5].forEach(function(p){ (data.pots[p]||[]).forEach(function(){total++;if(p===5)done++;}); });
-  return total?Math.round(done/total*100):0;
-}
-function lsGrade(data){ var p=lsPercent(data); return p>=90?'A':p>=75?'B':p>=60?'C':p>=50?'D':'F'; }
-function lsPickWord(data,streak){
-  var pot=data.currentPot||1;
-  for(var tries=0;tries<5;tries++){
-    var words=data.pots[pot]||[];
-    if(words.length>0){
-      var w=shuffleArr(words)[0];
-      return {word:w.word,clue:w.clue,pot:pot};
-    }
-    pot=pot<5?pot+1:1;
-  }
-  return null;
-}
-function normWordKey(s){ return (s||'').trim().toLowerCase().replace(/^to\s+/,''); }
 
 // T2LetterField with FIX 2, 3, 4 (wordNoSpaces)
 function T2LetterField({ word, onCorrect, onWrong }) {
