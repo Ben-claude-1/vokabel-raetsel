@@ -985,9 +985,9 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
     function pollAll(){
       sbGet('quiz_duels','player2_id=eq.'+player.id+'&status=eq.waiting&select=id,code,player1_name,created_at').then(function(d){
         if(Array.isArray(d)) setPendingChallenges(d);
-      });
+      }).catch(function(){});
       if(gameId){
-        sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){ if(d) setGameData(d); });
+        sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){ if(d) setGameData(d); }).catch(function(){});
       }
     }
     pollAll();
@@ -2677,16 +2677,10 @@ function LoginScreen({ onLogin }) {
   var [pw, setPw] = useState('');
   var [err, setErr] = useState('');
   var [loading, setLoading] = useState(false);
-  var KNOWN_USERS = [
-    { id: "supabase-emma-d46d1397", name: "Emma", password_hash: "fb_63b25a920b81aad7",
-      is_admin: false, total_score: 0, total_correct: 0, total_wrong: 0, puzzles_completed: 0 }
-  ];
   function doLogin() {
     if(!name.trim()||!pw.trim()){setErr('Name und Passwort eingeben');return;}
     setLoading(true); setErr('');
     hashPw(pw).then(function(hash){
-      var local=KNOWN_USERS.find(function(u){return u.name.toLowerCase()===name.trim().toLowerCase()&&u.password_hash===hash;});
-      if(local){ onLogin(local); setLoading(false); return; }
       sbGet('players','name=ilike.'+encodeURIComponent(name.trim())+'&select=*').then(function(d){
         var user=Array.isArray(d)&&d[0];
         if(!user){setErr('Nutzer nicht gefunden');setLoading(false);return;}
@@ -3085,7 +3079,8 @@ function GrammarGame({ player, onDone }) {
 }
 
 function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout }) {
-  var [screen, setScreen] = useState('home');
+  var isAdmin = !!(player && player.is_admin);
+  var [screen, setScreen] = useState(isAdmin ? 'admin' : 'home');
   var [screenData, setScreenData] = useState(null);
   var [lsRun, setLsRun] = useState(null);
   var [lsStreak, setLsStreak] = useState(null);
@@ -3105,13 +3100,14 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     }
   }
 
-  var tabs = [
-    {id:'home',label:'🏠',title:'Home'},
-    {id:'learn',label:'📚',title:'Lernen'},
-    {id:'games',label:'🎮',title:'Spiele'},
-    {id:'progress',label:'📊',title:'Fortschritt'},
-  ];
-  if(player&&player.is_admin) tabs.push({id:'admin',label:'⚙️',title:'Admin'});
+  var tabs = isAdmin
+    ? [{id:'admin', label:'⚙️', title:'Admin'}]
+    : [
+        {id:'home',     label:'🏠', title:'Home'},
+        {id:'learn',    label:'📚', title:'Lernen'},
+        {id:'games',    label:'🎮', title:'Spiele'},
+        {id:'progress', label:'📊', title:'Fortschritt'},
+      ];
 
   var childChapters = chapters.filter(function(c){return c.parent_id;});
 
@@ -3148,7 +3144,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Rangliste',word_select_trainer:'📝 Trainer'
   };
 
-  var mainScreens = ['home','learn','games','progress','admin'];
+  var mainScreens = isAdmin
+    ? ['admin']
+    : ['home','learn','games','progress','admin'];
   var showBack = mainScreens.indexOf(screen)<0;
 
   if(inner===null||mainScreens.indexOf(screen)>=0){
