@@ -702,7 +702,7 @@ function ProgressStats({ chapters, player, allCategories }) {
         });
       });
       setLearnedSet(learned); setPotMap(pots); setLoading(false);
-    });
+    }).catch(function(){ setLoading(false); });
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Daten…</div>;
   function toggle(id){setExpanded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
@@ -817,75 +817,6 @@ function ProgressStats({ chapters, player, allCategories }) {
       )}
     </div>
   );
-}
-
-function Login({ onLogin, onRegister }) {
-  var [name,setName]=useState(''); var [pw,setPw]=useState(''); var [err,setErr]=useState(''); var [loading,setLoading]=useState(false);
-  function doLogin(){
-    if(!name.trim()||!pw.trim()){setErr('Bitte alle Felder ausfullen');return;} setLoading(true); setErr('');
-    sbGet('players','name=ilike.'+encodeURIComponent(name.trim())+'&select=*').then(function(users){
-      var user=Array.isArray(users)&&users.length?users[0]:null;
-      if(!user){setLoading(false);setErr('Nutzer nicht gefunden');return;}
-      hashPw(pw).then(function(hashed){
-        if(user.password_hash!==hashed){setLoading(false);setErr('Falsches Passwort');return;}
-        setLoading(false); onLogin(user);
-      });
-    }).catch(function(){setLoading(false);setErr('Verbindungsfehler');});
-  }
-  return <div style={{maxWidth:360,margin:'0 auto',padding:20}}>
-    <div style={{textAlign:'center',marginBottom:24}}>
-      <div style={{fontSize:50,marginBottom:8}}>📚</div>
-      <h1 style={{fontSize:22,color:T,margin:0}}>Vokabel-Raetsel</h1>
-    </div>
-    <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Benutzername" style={{width:'100%',padding:'12px 14px',fontSize:16,border:'2px solid '+G200,borderRadius:10,outline:'none',marginBottom:10}}/>
-    <input type="password" value={pw} onChange={function(e){setPw(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="Passwort" style={{width:'100%',padding:'12px 14px',fontSize:16,border:'2px solid '+G200,borderRadius:10,outline:'none',marginBottom:12}}/>
-    {err&&<div style={{color:RE,fontSize:12,marginBottom:10,padding:'6px 10px',background:'#fef2f2',borderRadius:7}}>{err}</div>}
-    <button onClick={doLogin} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:16,opacity:loading?0.7:1})}>{loading?'Anmelden...':'Anmelden'}</button>
-    <button onClick={onRegister} style={{width:'100%',padding:'10px',marginTop:8,background:'none',border:'none',color:G400,fontSize:13,cursor:'pointer'}}>Noch kein Konto? Registrieren</button>
-  </div>;
-}
-
-function Register({ onBack }) {
-  var [name,setName]=useState(''); var [pw,setPw]=useState(''); var [err,setErr]=useState(''); var [loading,setLoading]=useState(false); var [done,setDone]=useState(false);
-  function doRegister(){
-    if(!name.trim()||!pw.trim()){setErr('Bitte alle Felder ausfullen');return;} if(pw.length<4){setErr('Passwort mind. 4 Zeichen');return;}
-    setLoading(true); setErr('');
-    hashPw(pw).then(function(hashed){
-      sbPost('players',{name:name.trim(),password_hash:hashed,total_score:0,total_correct:0,is_admin:false}).then(function(res){
-        setLoading(false); if(res&&res._err){setErr('Fehler');return;} setDone(true);
-      }).catch(function(){setLoading(false);setErr('Verbindungsfehler');});
-    });
-  }
-  if(done) return <div style={{maxWidth:360,margin:'0 auto',padding:20,textAlign:'center'}}>
-    <div style={{fontSize:40,marginBottom:12}}>OK</div>
-    <button onClick={onBack} style={BtnStyle(T,'white',{padding:'12px 24px',marginTop:12})}>Zum Login</button>
-  </div>;
-  return <div style={{maxWidth:360,margin:'0 auto',padding:20}}>
-    <div style={{textAlign:'center',marginBottom:20}}><h2 style={{color:T,margin:0}}>Registrieren</h2></div>
-    <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Benutzername" style={{width:'100%',padding:'12px',fontSize:16,border:'2px solid '+G200,borderRadius:10,outline:'none',marginBottom:10}}/>
-    <input type="password" value={pw} onChange={function(e){setPw(e.target.value);}} placeholder="Passwort (mind. 4 Zeichen)" style={{width:'100%',padding:'12px',fontSize:16,border:'2px solid '+G200,borderRadius:10,outline:'none',marginBottom:12}}/>
-    {err&&<div style={{color:RE,fontSize:12,marginBottom:10}}>{err}</div>}
-    <button onClick={doRegister} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15})}>{loading?'Erstellen...':'Konto erstellen'}</button>
-    <button onClick={onBack} style={{width:'100%',padding:'10px',marginTop:8,background:'none',border:'none',color:G400,fontSize:12,cursor:'pointer'}}>Zurueck</button>
-  </div>;
-}
-
-function BuchstabenSession({ words, onDone }) {
-  var [idx,setIdx]=useState(0); var [results,setResults]=useState([]);
-  if(!words.length||idx>=words.length) return <div style={{textAlign:'center',padding:20}}>
-    <div style={{fontSize:36,marginBottom:8}}>Fertig!</div>
-    <div style={{fontSize:18,fontWeight:'bold',color:T,marginBottom:12}}>{results.filter(Boolean).length}/{words.length} richtig</div>
-    <button onClick={onDone} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>Zurueck</button>
-  </div>;
-  var cw=words[idx];
-  return <div>
-    <div style={{textAlign:'center',padding:'16px 10px',background:G50,borderRadius:12,marginBottom:12,border:'2px solid '+G200}}>
-      <div style={{fontSize:11,color:G400,marginBottom:4}}>Englisch fuer:</div>
-      <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{cw.clue}</div>
-      <div style={{fontSize:10,color:G400,marginTop:4}}>{idx+1}/{words.length}</div>
-    </div>
-    <T2LetterField word={cw.word} onCorrect={function(){setResults(function(r){return r.concat([true]);});setIdx(function(i){return i+1;});}} onWrong={function(){setResults(function(r){return r.concat([false]);});setIdx(function(i){return i+1;});}}/>
-  </div>;
 }
 
 
@@ -1693,11 +1624,8 @@ function CelebrationPopup({ msg, onClose }) {
 
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp, setPlayer }) {
   var streak = streakProp || DEFAULT_STREAK;
-  var [data, setData] = useState(function(){
-    var saved = lsGetProgress(run.id, player.id);
-    if(saved) return saved;
-    return lsInitProgress(run, player.id, streak);
-  });
+  var [data, setData] = useState(null);
+  var [dataLoading, setDataLoading] = useState(true);
   var [phase, setPhase] = useState('pick');
   var [current, setCurrent] = useState(null);
   var [input, setInput] = useState('');
@@ -1706,10 +1634,31 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [celebration, setCelebration] = useState(null);
   var [sessionLog, setSessionLog] = useState([]);
   var inputRef = useRef();
+
+  useEffect(function(){
+    if(!player||!run) return;
+    var runWords=[]; try{runWords=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
+    var runSents=[]; try{runSents=typeof run.sentences==='string'?JSON.parse(run.sentences||'[]'):(run.sentences||[]);}catch(e){}
+    lsGetProgress(player.id, run.id).then(function(rows){
+      if(Array.isArray(rows)&&rows.length>0){
+        var row=rows[0];
+        var d={}; try{d=JSON.parse(row.data||'{}');}catch(e){}
+        if(!d.pots) d=lsInitProgress(runWords, runSents);
+        setData(d);
+      } else {
+        setData(lsInitProgress(runWords, runSents));
+      }
+      setDataLoading(false);
+    }).catch(function(){
+      setData(lsInitProgress(runWords, runSents));
+      setDataLoading(false);
+    });
+  },[]);
+
   useEffect(function(){ if(inputRef.current && phase==='answer') inputRef.current.focus(); },[phase]);
 
   function saveAndUpdate(newData){
-    lsSaveProgress(run.id, player.id, newData);
+    lsSaveProgress(player.id, run.id, newData);
     setData(newData);
   }
 
@@ -1766,6 +1715,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(allDone){ setPhase('done'); return; }
     pickWord();
   }
+
+  if(dataLoading||!data) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
 
   if(phase==='pick'){
     var pct = lsPercent(data);
@@ -1926,10 +1877,9 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   useEffect(function(){
     if(!player||!UUID.test(player.id)){setLoading(false);return;}
-    sbGet('settings','key=eq.ls_runs').then(function(d){
-      var r=[]; if(d&&d[0]){try{r=JSON.parse(d[0].value);}catch(e){}}
-      setRuns(r); setLoading(false);
-    });
+    lsGetRuns().then(function(r){
+      setRuns(Array.isArray(r)?r:[]); setLoading(false);
+    }).catch(function(){ setLoading(false); });
     sbGet('settings','key=eq.streak_settings').then(function(d){
       if(d&&d[0]){try{var s=JSON.parse(d[0].value);setStreakSettings(s);}catch(e){}}
     });
@@ -1940,9 +1890,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
       {runs.map(function(run){
-        var prog=lsGetProgress(run.id,player.id);
-        var pct=prog?lsPercent(prog):0;
-        var grade=prog?lsGrade(prog):null;
+        var wordCount = run.word_count || (run.words ? (typeof run.words==='string' ? JSON.parse(run.words||'[]').length : (run.words||[]).length) : 0);
         return(
           <button key={run.id} onClick={function(){onStart(run,streakSettings||DEFAULT_STREAK);}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+(T+'44'),background:'white',cursor:'pointer',touchAction:'manipulation'}}>
@@ -1950,14 +1898,10 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
               <span style={{fontSize:22}}>{run.icon||'🎯'}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.name}</div>
-                <div style={{fontSize:10,color:G400}}>{(run.words||[]).length} Vokabeln</div>
+                <div style={{fontSize:10,color:G400}}>{wordCount} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
               </div>
-              {grade&&<GradeDisplay grade={grade} pct={pct}/>}
-              {!grade&&<span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
+              <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>▶ Starten</span>
             </div>
-            {pct>0&&<div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginTop:8}}>
-              <div style={{height:'100%',width:pct+'%',background:T,borderRadius:2}}/>
-            </div>}
           </button>
         );
       })}
@@ -1972,6 +1916,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
   var [openCh, setOpenCh] = useState(null);
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var allWords = useMemo(function(){
     var w=[];
     chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
@@ -1997,15 +1942,16 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   function save(){
     if(!name.trim()||selectedWords.length<2){setMsg('Name und mind. 2 Wörter erforderlich');return;}
     setSaving(true);
-    var runId='run_'+Date.now();
-    sbGet('settings','key=eq.ls_runs').then(function(d){
-      var existing=[]; if(d&&d[0]){try{existing=JSON.parse(d[0].value);}catch(e){}}
-      var newRun={id:runId,name:name.trim(),icon:icon,words:selectedWords,createdBy:player.id,createdAt:new Date().toISOString()};
-      var updated=existing.concat([newRun]);
-      var body={key:'ls_runs',value:JSON.stringify(updated)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(updated)},'key=eq.ls_runs').then(function(){setSaving(false);setMsg('✓ Run gespeichert!');setTimeout(onDone,1000);}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Run gespeichert!');setTimeout(onDone,1000);}); }
-    });
+    var wordsJson=JSON.stringify(selectedWords.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapId||'',important:w.important||false};}));
+    var newRun={name:name.trim(),icon:icon,player_id:UUID.test(player.id)?player.id:null,
+      is_admin_run:!!(player.is_admin),word_count:selectedWords.length,sentence_count:0,
+      words:wordsJson,sentences:'[]',created_at:new Date().toISOString()};
+    sbPost('ls_runs',newRun).then(function(res){
+      setSaving(false);
+      if(res&&res._err){setMsg('Fehler: '+res.msg);return;}
+      setMsg('✓ Run gespeichert!');
+      setTimeout(onDone,1000);
+    }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
   var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
   return(
@@ -2069,15 +2015,15 @@ function LeitersSpielStreakSettings({ onDone }) {
   useEffect(function(){
     sbGet('settings','key=eq.streak_settings').then(function(d){
       if(d&&d[0]){try{setSettings(JSON.parse(d[0].value));}catch(e){}}
-    });
+    }).catch(function(){});
   },[]);
   function save(){
     setSaving(true);
     sbGet('settings','key=eq.streak_settings').then(function(d){
       var body={key:'streak_settings',value:JSON.stringify(settings)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(settings)},'key=eq.streak_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}); }
-    });
+      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(settings)},'key=eq.streak_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+    }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
   return(
     <div style={{padding:8}}>
@@ -2108,15 +2054,15 @@ function LeitersSpielGradeSettings({ onDone }) {
   useEffect(function(){
     sbGet('settings','key=eq.grade_settings').then(function(d){
       if(d&&d[0]){try{setThresholds(JSON.parse(d[0].value));}catch(e){}}
-    });
+    }).catch(function(){});
   },[]);
   function save(){
     setSaving(true);
     sbGet('settings','key=eq.grade_settings').then(function(d){
       var body={key:'grade_settings',value:JSON.stringify(thresholds)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(thresholds)},'key=eq.grade_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}); }
-    });
+      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(thresholds)},'key=eq.grade_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+    }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
   return(
     <div style={{padding:8}}>
@@ -2178,14 +2124,13 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   }
   function save(){
     setSaving(true);
-    sbGet('settings','key=eq.ls_runs').then(function(d){
-      var existing=[]; if(d&&d[0]){try{existing=JSON.parse(d[0].value);}catch(e){}}
-      var updated=existing.map(function(r){return r.id===run.id?Object.assign({},r,{words:words}):r;});
-      if(!updated.find(function(r){return r.id===run.id;})) updated=updated.concat([Object.assign({},run,{words:words})]);
-      var body={value:JSON.stringify(updated)};
-      if(d&&d[0]){ sbPatch('settings',body,'key=eq.ls_runs').then(function(){setSaving(false);onSave(Object.assign({},run,{words:words}));}); }
-      else { sbPost('settings',Object.assign({key:'ls_runs'},body)).then(function(){setSaving(false);onSave(Object.assign({},run,{words:words}));}); }
-    });
+    var wordsJson = JSON.stringify(words);
+    sbPatch('ls_runs',{words:wordsJson,word_count:words.length,name:run.name},'id=eq.'+run.id)
+      .then(function(){
+        setSaving(false);
+        onSave(Object.assign({},run,{words:words,word_count:words.length}));
+      })
+      .catch(function(){setSaving(false);});
   }
   var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
   return(
@@ -2245,16 +2190,15 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   var [tab, setTab] = useState('runs');
   useEffect(function(){
     Promise.all([
-      sbGet('settings','key=eq.ls_runs').then(function(d){ var r=[]; if(d&&d[0]){try{r=JSON.parse(d[0].value);}catch(e){}} return r; }),
+      lsGetRuns(),
       sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_active').then(function(d){return Array.isArray(d)?d:[];})
-    ]).then(function(res){ setRuns(res[0]); setAllUsers(res[1]); setLoading(false); });
+    ]).then(function(res){ setRuns(Array.isArray(res[0])?res[0]:[]); setAllUsers(res[1]); setLoading(false); })
+      .catch(function(){ setLoading(false); });
   },[]);
   function deleteRun(runId){
     if(!confirm('Run löschen?')) return;
-    sbGet('settings','key=eq.ls_runs').then(function(d){
-      var existing=[]; if(d&&d[0]){try{existing=JSON.parse(d[0].value);}catch(e){}}
-      var updated=existing.filter(function(r){return r.id!==runId;});
-      sbPatch('settings',{value:JSON.stringify(updated)},'key=eq.ls_runs').then(function(){ setRuns(updated); });
+    sbDel('ls_runs','id=eq.'+runId).then(function(){
+      setRuns(function(prev){ return prev.filter(function(r){return r.id!==runId;}); });
     });
   }
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
@@ -2278,17 +2222,11 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       </div>)}
       {tab==='progress'&&(<div>
         {allUsers.map(function(u){
-          var userRuns=runs.map(function(run){
-            var prog=lsGetProgress(run.id,u.id);
-            return{run:run,pct:prog?lsPercent(prog):null,grade:prog?lsGrade(prog):null};
-          });
           return <div key={u.id} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{fontWeight:'bold',fontSize:13,marginBottom:6}}>{u.name}</div>
             <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-              {userRuns.map(function(ur){ return <div key={ur.run.id} style={{padding:'4px 8px',borderRadius:8,background:ur.grade?T+'18':G100,border:'1px solid '+(ur.grade?T:G200),fontSize:11}}>
-                <span style={{fontWeight:'bold',color:T}}>{ur.run.icon} {ur.run.name}</span>
-                {ur.grade&&<span style={{marginLeft:6,color:T,fontWeight:'bold'}}>{ur.grade} ({ur.pct}%)</span>}
-                {!ur.grade&&<span style={{marginLeft:6,color:G400}}>—</span>}
+              {runs.map(function(run){ return <div key={run.id} style={{padding:'4px 8px',borderRadius:8,background:G100,border:'1px solid '+G200,fontSize:11}}>
+                <span style={{fontWeight:'bold',color:T}}>{run.icon||'🎯'} {run.name}</span>
               </div>; })}
             </div>
           </div>;
@@ -2758,8 +2696,8 @@ function LoginScreen({ onLogin }) {
         } else {
           setErr('Falsches Passwort'); setLoading(false);
         }
-      });
-    });
+      }).catch(function(){ setErr('Verbindungsfehler'); setLoading(false); });
+    }).catch(function(){ setErr('Fehler'); setLoading(false); });
   }
   return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)',padding:16}}>
@@ -2807,8 +2745,8 @@ function RegisterScreen({ onRegister, onBack }) {
         if(res&&res._err){setErr('Fehler beim Registrieren');setLoading(false);return;}
         onRegister(res||{name:name.trim(),id:null});
         setLoading(false);
-      });
-    });
+      }).catch(function(){ setErr('Verbindungsfehler'); setLoading(false); });
+    }).catch(function(){ setErr('Fehler'); setLoading(false); });
   }
   return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)',padding:16}}>
@@ -3008,11 +2946,14 @@ function GrammarGame({ player, onDone }) {
   function startTopic(t){
     setLoading(true); setTopic(t);
     loadGrammarPool(t).then(function(p){
+      if(!p||p.length===0){
+        setLoading(false); setPhase('empty'); return;
+      }
       setPool(p);
-      var qs=grammarPickQuestions(p,ruleStats,10);
+      var qs=grammarPickQuestions(p,ruleStats,Math.min(10,p.length));
       setQuestions(qs); setQIdx(0); setResults([]); setInput(''); setResult(null); setPhase('game');
       setLoading(false);
-    });
+    }).catch(function(){setLoading(false);});
   }
 
   useEffect(function(){ if(inputRef.current&&!result&&phase==='game') inputRef.current.focus(); },[qIdx,result,phase]);
@@ -3072,6 +3013,17 @@ function GrammarGame({ player, onDone }) {
   );
 
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fragen…</div>;
+
+  if(phase==='empty') return(
+    <div style={{padding:16,textAlign:'center'}}>
+      <div style={{fontSize:40,marginBottom:12}}>📝</div>
+      <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:8}}>Noch keine Übungen vorhanden</div>
+      <div style={{fontSize:13,color:G600,marginBottom:16}}>
+        Admin muss zuerst Sätze generieren: Admin → ✏️ Grammatik-Tab → Thema wählen → 🤖 KI-Generierung
+      </div>
+      <button onClick={function(){setPhase('menu');setTopic(null);}} style={BtnStyle(T,'white',{padding:'10px 20px'})}>← Zurück</button>
+    </div>
+  );
 
   if(phase==='result'){
     var corr2=results.filter(function(r){return r.correct;}).length;
@@ -3345,7 +3297,7 @@ function App() {
       setLoading(false);
       return;
     }
-    Promise.all([p1,p2,p3]).then(function(){ setLoading(false); });
+    Promise.all([p1,p2,p3]).then(function(){ setLoading(false); }).catch(function(){ setLoading(false); });
   }
 
   function handleLogout() {
