@@ -1874,6 +1874,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
   var [runs, setRuns] = useState([]);
   var [loading, setLoading] = useState(true);
   var [streakSettings, setStreakSettings] = useState(null);
+  var [progressMap, setProgressMap] = useState({});
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   useEffect(function(){
     if(!player||!UUID.test(player.id)){setLoading(false);return;}
@@ -1891,8 +1892,12 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
       {runs.map(function(run){
         var wordCount = run.word_count || (run.words ? (typeof run.words==='string' ? JSON.parse(run.words||'[]').length : (run.words||[]).length) : 0);
+        var gs = streakSettings || DEFAULT_STREAK;
+        var prog = progressMap[run.id];
+        var pct = prog ? lsPercent(prog,gs) : 0;
+        var grade = prog ? lsGrade(pct,gs) : null;
         return(
-          <button key={run.id} onClick={function(){onStart(run,streakSettings||DEFAULT_STREAK);}}
+          <button key={run.id} onClick={function(){onStart(run,gs);}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+(T+'44'),background:'white',cursor:'pointer',touchAction:'manipulation'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:22}}>{run.icon||'🎯'}</span>
@@ -1900,8 +1905,10 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
                 <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.name}</div>
                 <div style={{fontSize:10,color:G400}}>{wordCount} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
               </div>
-              <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>▶ Starten</span>
+              {grade ? <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',fontSize:16,color:T}}>{grade}</div><div style={{fontSize:10,color:G400}}>{pct}%</div></div>
+                     : <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
             </div>
+            {pct>0&&<div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginTop:8}}><div style={{height:'100%',width:pct+'%',background:T,borderRadius:2}}/></div>}
           </button>
         );
       })}
@@ -2096,12 +2103,15 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
 }
 
 function RunEditor({ run, chapters, onSave, onCancel }) {
-  var [words, setWords] = useState((run.words||[]).slice());
+  var initWords = useMemo(function(){
+    var raw=run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}} return Array.isArray(raw)?raw.slice():[];
+  },[]);
+  var [words, setWords] = useState(initWords);
   var [saving, setSaving] = useState(false);
   var allChapWords = useMemo(function(){
     var w=[];
     chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
-      (ch.words||[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
+      var cw=ch.words; if(typeof cw==='string'){try{cw=JSON.parse(cw);}catch(e){cw=[];}} (Array.isArray(cw)?cw:[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
     });
     return w;
   },[chapters]);
@@ -2213,7 +2223,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
           return <div key={run.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:20}}>{run.icon||'🎯'}</span>
-              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div><div style={{fontSize:10,color:G400}}>{(run.words||[]).length} Vokabeln</div></div>
+              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div><div style={{fontSize:10,color:G400}}>{run.word_count||(typeof run.words==='string'?JSON.parse(run.words||'[]').length:(run.words||[]).length)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div></div>
               <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>✏️</button>
               <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>🗑</button>
             </div>
