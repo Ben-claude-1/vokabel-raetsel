@@ -239,6 +239,12 @@ var SOLS = [
 // FIX 1: shuffleArr + shuffle alias (needed by grammarPickQuestions)
 function shuffleArr(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
 var shuffle = shuffleArr;
+function naturalSort(a, b) {
+  var ka = ((a.title||a.word||a.name||'')+'').toLowerCase(), kb = ((b.title||b.word||b.name||'')+'').toLowerCase();
+  var na=ka.match(/^(\D*)(\d+)/), nb=kb.match(/^(\D*)(\d+)/);
+  if(na&&nb&&na[1]===nb[1]) return parseInt(na[2])-parseInt(nb[2]);
+  return ka.localeCompare(kb);
+}
 
 function getWordType(w) {
   var t = (w.type||'').toLowerCase();
@@ -2793,12 +2799,7 @@ function LeitersSpielGradeSettings({ onDone }) {
   );
 }
 
-function naturalSort(a, b) {
-  var ka = ((a.title||a.word||'')+'').toLowerCase(), kb = ((b.title||b.word||'')+'').toLowerCase();
-  var na=ka.match(/^(\D*)(\d+)/), nb=kb.match(/^(\D*)(\d+)/);
-  if(na&&nb&&na[1]===nb[1]) return parseInt(na[2])-parseInt(nb[2]);
-  return ka.localeCompare(kb);
-}
+
 function sortWords(words){ return words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}); }
 function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving, setMsg) {
   setSaving(true);
