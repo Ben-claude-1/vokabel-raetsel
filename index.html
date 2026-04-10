@@ -1860,59 +1860,6 @@ function lsPickWord(progress,lastWord) { var cands=[]; [1,2,3,4].forEach(functio
 function normWordKey(w) { return (w||'').toLowerCase().trim().replace(/^to\s+/,''); }
 
 // FIX 2+3+4: T2LetterField - spaces excluded from tiles, wordNoSpaces for complete/check
-function T2LetterField({ word, onCorrect, onWrong }) {
-  var wordNoSpaces = word.replace(/ /g,'');
-  var initLetters=useMemo(function(){
-    var real=wordNoSpaces.split('').map(function(l,i){return{l:l,id:'t2_'+i};});
-    var POOL='bcdfghjklmnpqrstvwxyz'.split('').filter(function(c){ return wordNoSpaces.toLowerCase().indexOf(c)<0; });
-    var extras=shuffleArr(POOL).slice(0,Math.min(3,POOL.length));
-    var dummies=extras.map(function(l,i){return{l:l,id:'t2_dummy_'+i};});
-    return shuffleArr(real.concat(dummies));
-  },[wordNoSpaces]);
-  var [source,setSource]=useState(initLetters);
-  var [answer,setAnswer]=useState([]);
-  var [dragId,setDragId]=useState(null);
-  var [dragFrom,setDragFrom]=useState(null);
-  var [overZone,setOverZone]=useState(null);
-  var [overIdx,setOverIdx]=useState(null);
-  var [checked,setChecked]=useState(false);
-  var [correct,setCorrect]=useState(null);
-  useEffect(function(){
-    setSource(shuffleArr(wordNoSpaces.split('').map(function(l,i){return{l:l,id:'t2_'+i};})));
-    setAnswer([]); setChecked(false); setCorrect(null);
-  },[wordNoSpaces]);
-  function getTile(id){return source.find(function(t){return t.id===id;})||answer.find(function(t){return t.id===id;});}
-  function moveToAnswer(tile,idx){setSource(function(s){return s.filter(function(t){return t.id!==tile.id;});});setAnswer(function(a){var na=a.filter(function(t){return t.id!==tile.id;});if(typeof idx==='number')na.splice(idx,0,tile);else na.push(tile);return na;});}
-  function moveToSource(tile){setAnswer(function(a){return a.filter(function(t){return t.id!==tile.id;});});setSource(function(s){return s.concat([tile]);});}
-  function reorderAnswer(tile,idx){setAnswer(function(a){var na=a.filter(function(t){return t.id!==tile.id;});if(typeof idx==='number')na.splice(idx,0,tile);else na.push(tile);return na;});}
-  function check(){
-    var typed=answer.map(function(t){return t.l;}).join('');
-    var ok=typed.toLowerCase()===wordNoSpaces.toLowerCase();
-    setChecked(true); setCorrect(ok);
-    if(ok) onCorrect(); else onWrong(typed);
-  }
-  var complete=answer.length===wordNoSpaces.length;
-  var tileBase={display:'inline-flex',alignItems:'center',justifyContent:'center',width:38,height:38,borderRadius:6,fontSize:18,fontWeight:'bold',cursor:checked?'default':'pointer',userSelect:'none',touchAction:'none',flexShrink:0,transition:'border-color 0.1s'};
-  function dropOnAnswer(e,insertIdx){e.preventDefault();if(!dragId) return;var tile=getTile(dragId);if(!tile) return;if(dragFrom==='source') moveToAnswer(tile,insertIdx);else reorderAnswer(tile,insertIdx);setDragId(null);setDragFrom(null);setOverZone(null);setOverIdx(null);}
-  return (
-    <div>
-      {word!==wordNoSpaces&&<div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:4}}>Leerzeichen werden automatisch ergänzt</div>}
-      <div onDragOver={function(e){e.preventDefault();setOverZone('answer');}} onDrop={function(e){dropOnAnswer(e,answer.length);}}
-        style={{display:'flex',flexWrap:'wrap',gap:5,minHeight:54,padding:8,borderRadius:8,border:'2px solid '+(overZone==='answer'?'#0369a1':'#93c5fd'),background:overZone==='answer'?'#eff6ff':'#f0f9ff',marginBottom:8,alignItems:'center',justifyContent:'center',position:'relative'}}>
-        <div style={{position:'absolute',top:3,left:8,fontSize:10,color:'#93c5fd'}}>Antwortfeld</div>
-        {answer.length===0&&<span style={{color:G400,fontSize:12,marginTop:8}}>Antippen oder hierher ziehen</span>}
-        {answer.map(function(tile,idx){
-          var corr=checked&&tile.l===wordNoSpaces[idx];
-          var wrng=checked&&tile.l!==wordNoSpaces[idx];
-          return (<div key={tile.id} style={{display:'inline-flex',alignItems:'center'}}>
-            <div onDragOver={function(e){e.preventDefault();setOverIdx(idx);}} onDrop={function(e){dropOnAnswer(e,idx);}} style={{width:overIdx===idx?4:0,height:38,background:'#0369a1',borderRadius:2,transition:'width 0.12s'}}/>
-            <div draggable={!checked} onDragStart={function(){if(!checked){setDragId(tile.id);setDragFrom('answer');}}} onDragEnd={function(){setDragId(null);setOverZone(null);setOverIdx(null);}} onClick={function(){if(!checked)moveToSource(tile);}}
-              style={Object.assign({},tileBase,{border:'1.5px solid '+(dragId===tile.id?'#93c5fd':corr?'#22c55e':wrng?'#ef4444':'#0369a1'),background:dragId===tile.id?'#dbeafe':corr?'#dcfce7':wrng?'#fee2e2':'#eff6ff',color:corr?'#15803d':wrng?'#dc2626':'#1e40af',opacity:dragId===tile.id?0.4:1})}>
-              {tile.l}
-            </div>
-          </div>);
-        })}
-
 function AdminDash({ chapters, setChapters, allUsers, setAllUsers, player, gradeSettings, streakSettings, setGradeSettings, setStreakSettings, allCategories, setAllCategories, allRuns }) {
   var [tab,setTab]=useState('users');
   var [players,setPlayers]=useState([]);
