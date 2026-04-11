@@ -1538,12 +1538,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
   var wordNoSpaces=word.replace(/ /g,'');
   var initLetters=useMemo(function(){
     var real=word.split('').filter(function(l){return l!==' ';}).map(function(l,i){return{l:l,id:'t2_'+i,dummy:false};});
-    var POOL='bcdfghjklmnpqrstvwxyz'.split('').filter(function(c){
-      return wordNoSpaces.toLowerCase().indexOf(c)<0;
-    });
-    var extras=shuffleArr(POOL).slice(0,Math.min(3,POOL.length));
-    var dummies=extras.map(function(l,i){return{l:l,id:'t2_dummy_'+i,dummy:true};});
-    return shuffleArr(real.concat(dummies));
+    return shuffleArr(real);
   },[word]);
   var [tiles, setTiles] = useState(initLetters);
   var [answer, setAnswer] = useState([]);
@@ -1565,9 +1560,9 @@ function T2LetterField({ word, onCorrect, onWrong }) {
     var typed=answer.map(function(t){return t.l;}).join('');
     var ok=typed.toLowerCase()===wordNoSpaces.toLowerCase();
     setChecked(true); setCorrect(ok);
-    if(ok) onCorrect(); else onWrong(typed);
+    setTimeout(function(){ if(ok) onCorrect(); else onWrong(typed); }, ok?600:0);
   }
-  function reset(){ setTiles(initLetters); setAnswer([]); setChecked(false); setCorrect(false); }
+  function reset(){ setTiles(shuffleArr(initLetters)); setAnswer([]); setChecked(false); setCorrect(false); }
   var displayWord = word;
   var answerDisplay = (function(){
     if(!checked) return answer.map(function(t){return t.l;});
@@ -1594,13 +1589,14 @@ function T2LetterField({ word, onCorrect, onWrong }) {
       </div>
       {!checked&&(
         <div style={{display:'flex',flexWrap:'wrap',gap:5,justifyContent:'center',marginBottom:10}}>
-          {tiles.map(function(t){ return <button key={t.id} onClick={function(){addLetter(t);}} style={{width:36,height:40,borderRadius:8,background:t.dummy?G100:'white',border:'2px solid '+(t.dummy?G200:G200),fontWeight:'bold',fontSize:17,color:t.dummy?G400:G900,cursor:'pointer',touchAction:'manipulation'}}>{t.l}</button>; })}
+          {tiles.map(function(t){ return <button key={t.id} onClick={function(){addLetter(t);}} style={{width:36,height:40,borderRadius:8,background:'white',border:'2px solid '+G200,fontWeight:'bold',fontSize:17,color:G900,cursor:'pointer',touchAction:'manipulation'}}>{t.l}</button>; })}
         </div>
       )}
       <div style={{display:'flex',gap:6,justifyContent:'center'}}>
         {!checked&&<button onClick={removeLast} disabled={answer.length===0} style={BtnStyle(G100,G600,{padding:'8px 14px',opacity:answer.length===0?0.4:1})}>← Zurück</button>}
         {!checked&&<button onClick={check} disabled={!complete} style={BtnStyle(T,'white',{padding:'8px 20px',opacity:complete?1:0.4})}>✓ Prüfen</button>}
-        {checked&&<button onClick={reset} style={BtnStyle(G100,G600,{padding:'8px 14px'})}>↺ Nochmal</button>}
+        {checked&&!correct&&<button onClick={reset} style={BtnStyle(G100,G600,{padding:'8px 14px'})}>↺ Nochmal</button>}
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:14,padding:'8px'}}>✓ Richtig! Weiter…</div>}
       </div>
     </div>
   );
