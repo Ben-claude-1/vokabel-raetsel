@@ -1763,6 +1763,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',fromPot:fromPot,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+    setPhase('showResult');
     if(correct && moveTo===5 && fromPot!==5) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
 
@@ -1817,7 +1818,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
         </div>
-        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
           {quizOptions.map(function(opt){
             var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
             var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
