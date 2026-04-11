@@ -2258,97 +2258,100 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
   });
 }
 
-function RunEditor({ run, chapters, onSave, onCancel }) {
-  var initWords = useMemo(function(){
-    var raw=run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}} return Array.isArray(raw)?raw.slice():[];
-  },[]);
-  var [words, setWords] = useState(initWords);
+function RunEditor({ run, chapters, onSave, onCancel, streakSettings }) {
+  function safeW(w){ return Array.isArray(w)?w:(w?JSON.parse(w)||[]:[]);}
+  var runWords=[]; try{runWords=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
+  var runWordKeys={};
+  runWords.forEach(function(w){ runWordKeys[normWordKey(w.word)]=w; });
+
+  // Build flat list: only leaf chapters (Themenbereiche) that exist in chapters prop
+  var chapList=[];
+  chapters.forEach(function(ch){
+    if(!ch.parent_id) return; // skip top-level Kapitel
+    var words=safeW(ch.words);
+    if(words.length===0) return; // skip empty
+    var inRun=words.filter(function(w){return !!runWordKeys[normWordKey(w.word)];}).length;
+    chapList.push({ch:ch, words:words, inRun:inRun});
+  });
+
+  // State: selected word keys
+  var initSelected={};
+  runWords.forEach(function(rw){ initSelected[normWordKey(rw.word)]=true; });
+  var [selected, setSelected] = useState(initSelected);
   var [saving, setSaving] = useState(false);
-  var allChapWords = useMemo(function(){
-    var w=[];
-    chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
-      var cw=ch.words; if(typeof cw==='string'){try{cw=JSON.parse(cw);}catch(e){cw=[];}} (Array.isArray(cw)?cw:[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
-    });
-    return w;
-  },[chapters]);
-  var [openCh, setOpenCh] = useState(null);
-  function isInRun(word){ return words.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
-  function toggle(wObj){
-    setWords(function(prev){
-      if(isInRun(wObj)) return prev.filter(function(w){return normWordKey(w.word)!==normWordKey(wObj.word);});
-      var existing=prev.find(function(w){return normWordKey(w.word)===normWordKey(wObj.word);});
-      return prev.concat([{word:wObj.word,clue:wObj.clue,pot:existing?existing.pot:1}]);
+
+  function toggleChap(chapWords, add){
+    setSelected(function(prev){
+      var n=Object.assign({},prev);
+      chapWords.forEach(function(w){ if(add) n[normWordKey(w.word)]=true; else delete n[normWordKey(w.word)]; });
+      return n;
     });
   }
-  function toggleChapter(ch){
-    var allIn=chW.every(function(w){return isInRun(w);});
-    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !chW.some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
-    else { var toAdd=chW.filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
+  function toggleWord(word){
+    var k=normWordKey(word);
+    setSelected(function(prev){
+      var n=Object.assign({},prev);
+      if(n[k]) delete n[k]; else n[k]=true;
+      return n;
+    });
   }
-  function setPot(wordStr, pot){
-    setWords(function(prev){ return prev.map(function(w){ return normWordKey(w.word)===normWordKey(wordStr)?Object.assign({},w,{pot:pot}):w; }); });
-  }
-  function save(){
+  function selectAll(){ var n={}; chapList.forEach(function(c){c.words.forEach(function(w){n[normWordKey(w.word)]=true;});}); setSelected(n); }
+  function clearAll(){ setSelected({}); }
+
+  function handleSave(){
     setSaving(true);
-    var wordsJson = JSON.stringify(words);
-    sbPatch('ls_runs',{words:wordsJson,word_count:words.length,name:run.name},'id=eq.'+run.id)
-      .then(function(){
-        setSaving(false);
-        onSave(Object.assign({},run,{words:words,word_count:words.length}));
-      })
-      .catch(function(){setSaving(false);});
+    // Collect full word objects for selected words
+    var wordMap={};
+    chapList.forEach(function(c){
+      c.words.forEach(function(w){ wordMap[normWordKey(w.word)]=Object.assign({},w,{chapterId:c.ch.id}); });
+    });
+    var newWords=Object.keys(selected).map(function(k){return wordMap[k];}).filter(Boolean);
+    onSave(newWords);
   }
-  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+
+  var totalSelected=Object.keys(selected).length;
+  var totalAvail=chapList.reduce(function(s,c){return s+c.words.length;},0);
+
   return(
     <div style={{padding:8}}>
-      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:4}}>{run.icon} {run.name} bearbeiten</div>
-      <div style={{padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold',marginBottom:10}}>{words.length} Vokabeln im Run</div>
-      {topLevel.map(function(kap){
-        var children=chapters.filter(function(c){return c.parent_id===kap.id;});
-        return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
-          <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
-          {children.map(function(ch){
-            var chW=Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]);
-            var allIn=chW.every(function(w){return isInRun(w);});
-            var someIn=!allIn&&chW.some(function(w){return isInRun(w);});
-            var open=openCh===ch.id;
-            return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
-                <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(allIn?ch.color:someIn?ch.color:G200),background:allIn?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  {allIn&&<span style={{color:'white',fontSize:10}}>✓</span>}
-                  {someIn&&<span style={{color:ch.color,fontSize:12}}>−</span>}
+      <div style={{padding:'10px 14px',background:TL,borderRadius:10,marginBottom:10,fontWeight:'bold',fontSize:13,color:T}}>
+        {totalSelected} / {totalAvail} Vokabeln ausgewählt
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:10}}>
+        <button onClick={selectAll} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:12})}>Alle auswählen</button>
+        <button onClick={clearAll} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:12})}>Alle abwählen</button>
+      </div>
+      <div style={{maxHeight:380,overflowY:'auto',border:'1px solid '+G200,borderRadius:10,marginBottom:10}}>
+        {chapList.map(function(item){
+          var words=item.words;
+          var selCount=words.filter(function(w){return !!selected[normWordKey(w.word)];}).length;
+          var allSel=selCount===words.length;
+          var noneSel=selCount===0;
+          return(
+            <div key={item.ch.id} style={{borderBottom:'1px solid '+G200}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:selCount>0?TL:'white',cursor:'pointer'}}
+                onClick={function(){toggleChap(words, !allSel);}}>
+                <div style={{width:18,height:18,borderRadius:4,border:'2px solid '+(allSel?T:selCount>0?AM:G200),
+                  background:allSel?T:selCount>0?AM:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {allSel&&<span style={{color:'white',fontSize:11}}>✓</span>}
+                  {!allSel&&selCount>0&&<span style={{color:'white',fontSize:10}}>-</span>}
                 </div>
-                <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{chW.filter(function(w){return isInRun(w);}).length}/{chW.length}</span>
-                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
+                <span style={{fontSize:11}}>{item.ch.icon||'📂'}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:'bold',color:item.ch.color||G900}}>{item.ch.title}</span>
+                <span style={{fontSize:11,color:G400}}>{selCount}/{words.length}</span>
               </div>
-              {open&&<div style={{padding:'4px 8px 8px 28px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {chW.map(function(w,i){
-                  var inRun=isInRun(w);
-                  var runW=inRun?words.find(function(rw){return normWordKey(rw.word)===normWordKey(w.word);}):null;
-                  return <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 6px',borderRadius:8,border:'1.5px solid '+(inRun?ch.color:G200),background:inRun?ch.color+'12':'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){toggle(w);}}>
-                    <div style={{display:'flex',alignItems:'center',gap:3}}>
-                      {w.important&&<span style={{fontSize:9}}>⭐</span>}
-                      <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:inRun?ch.color:G600}}>{w.word}</span>
-                    </div>
-                    {inRun&&<div style={{display:'flex',gap:2}} onClick={function(e){e.stopPropagation();}}>
-                      {[1,2,3,4,5].map(function(p){ return <button key={p} onClick={function(){setPot(w.word,p);}} style={{width:16,height:16,borderRadius:3,border:'none',background:runW&&runW.pot===p?POT_COL[p]:G200,color:runW&&runW.pot===p?'white':G400,fontSize:8,cursor:'pointer',padding:0,fontWeight:'bold'}}>{p}</button>; })}
-                    </div>}
-                  </div>;
-                })}
-              </div>}
-            </div>;
-          })}
-        </div>;
-      })}
-      <div style={{display:'flex',gap:8,marginTop:10}}>
-        <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'11px'})}>{saving?'…':'💾 Speichern'}</button>
-        <button onClick={onCancel} style={BtnStyle(G100,G600,{flex:1,padding:'11px'})}>Abbrechen</button>
+            </div>
+          );
+        })}
+        {chapList.length===0&&<div style={{padding:20,textAlign:'center',color:G400,fontSize:13}}>Keine Themenbereiche verfügbar.</div>}
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={handleSave} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'10px',fontSize:13,opacity:saving?0.6:1})}>💾 Speichern</button>
+        <button onClick={onCancel} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:13})}>Abbrechen</button>
       </div>
     </div>
   );
 }
-
 function LeitersSpielAdminOverview({ chapters, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
