@@ -1521,7 +1521,14 @@ function lsSaveProgress(pid,rid,data,eid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[
 function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
 function lsPercent(progress,gs) { var p=progress.pots||{}; var t=(p[1]||[]).length+(p[2]||[]).length+(p[3]||[]).length+(p[4]||[]).length+(p[5]||[]).length; if(t===0) return 0; var score=(p[2]||[]).length*25+(p[3]||[]).length*50+(p[4]||[]).length*75+(p[5]||[]).length*100; var base=Math.round(score/t); if(progress.bonusStarted&&(progress.sentences||[]).length>0){var sl=progress.sentences.filter(function(s){return s.streak>=2;}).length;return Math.min(100,base+Math.round(sl/progress.sentences.length*10));}return base; }
 function lsGrade(pct,gs) { if(!gs||!gs.grades) return null; var correct=Math.round(pct/100*(gs.testSize||20)); var errors=(gs.testSize||20)-correct; var sorted=(gs.grades||[]).slice().sort(function(a,b){return a.maxErrors-b.maxErrors;}); for(var i=0;i<sorted.length;i++) if(errors<=sorted[i].maxErrors) return sorted[i].grade; return sorted.length?sorted[sorted.length-1].grade+1:null; }
-function lsPickWord(progress,lastWord) { var cands=[]; [1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(w.disputeId) return; if(!lastWord||w.word!==lastWord) cands.push({word:w,pot:pot});}); }); if(cands.length===0&&lastWord){[1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(!w.disputeId) cands.push({word:w,pot:pot});});});} if(cands.length===0){[1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push({word:w,pot:pot});});});} return cands.length?shuffleArr(cands)[0]:null; }
+function lsPickWord(progress,lastWord) {
+  function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
+  var cands=[];
+  [1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(w.disputeId) return; if(!lastWord||w.word!==lastWord) cands.push(flat(w,pot));});});
+  if(cands.length===0&&lastWord){[1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(!w.disputeId) cands.push(flat(w,pot));});});}
+  if(cands.length===0){[1,2,3,4].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push(flat(w,pot));});});}
+  return cands.length?shuffleArr(cands)[0]:null;
+}
 function normWordKey(w) { return (w||'').toLowerCase().trim().replace(/^to\s+/,''); }
 
 // FIX 2+3+4: T2LetterField - spaces excluded from tiles, wordNoSpaces for complete/check
@@ -1663,7 +1670,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   function pickWord(){
-    var w = lsPickWord(data, streak);
+    var w = lsPickWord(data, current ? current.word : null);
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
     setPhase(w.pot===2?'t2':'answer');
