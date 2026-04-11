@@ -1700,6 +1700,21 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     } else { setPhase(w.pot===2?'t2':'answer'); }
   }
 
+  function submitDispute(type){
+    if(!current||!player) return;
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!UUID.test(player.id)||!UUID.test(run.id)) return;
+    var payload={player_id:player.id,player_name:player.name,run_id:run.id,
+      word:current.word,clue:current.clue,typed_answer:result?result.typed:'',
+      pot:current.pot,chapter_id:'',status:'open',dispute_type:type,
+      created_at:new Date().toISOString()};
+    sbPost('word_disputes',payload).then(function(res){
+      if(!res||res._err) return;
+      if(type==='unimportant') alert('✅ Meldung gesendet. Admin prüft die Anfrage.');
+      else alert('✅ Anfrage gesendet. Admin prüft deine Antwort.');
+    }).catch(function(){});
+  }
+
   function handleQuizAnswer(opt){
     if(quizChosen) return;
     setQuizChosen(opt);
@@ -1934,6 +1949,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         )}
         <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>→ Weiter</button>
         <button onClick={function(){setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
+        {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
+        <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>🔇 Als unwichtig melden</button>
       </div>
     );
   }
@@ -2297,6 +2314,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
   var [allProgress, setAllProgress] = useState([]);
+  var [allDisputes, setAllDisputes] = useState([]);
   var [loading, setLoading] = useState(true);
   var [editRun, setEditRun] = useState(null);
   var [tab, setTab] = useState('runs');
@@ -2304,11 +2322,13 @@ function LeitersSpielAdminOverview({ chapters, player }) {
     Promise.all([
       lsGetRuns(),
       sbGet('players','select=id,name,total_score,is_active,is_admin').then(function(d){return Array.isArray(d)?d:[];}),
-      sbGet('ls_progress','select=player_id,run_id,data').then(function(d){return Array.isArray(d)?d:[];})
+      sbGet('ls_progress','select=player_id,run_id,data').then(function(d){return Array.isArray(d)?d:[];}),
+      sbGet('word_disputes','status=eq.open&order=created_at.desc').then(function(d){return Array.isArray(d)?d:[];})
     ]).then(function(res){
       setRuns(Array.isArray(res[0])?res[0]:[]);
       setAllUsers((res[1]||[]).filter(function(u){return !u.is_admin;}));
       setAllProgress(res[2]||[]);
+      setAllDisputes(res[3]||[]);
       setLoading(false);
     }).catch(function(){ setLoading(false); });
   },[]);
@@ -2333,7 +2353,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
-        {[['runs','🏃 Runs'],['progress','📊 Fortschritt']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
+        {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
         {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
@@ -2420,9 +2440,46 @@ function LeitersSpielAdminOverview({ chapters, player }) {
             </div>
           </div>;
         })}
-      </div>)}    </div>
+      </div>)}
+      {tab==='disputes'&&(<div>
+        {allDisputes.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine offenen Anfragen.</div>}
+        {allDisputes.map(function(d){
+          var isUnimp = d.dispute_type==='unimportant';
+          return <div key={d.id} style={{marginBottom:8,padding:'10px 12px',borderRadius:10,border:'2px solid '+(isUnimp?G200:'#7c3aed44'),background:'white'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+              <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:isUnimp?G100:'#f3e8ff',color:isUnimp?G600:'#7c3aed',fontWeight:'bold'}}>{isUnimp?'🔇 Unwichtig':'❓ Anfechtung'}</span>
+              <span style={{fontSize:11,color:G400}}>{d.player_name} · Topf {d.pot}</span>
+            </div>
+            <div style={{fontSize:14,fontWeight:'bold',color:G900}}>{d.word} <span style={{color:G400,fontWeight:'normal',fontSize:12}}>({d.clue})</span></div>
+            {!isUnimp&&d.typed_answer&&<div style={{fontSize:11,color:G600,marginTop:2}}>Eingabe: <em>{d.typed_answer}</em></div>}
+            <div style={{display:'flex',gap:6,marginTop:8}}>
+              <button onClick={function(){
+                if(!confirm(isUnimp?'Wort aus Run entfernen?':'Anfrage als korrekt akzeptieren?')) return;
+                sbPatch('word_disputes',{status:'accepted',resolved_at:new Date().toISOString()},'id=eq.'+d.id).then(function(){
+                  if(isUnimp){
+                    sbGet('ls_runs','id=eq.'+d.run_id+'&select=words').then(function(rows){
+                      if(!rows||!rows[0]) return;
+                      var w=rows[0].words; try{if(typeof w==='string')w=JSON.parse(w);}catch(e){w=[];}
+                      var f=w.filter(function(x){return (x.word||'').toLowerCase()!==d.word.toLowerCase();});
+                      sbPatch('ls_runs',{words:JSON.stringify(f),word_count:f.length},'id=eq.'+d.run_id);
+                    }).catch(function(){});
+                  }
+                  setAllDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
+                }).catch(function(){});
+              }} style={BtnStyle(GR,'white',{flex:1,padding:'6px',fontSize:11})}>✓ Akzeptieren</button>
+              <button onClick={function(){
+                sbPatch('word_disputes',{status:'rejected',resolved_at:new Date().toISOString()},'id=eq.'+d.id).then(function(){
+                  setAllDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
+                }).catch(function(){});
+              }} style={BtnStyle(RE,'white',{flex:1,padding:'6px',fontSize:11})}>✕ Ablehnen</button>
+            </div>
+          </div>;
+        })}
+      </div>)}
+    </div>
   );
 }
+
 function CategoryPicker({ allCategories, selected, onChange }) {
   return(
     <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
