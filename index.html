@@ -1594,16 +1594,20 @@ function T2LetterField({ word, onCorrect, onWrong }) {
               if(item.isSpace) return <span key={'sp'+i} style={{width:12}}/>;
               return <div key={i} style={{width:32,height:36,borderRadius:8,background:tileBg,border:'2px solid '+(correct?GR:RE),display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:16,color:tileCol}}>{item.l}</div>;
             })
-          : Array.from({length:wordNoSpaces.length}).map(function(_,i){
-            var filled = answer[i];
-            return <div key={i} onClick={filled?function(){removeLast()}:undefined}
-              style={{width:32,height:36,borderRadius:8,background:filled?'white':G50,
-                border:'2px solid '+(filled?T:G200),display:'flex',alignItems:'center',
-                justifyContent:'center',fontWeight:'bold',fontSize:16,
-                color:filled?T:G400,cursor:filled?'pointer':'default'}}>
-              {filled?filled.l:'–'}
-            </div>;
-          })
+          : (function(){
+            var si=0;
+            return word.split('').map(function(ch,ci){
+              if(ch===' ') return <div key={'sp'+ci} style={{width:12}}/>;
+              var filled=answer[si++];
+              return <div key={ci} onClick={filled?function(){removeLast();}:undefined}
+                style={{width:32,height:36,borderRadius:8,background:filled?'white':G50,
+                  border:'2px solid '+(filled?T:G200),display:'flex',alignItems:'center',
+                  justifyContent:'center',fontWeight:'bold',fontSize:16,
+                  color:filled?T:G400,cursor:filled?'pointer':'default'}}>
+                {filled?filled.l:'–'}
+              </div>;
+            });
+          })()
         }
         
       </div>
@@ -2356,6 +2360,8 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   var [loading, setLoading] = useState(true);
   var [editRun, setEditRun] = useState(null);
   var [tab, setTab] = useState('runs');
+  var [expanded, setExpanded] = useState({});
+  function toggle(key){ setExpanded(function(prev){var n=Object.assign({},prev);n[key]=!n[key];return n;}); }
   useEffect(function(){
     Promise.all([
       lsGetRuns(),
