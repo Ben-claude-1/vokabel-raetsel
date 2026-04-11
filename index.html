@@ -2097,7 +2097,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   function selectAll(){ setSelectedWords(allWords.map(function(w){return{word:w.word,clue:w.clue,pot:1};})); }
   function selectImportant(){ setSelectedWords(allWords.filter(function(w){return w.important;}).map(function(w){return{word:w.word,clue:w.clue,pot:1};})); }
   function toggleChapter(ch){
-    var chWords=ch.words||[];
+    var chWords=Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]);
     var allSel=chWords.every(function(w){return isSelected(w);});
     if(allSel){ setSelectedWords(function(prev){return prev.filter(function(sw){return !chWords.some(function(cw){return normWordKey(cw.word)===normWordKey(sw.word);});}); }); }
     else { var toAdd=chWords.filter(function(w){return !isSelected(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
@@ -2259,8 +2259,6 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
 }
 
 function RunEditor({ run, chapters, onSave, onCancel }) {
-  function chWords(ch){ var w=chWords(ch); if(!w) return []; if(Array.isArray(w)) return w; try{return JSON.parse(w)||[];}catch(e){return [];} }
-
   var initWords = useMemo(function(){
     var raw=run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}} return Array.isArray(raw)?raw.slice():[];
   },[]);
@@ -2269,7 +2267,7 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   var allChapWords = useMemo(function(){
     var w=[];
     chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
-      var cw=chWords(ch); if(typeof cw==='string'){try{cw=JSON.parse(cw);}catch(e){cw=[];}} (Array.isArray(cw)?cw:[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
+      var cw=ch.words; if(typeof cw==='string'){try{cw=JSON.parse(cw);}catch(e){cw=[];}} (Array.isArray(cw)?cw:[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
     });
     return w;
   },[chapters]);
@@ -2283,9 +2281,9 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
     });
   }
   function toggleChapter(ch){
-    var allIn=chWords(ch).every(function(w){return isInRun(w);});
-    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !chWords(ch).some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
-    else { var toAdd=chWords(ch).filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
+    var allIn=ch.words.every(function(w){return isInRun(w);});
+    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !ch.words.some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
+    else { var toAdd=ch.words.filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
   }
   function setPot(wordStr, pot){
     setWords(function(prev){ return prev.map(function(w){ return normWordKey(w.word)===normWordKey(wordStr)?Object.assign({},w,{pot:pot}):w; }); });
@@ -2310,8 +2308,8 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
           <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
           {children.map(function(ch){
-            var allIn=chWords(ch).every(function(w){return isInRun(w);});
-            var someIn=!allIn&&chWords(ch).some(function(w){return isInRun(w);});
+            var allIn=ch.words.every(function(w){return isInRun(w);});
+            var someIn=!allIn&&ch.words.some(function(w){return isInRun(w);});
             var open=openCh===ch.id;
             return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
@@ -2320,11 +2318,11 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
                   {someIn&&<span style={{color:ch.color,fontSize:12}}>−</span>}
                 </div>
                 <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{chWords(ch).filter(function(w){return isInRun(w);}).length}/{chWords(ch).length}</span>
+                <span style={{fontSize:10,color:G400}}>{ch.words.filter(function(w){return isInRun(w);}).length}/{ch.words.length}</span>
                 <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
               </div>
               {open&&<div style={{padding:'4px 8px 8px 28px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {chWords(ch).map(function(w,i){
+                {ch.words.map(function(w,i){
                   var inRun=isInRun(w);
                   var runW=inRun?words.find(function(rw){return normWordKey(rw.word)===normWordKey(w.word);}):null;
                   return <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 6px',borderRadius:8,border:'1.5px solid '+(inRun?ch.color:G200),background:inRun?ch.color+'12':'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){toggle(w);}}>
