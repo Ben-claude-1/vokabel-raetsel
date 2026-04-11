@@ -1594,9 +1594,18 @@ function T2LetterField({ word, onCorrect, onWrong }) {
               if(item.isSpace) return <span key={'sp'+i} style={{width:12}}/>;
               return <div key={i} style={{width:32,height:36,borderRadius:8,background:tileBg,border:'2px solid '+(correct?GR:RE),display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:16,color:tileCol}}>{item.l}</div>;
             })
-          : answer.map(function(t,i){ return <div key={t.id} onClick={function(){removeLast();}} style={{width:32,height:36,borderRadius:8,background:'white',border:'2px solid '+T,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:16,color:T,cursor:'pointer'}}>{t.l}</div>; })
+          : Array.from({length:wordNoSpaces.length}).map(function(_,i){
+            var filled = answer[i];
+            return <div key={i} onClick={filled?function(){removeLast()}:undefined}
+              style={{width:32,height:36,borderRadius:8,background:filled?'white':G50,
+                border:'2px solid '+(filled?T:G200),display:'flex',alignItems:'center',
+                justifyContent:'center',fontWeight:'bold',fontSize:16,
+                color:filled?T:G400,cursor:filled?'pointer':'default'}}>
+              {filled?filled.l:'–'}
+            </div>;
+          })
         }
-        {!checked&&answer.length===0&&<span style={{color:G400,fontSize:12,alignSelf:'center'}}>Buchstaben antippen…</span>}
+        
       </div>
       {!checked&&(
         <div style={{display:'flex',flexWrap:'wrap',gap:5,justifyContent:'center',marginBottom:10}}>
