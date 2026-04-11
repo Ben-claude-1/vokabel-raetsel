@@ -1679,7 +1679,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var correct = status==='correct'||status==='partial';
     var newData = JSON.parse(JSON.stringify(data));
     var fromPot = current.pot;
-    var reqStreak = (streak.required||DEFAULT_STREAK.required)[fromPot-1]||2;
+    var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
     var potArr = (newData.pots[fromPot]||[]);
     var wIdx = potArr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(current.word); });
     if(wIdx<0) wIdx = potArr.findIndex(function(w){ return w.word===current.word; });
