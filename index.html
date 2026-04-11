@@ -1924,9 +1924,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
-          <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
             {dashWord.split('').map(function(_,i){
-              return <div key={i} style={{width:24,height:30,borderBottom:'3px solid '+T,minWidth:18}}/>;
+              var letter = input[i]||'';
+              return <div key={i} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
+                <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
+              </div>;
             })}
           </div>
           <div style={{fontSize:11,color:G400,marginTop:6}}>{dashWord.length} Buchstaben</div>
