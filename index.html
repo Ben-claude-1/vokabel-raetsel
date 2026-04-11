@@ -1595,7 +1595,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
       <div style={{display:'flex',gap:6,justifyContent:'center'}}>
         {!checked&&<button onClick={removeLast} disabled={answer.length===0} style={BtnStyle(G100,G600,{padding:'8px 14px',opacity:answer.length===0?0.4:1})}>← Zurück</button>}
         {!checked&&<button onClick={check} disabled={!complete} style={BtnStyle(T,'white',{padding:'8px 20px',opacity:complete?1:0.4})}>✓ Prüfen</button>}
-        {checked&&!correct&&<button onClick={reset} style={BtnStyle(G100,G600,{padding:'8px 14px'})}>↺ Nochmal</button>}
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>✓ Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>✗ Falsch — kommt wieder</div>}
         {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:14,padding:'8px'}}>✓ Richtig! Weiter…</div>}
       </div>
     </div>
@@ -1771,8 +1771,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var wIdx=potArr.findIndex(function(w){return normWordKey(w.word)===normWordKey(current.word);});
           if(wIdx<0) wIdx=potArr.findIndex(function(w){return w.word===current.word;});
           var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
-          var reqStreak=(streak.required||DEFAULT_STREAK.required)[1]||2;
+          var reqStreak=(streak.upThresholds&&streak.upThresholds[2])||2;
           wObj.streak=(wObj.streak||0)+1;
+          wObj.correct=(wObj.correct||0)+1;
           var moveTo=2;
           if(wObj.streak>=reqStreak){moveTo=3;wObj.streak=0;}
           if(!newData.pots[moveTo])newData.pots[moveTo]=[];
@@ -1792,7 +1793,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           if(wIdx<0) wIdx=potArr.findIndex(function(w){return w.word===current.word;});
           var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
           wObj.streak=0;
-          if(2>1){var moveTo2=1;if(!newData.pots[moveTo2])newData.pots[moveTo2]=[];newData.pots[moveTo2].push(wObj);}else{if(!newData.pots[2])newData.pots[2]=[];newData.pots[2].push(wObj);}
+          wObj.wrong=(wObj.wrong||0)+1;
+          if(!newData.pots[1])newData.pots[1]=[];
+          newData.pots[1].push(wObj);
           newData.totalWrong=(newData.totalWrong||0)+1;
           saveAndUpdate(newData);
           setResult({correct:false,partial:false,answer:current.word,typed:typed,fromPot:2,toPot:1,pts:0});
@@ -3157,8 +3160,7 @@ function GrammarGame({ player, onDone }) {
           </div>;
         })}
         <div style={{display:'flex',gap:6,marginTop:10}}>
-          <button onClick={function(){setPhase('menu');}} style={BtnStyle(T,'white',{flex:1,padding:'10px'})}>← Menü</button>
-          <button onClick={function(){startTopic(topic);}} style={BtnStyle(G100,G600,{flex:1,padding:'10px'})}>↺ Nochmal</button>
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>✓ Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>✗ Falsch</div>}
         </div>
       </div>
     );
