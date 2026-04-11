@@ -1517,7 +1517,13 @@ function BrowseChapter({ ch }) {
 var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1}, downThresholds:{1:0,2:1,3:1,4:1} };
 function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
 function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
-function lsSaveProgress(pid,rid,data,eid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true}); var payload={data:JSON.stringify(data),updated_at:new Date().toISOString()}; if(eid) return sbPatch('ls_progress',payload,'id=eq.'+eid); return sbPost('ls_progress',Object.assign({player_id:pid,run_id:rid},payload)); }
+function lsSaveProgress(pid,rid,data,eid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true}); var payload={data:JSON.stringify(data),updated_at:new Date().toISOString()}; if(eid) return sbPatch('ls_progress',payload,'id=eq.'+eid); returvar full=Object.assign({player_id:pid,run_id:rid},payload);
+  return fetch(SB_URL+'/rest/v1/ls_progress?on_conflict=player_id,run_id',{
+    method:'POST',
+    headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=representation'}),
+    body:JSON.stringify(full),mode:'cors',credentials:'omit'
+  }).then(function(r){return r.json();}).catch(function(){return {_ok:true};});
+}
 function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
 function lsPercent(progress,gs) { var p=progress.pots||{}; var t=(p[1]||[]).length+(p[2]||[]).length+(p[3]||[]).length+(p[4]||[]).length+(p[5]||[]).length; if(t===0) return 0; var score=(p[2]||[]).length*25+(p[3]||[]).length*50+(p[4]||[]).length*75+(p[5]||[]).length*100; var base=Math.round(score/t); if(progress.bonusStarted&&(progress.sentences||[]).length>0){var sl=progress.sentences.filter(function(s){return s.streak>=2;}).length;return Math.min(100,base+Math.round(sl/progress.sentences.length*10));}return base; }
 function lsGrade(pct,gs) { if(!gs||!gs.grades) return null; var correct=Math.round(pct/100*(gs.testSize||20)); var errors=(gs.testSize||20)-correct; var sorted=(gs.grades||[]).slice().sort(function(a,b){return a.maxErrors-b.maxErrors;}); for(var i=0;i<sorted.length;i++) if(errors<=sorted[i].maxErrors) return sorted[i].grade; return sorted.length?sorted[sorted.length-1].grade+1:null; }
@@ -1636,6 +1642,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [streakCount, setStreakCount] = useState(0);
   var [celebration, setCelebration] = useState(null);
   var [sessionLog, setSessionLog] = useState([]);
+  var [quizOptions, setQuizOptions] = useState([]);
+  var [quizChosen, setQuizChosen] = useState(null);
   var inputRef = useRef();
 
   useEffect(function(){
@@ -1669,7 +1677,44 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var w = lsPickWord(data, current ? current.word : null);
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
-    setPhase(w.pot===2?'t2':'answer');
+    if(w.pot===1){
+      var allWords=[];
+      [1,2,3,4,5].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
+      var others=shuffleArr(allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word);})).slice(0,3);
+      setQuizOptions(shuffleArr([{word:w.word,clue:w.clue}].concat(others.map(function(d){return {word:d.word,clue:d.clue};}))));
+      setQuizChosen(null); setPhase('quiz');
+    } else { setPhase(w.pot===2?'t2':'answer'); }
+  }
+
+  function handleQuizAnswer(opt){
+    if(quizChosen) return;
+    setQuizChosen(opt);
+    var correct=normWordKey(opt.word)===normWordKey(current.word);
+    var newData=JSON.parse(JSON.stringify(data));
+    var reqStreak=((streak.upThresholds||DEFAULT_STREAK.upThresholds)[1])||2;
+    var potArr=(newData.pots[1]||[]);
+    var wIdx=potArr.findIndex(function(w){return normWordKey(w.word)===normWordKey(current.word);});
+    if(wIdx<0)wIdx=potArr.findIndex(function(w){return w.word===current.word;});
+    var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
+    var newStreak=correct?(wObj.streak||0)+1:0;
+    var moveTo=1;
+    if(correct&&newStreak>=reqStreak){moveTo=2;newStreak=0;}
+    wObj.streak=newStreak; wObj.correct=(wObj.correct||0)+(correct?1:0); wObj.wrong=(wObj.wrong||0)+(!correct?1:0);
+    if(!newData.pots[moveTo])newData.pots[moveTo]=[];
+    newData.pots[moveTo].push(wObj);
+    if(correct)newData.totalCorrect=(newData.totalCorrect||0)+1;
+    else newData.totalWrong=(newData.totalWrong||0)+1;
+    saveAndUpdate(newData);
+    var pts=correct?5:0;
+    if(pts>0&&onUpdateScore)onUpdateScore(pts);
+    if(pts>0&&setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
+    var log={word:current.word,clue:current.clue,typed:opt.word,correct:correct,partial:false,fromPot:1,toPot:moveTo,pts:pts};
+    setSessionLog(function(l){return l.concat([log]);});
+    if(correct&&moveTo===5)setCelebration('🏆 "'+current.word+'" gelernt!');
+    setTimeout(function(){
+      setResult({correct:correct,word:current.word,clue:current.clue,answer:current.word,typed:opt.word,fromPot:1,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+      setPhase('showResult');
+    }, correct?800:1500);
   }
 
   function submitAnswer(){
@@ -1755,6 +1800,33 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         </div>
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
         <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
+      </div>
+    );
+  }
+
+  if(phase==='quiz'){
+    return(
+      <div style={{padding:8}}>
+        {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
+        <div style={{textAlign:'center',padding:'16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
+          <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:12}}>
+          {quizOptions.map(function(opt){
+            var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
+            var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
+            var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
+            var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
+            return <button key={opt.word} onClick={function(){handleQuizAnswer(opt);}} disabled={!!quizChosen}
+              style={{padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
+                textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation'}}>
+              {opt.word}
+            </button>;
+          })}
+        </div>
+        <button onClick={function(){setResult({skipped:true,word:current?current.word:'',clue:current?current.clue:'',answer:current?current.word:'',fromPot:1,toPot:1,pts:0});setPhase('showResult');}}
+          style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
   }
