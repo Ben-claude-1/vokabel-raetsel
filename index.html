@@ -1517,7 +1517,12 @@ function BrowseChapter({ ch }) {
 var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1}, downThresholds:{1:0,2:1,3:1,4:1} };
 function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
 function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
-function lsSaveProgress(pid,rid,data,eid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true}); var payload={data:JSON.stringify(data),updated_at:new Date().toISOString()}; if(eid) return sbPatch('ls_progress',payload,'id=eq.'+eid); returvar full=Object.assign({player_id:pid,run_id:rid},payload);
+function lsSaveProgress(pid,rid,data,eid) {
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true});
+  var payload={data:JSON.stringify(data),updated_at:new Date().toISOString()};
+  if(eid) return sbPatch('ls_progress',payload,'id=eq.'+eid);
+  var full=Object.assign({player_id:pid,run_id:rid},payload);
   return fetch(SB_URL+'/rest/v1/ls_progress?on_conflict=player_id,run_id',{
     method:'POST',
     headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=representation'}),
