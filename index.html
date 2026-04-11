@@ -1712,7 +1712,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setStreakCount(newSc);
     var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',fromPot:fromPot,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
-    setResult({correct:correct,partial:status==='partial',answer:correctAnswer,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+    setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
     if(correct && moveTo===5 && fromPot!==5) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
 
@@ -1786,7 +1786,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           if(onUpdateScore)onUpdateScore(pts);
           if(setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
           if(moveTo===5)setCelebration('🏆 "'+current.word+'" gelernt!');
-          setResult({correct:true,partial:false,answer:current.word,typed:current.word,fromPot:2,toPot:moveTo,pts:pts,newStreak:wObj.streak,reqStreak:reqStreak});
+          setResult({correct:true,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:current.word,fromPot:2,toPot:moveTo,pts:pts,newStreak:wObj.streak,reqStreak:reqStreak});
           setPhase('showResult');
         }} onWrong={function(typed){
           var newData=JSON.parse(JSON.stringify(data));
@@ -1800,10 +1800,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           newData.pots[1].push(wObj);
           newData.totalWrong=(newData.totalWrong||0)+1;
           saveAndUpdate(newData);
-          setResult({correct:false,partial:false,answer:current.word,typed:typed,fromPot:2,toPot:1,pts:0});
+          setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
           setPhase('showResult');
         }}/>}
-        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',fromPot:2,toPot:2,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
+        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:2,toPot:2,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
       </div>
     );
   }
@@ -1824,7 +1824,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
           <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){setResult({skipped:true,answer:current?current.clue:'',fromPot:current?current.pot:1,toPot:current?current.pot:1,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        <button onClick={function(){setResult({skipped:true,answer:current?current.clue:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:current?current.pot:1,toPot:current?current.pot:1,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
     return(
@@ -1835,7 +1835,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
               {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
-            <div style={{fontSize:14,color:G900,marginBottom:4}}>Richtig: <strong>{result.answer}</strong></div>
+            <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
             {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
             {!result.skipped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} {POT_LABEL[result.fromPot]}</span>
