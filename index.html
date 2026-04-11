@@ -1883,16 +1883,22 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     }).catch(function(){ setLoading(false); });
     sbGet('settings','key=eq.streak_settings').then(function(d){
       if(d&&d[0]){try{var s=JSON.parse(d[0].value);setStreakSettings(s);}catch(e){}}
-    });
+    }).catch(function(){});
+    if(UUID.test(player.id)){
+      sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data').then(function(rows){
+        var pm={}; (Array.isArray(rows)?rows:[]).forEach(function(row){try{pm[row.run_id]=JSON.parse(row.data||'{}');}catch(e){}});
+        setProgressMap(pm);
+      }).catch(function(){});
+    }
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   if(runs.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>Noch keine Runs. Bitte Admin fragen.</div>;
+  var gs = streakSettings || DEFAULT_STREAK;
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
       {runs.map(function(run){
         var wordCount = run.word_count || (run.words ? (typeof run.words==='string' ? JSON.parse(run.words||'[]').length : (run.words||[]).length) : 0);
-        var gs = streakSettings || DEFAULT_STREAK;
         var prog = progressMap[run.id];
         var pct = prog ? lsPercent(prog,gs) : 0;
         var grade = prog ? lsGrade(pct,gs) : null;
@@ -1905,8 +1911,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
                 <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.name}</div>
                 <div style={{fontSize:10,color:G400}}>{wordCount} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
               </div>
-              {grade ? <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',fontSize:16,color:T}}>{grade}</div><div style={{fontSize:10,color:G400}}>{pct}%</div></div>
-                     : <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
+              {grade ? <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',fontSize:16,color:T}}>{grade}</div><div style={{fontSize:10,color:G400}}>{pct}%</div></div> : <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
             </div>
             {pct>0&&<div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginTop:8}}><div style={{height:'100%',width:pct+'%',background:T,borderRadius:2}}/></div>}
           </button>
@@ -1915,7 +1920,6 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     </div>
   );
 }
-
 function LeitersSpielCreate({ player, chapters, onDone }) {
   var [name, setName] = useState('');
   var [icon, setIcon] = useState('🎯');
@@ -2195,15 +2199,21 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
 function LeitersSpielAdminOverview({ chapters, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
+  var [allProgress, setAllProgress] = useState([]);
   var [loading, setLoading] = useState(true);
   var [editRun, setEditRun] = useState(null);
   var [tab, setTab] = useState('runs');
   useEffect(function(){
     Promise.all([
       lsGetRuns(),
-      sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_active').then(function(d){return Array.isArray(d)?d:[];})
-    ]).then(function(res){ setRuns(Array.isArray(res[0])?res[0]:[]); setAllUsers(res[1]); setLoading(false); })
-      .catch(function(){ setLoading(false); });
+      sbGet('players','select=id,name,total_score,is_active,is_admin').then(function(d){return Array.isArray(d)?d:[];}),
+      sbGet('ls_progress','select=player_id,run_id,data').then(function(d){return Array.isArray(d)?d:[];})
+    ]).then(function(res){
+      setRuns(Array.isArray(res[0])?res[0]:[]);
+      setAllUsers((res[1]||[]).filter(function(u){return !u.is_admin;}));
+      setAllProgress(res[2]||[]);
+      setLoading(false);
+    }).catch(function(){ setLoading(false); });
   },[]);
   function deleteRun(runId){
     if(!confirm('Run löschen?')) return;
@@ -2211,19 +2221,33 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       setRuns(function(prev){ return prev.filter(function(r){return r.id!==runId;}); });
     });
   }
+  function getProgData(playerId, runId){
+    var row = allProgress.find(function(p){return p.player_id===playerId&&p.run_id===runId;});
+    if(!row) return null;
+    try{ return JSON.parse(row.data||'{}'); }catch(e){ return null; }
+  }
+  function getWordCount(run){
+    var wc = run.word_count; if(wc) return wc;
+    var raw = run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}}
+    return Array.isArray(raw)?raw.length:0;
+  }
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
-  if(editRun) return <RunEditor run={editRun} chapters={chapters} onSave={function(updated){ setRuns(function(prev){return prev.map(function(r){return r.id===updated.id?updated:r;});}); setEditRun(null); }} onCancel={function(){setEditRun(null);}}/>;
+  if(editRun) return <RunEditor run={editRun} chapters={chapters} onSave={function(updated){ setRuns(function(prev){return prev.map(function(r){return r.id===updated.id?updated:r;});}); setEditRun(null); }} onCancel={function(){setEditRun(null);}}/> ;
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
         {[['runs','🏃 Runs'],['progress','📊 Fortschritt']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
+        {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
         {runs.map(function(run){
           return <div key={run.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:20}}>{run.icon||'🎯'}</span>
-              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div><div style={{fontSize:10,color:G400}}>{run.word_count||(typeof run.words==='string'?JSON.parse(run.words||'[]').length:(run.words||[]).length)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div></div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div>
+                <div style={{fontSize:10,color:G400}}>{getWordCount(run)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
+              </div>
               <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>✏️</button>
               <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>🗑</button>
             </div>
@@ -2231,13 +2255,38 @@ function LeitersSpielAdminOverview({ chapters, player }) {
         })}
       </div>)}
       {tab==='progress'&&(<div>
+        {allUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine Spieler gefunden.</div>}
         {allUsers.map(function(u){
           return <div key={u.id} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+G200,background:'white'}}>
-            <div style={{fontWeight:'bold',fontSize:13,marginBottom:6}}>{u.name}</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-              {runs.map(function(run){ return <div key={run.id} style={{padding:'4px 8px',borderRadius:8,background:G100,border:'1px solid '+G200,fontSize:11}}>
-                <span style={{fontWeight:'bold',color:T}}>{run.icon||'🎯'} {run.name}</span>
-              </div>; })}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{u.name}</span>
+              <span style={{fontSize:11,color:G400,marginLeft:'auto'}}>{u.total_score||0} Pkt</span>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {runs.map(function(run){
+                var prog = getProgData(u.id, run.id);
+                var pct = prog ? lsPercent(prog) : null;
+                var wc = getWordCount(run);
+                var pots = prog ? (prog.pots||{}) : {};
+                var p1=(pots[1]||[]).length,p2=(pots[2]||[]).length,p3=(pots[3]||[]).length,p4=(pots[4]||[]).length,p5=(pots[5]||[]).length;
+                return <div key={run.id} style={{padding:'8px 10px',borderRadius:8,border:'1px solid '+(prog?T+'33':G200),background:prog?TL:'white',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:prog?5:0}}>
+                    <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
+                    <span style={{fontWeight:'bold',fontSize:12,color:G900,flex:1}}>{run.name}</span>
+                    {prog ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% · {p5}/{wc} gelernt</span> : <span style={{fontSize:11,color:G400}}>— noch nicht gespielt</span>}
+                  </div>
+                  {prog&&<div>
+                    <div style={{height:5,background:G200,borderRadius:3,overflow:'hidden',marginBottom:5}}>
+                      <div style={{height:'100%',width:(pct||0)+'%',background:T,borderRadius:3}}/>
+                    </div>
+                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                      {[[1,'🔴','T1',p1],[2,'🟠','T2',p2],[3,'🟡','T3',p3],[4,'🔵','T4',p4],[5,'✅','Gel.',p5]].map(function(pt){
+                        return pt[3]>0 ? <span key={pt[0]} style={{fontSize:10,padding:'1px 5px',borderRadius:10,background:POT_COL[pt[0]]+'18',color:POT_COL[pt[0]],fontWeight:'bold'}}>{pt[2]}: {pt[3]}</span> : null;
+                      })}
+                    </div>
+                  </div>}
+                </div>;
+              })}
             </div>
           </div>;
         })}
@@ -2245,7 +2294,6 @@ function LeitersSpielAdminOverview({ chapters, player }) {
     </div>
   );
 }
-
 function CategoryPicker({ allCategories, selected, onChange }) {
   return(
     <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
@@ -2829,67 +2877,95 @@ function GrammarAdmin({ player, chapters }) {
   var [generating, setGenerating] = useState(false);
   var [msg, setMsg] = useState('');
   var [batchN, setBatchN] = useState(10);
+  var [apiKey, setApiKey] = useState('');
+  var [savedKey, setSavedKey] = useState('');
+
+  useEffect(function(){
+    var k = localStorage.getItem('claude_api_key') || '';
+    setApiKey(k); setSavedKey(k);
+  },[]);
+
   useEffect(function(){
     setLoading(true);
-    loadGrammarPool(topic).then(function(p){setPool(p);setLoading(false);});
+    loadGrammarPool(topic).then(function(p){setPool(p);setLoading(false);}).catch(function(){setLoading(false);});
   },[topic]);
+
+  function saveKey(){
+    localStorage.setItem('claude_api_key', apiKey.trim());
+    setSavedKey(apiKey.trim());
+    setMsg('✓ API-Key gespeichert');
+  }
+
   function generate(){
-    var apiKey=localStorage.getItem('claude_api_key');
-    if(!apiKey){setMsg('Bitte zuerst API-Key eingeben');return;}
-    setGenerating(true);
-    var existingCount=pool.length;
-    var prompt='Generate '+batchN+' English grammar exercise sentences for students learning Simple Present (topic: sp) or Past Participle (topic: pp). Topic: '+(topic==='sp'?'Simple Present':'Past Participle')+'. Each sentence should test grammar rules. Return ONLY a JSON array with objects: [{id,sentence,rule,answer,explanation_de}]. Make sure id is unique string. No markdown, no preamble.';
+    var key = savedKey || localStorage.getItem('claude_api_key') || '';
+    if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
+    setGenerating(true); setMsg('');
+    var topicLabel = topic==='sp'?'Simple Present':'Past Participle';
+    var prompt = 'Erstelle '+batchN+' verschiedene deutsche Beispielsätze mit '+topicLabel+' auf Englisch. Jeder Satz soll kurz (max 10 Wörter), alltagstauglich und für Englischlernende (B1-Niveau) geeignet sein. Antworte NUR mit einem JSON-Array: [{"text":"English sentence","translation":"Deutsche Übersetzung","rule":"'+topicLabel+'","important":true}]. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})
-    }).then(function(r){return r.json();}).then(function(data){
-      var text=data.content&&data.content[0]&&data.content[0].text||'[]';
-      try{
-        var clean=text.replace(/```json|```/g,'').trim();
-        var newQ=JSON.parse(clean);
-        var merged=pool.concat(newQ.map(function(q,i){return Object.assign({},q,{id:q.id||'q_'+topic+'_'+(existingCount+i)+'_'+Date.now()});}));
-        saveGrammarPool(topic,merged).then(function(){setPool(merged);setGenerating(false);setMsg('✓ '+newQ.length+' Sätze generiert');});
-      }catch(e){setGenerating(false);setMsg('Fehler beim Parsen');}
-    }).catch(function(e){setGenerating(false);setMsg('API-Fehler: '+e.message);});
+    }).then(function(r){return r.json();})
+    .then(function(d){
+      var text = d.content&&d.content[0]&&d.content[0].text||'';
+      var clean = text.replace(/```json|```/g,'').trim();
+      var arr = JSON.parse(clean);
+      return saveGrammarPool(topic, pool.concat(arr)).then(function(){ return arr; });
+    })
+    .then(function(arr){
+      setPool(function(prev){return prev.concat(arr);});
+      setMsg('✓ '+arr.length+' Sätze generiert und gespeichert');
+      setGenerating(false);
+    })
+    .catch(function(e){ setMsg('Fehler: '+e.message); setGenerating(false); });
   }
+
   function deleteQ(id){
-    var newPool=pool.filter(function(q){return q.id!==id;});
-    saveGrammarPool(topic,newPool).then(function(){setPool(newPool);});
+    var newPool = pool.filter(function(q){return q.id!==id;});
+    saveGrammarPool(topic, newPool).then(function(){ setPool(newPool); });
   }
+
   return(
-    <div>
-      <div style={{display:'flex',gap:6,marginBottom:10}}>
+    <div style={{padding:8}}>
+      <div style={{padding:'10px 12px',background:savedKey?'#d1fae5':'#fef3c7',borderRadius:8,border:'1px solid '+(savedKey?GR:AM),marginBottom:10}}>
+        <div style={{fontWeight:'bold',fontSize:12,color:G900,marginBottom:6}}>🔑 Claude API-Key</div>
+        {savedKey
+          ? <div style={{fontSize:11,color:T}}>✓ Key hinterlegt ({savedKey.slice(0,8)}…)<button onClick={function(){setSavedKey('');setApiKey('');localStorage.removeItem('claude_api_key');}} style={{marginLeft:8,border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Ändern</button></div>
+          : <div style={{display:'flex',gap:6}}>
+              <input value={apiKey} onChange={function(e){setApiKey(e.target.value);}} placeholder="sk-ant-…" type="password"
+                style={{flex:1,padding:'6px 10px',fontSize:12,border:'1px solid '+AM,borderRadius:6,outline:'none'}}/>
+              <button onClick={saveKey} style={BtnStyle(AM,'white',{padding:'6px 12px',fontSize:11})}>Speichern</button>
+            </div>
+        }
+      </div>
+      <div style={{display:'flex',gap:4,marginBottom:10,background:G100,padding:3,borderRadius:8}}>
         {[['sp','Simple Present'],['pp','Past Participle']].map(function(t){
-          return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:8,border:'2px solid '+(topic===t[0]?T:G200),background:topic===t[0]?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:topic===t[0]?T:G600}}>{t[1]}</button>;
+          return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
-      <div style={{padding:'10px 12px',background:G50,borderRadius:8,marginBottom:10,fontSize:12,color:G600}}>{pool.length} Sätze im Pool</div>
-      <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:10}}>
-        <select value={batchN} onChange={function(e){setBatchN(parseInt(e.target.value));}} style={{padding:'6px',fontSize:12,border:'1px solid '+G200,borderRadius:6}}>
-          {[5,10,15,20,30].map(function(n){return <option key={n} value={n}>{n} Sätze</option>;})}
+      <div style={{fontSize:12,color:G600,marginBottom:8}}>{loading?'Lade…':pool.length+' Sätze im Pool'}</div>
+      <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+        <select value={batchN} onChange={function(e){setBatchN(Number(e.target.value));}} style={{padding:'6px 10px',borderRadius:6,border:'1px solid '+G200,fontSize:12}}>
+          {[5,10,20,50].map(function(n){return <option key={n} value={n}>{n} Sätze</option>;})}
         </select>
-        <button onClick={generate} disabled={generating} style={BtnStyle(T,'white',{flex:1,padding:'8px',fontSize:11})}>{generating?'Generiere…':'🤖 KI-Generierung'}</button>
+        <button onClick={generate} disabled={generating||!savedKey} style={BtnStyle(T,'white',{flex:1,padding:'8px',fontSize:11,opacity:(!savedKey)?0.5:1})}>{generating?'Generiere…':'🤖 KI-Generierung'}</button>
       </div>
-      {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:6,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
-      {loading&&<div style={{textAlign:'center',padding:20,color:G400}}>Lade…</div>}
+      {msg&&<div style={{fontSize:11,color:msg.startsWith('Fehler')?RE:T,padding:'6px 10px',background:msg.startsWith('Fehler')?'#fee2e2':'#d1fae5',borderRadius:6,marginBottom:8}}>{msg}</div>}
       <div style={{maxHeight:300,overflowY:'auto'}}>
-        {pool.map(function(q){
-          return <div key={q.id} style={{padding:'6px 8px',marginBottom:3,borderRadius:7,border:'1px solid '+G200,background:'white',fontSize:11}}>
-            <div style={{display:'flex',gap:6,alignItems:'flex-start'}}>
-              <div style={{flex:1}}>
-                <div style={{fontWeight:'bold',color:G900}}>{q.sentence}</div>
-                <div style={{color:G400}}>{q.rule}</div>
-              </div>
-              <button onClick={function(){deleteQ(q.id);}} style={{border:'none',background:'none',color:RE,cursor:'pointer',fontSize:12,flexShrink:0}}>✕</button>
+        {pool.map(function(q,i){
+          return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:G50,border:'1px solid '+G200}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.text}</div>
+              <div style={{fontSize:10,color:G600}}>{q.translation}</div>
             </div>
+            <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>×</button>
           </div>;
         })}
       </div>
     </div>
   );
 }
-
 function GrammarProgress({ ruleStats, sessions }) {
   var rules=Object.keys(ruleStats||{});
   if(rules.length===0&&(!sessions||sessions.length===0)) return <div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Übungen absolviert.</div>;
