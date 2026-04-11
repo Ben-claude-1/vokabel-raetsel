@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Vokabel-RÃ¤tsel</title>
+  <title>Vokabel-Rätsel</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -97,54 +97,54 @@ function simpleHash(str) {
 function hashPw(pw) { return Promise.resolve(simpleHash(pw)); }
 
 const BUILTIN = [
-  { id: "ch_kapitel4", parent_id: null, title: "Kapitel 4", color: "#0369a1", icon: "ð", is_builtin: false, sentences: [], words: [] },
-  { id: "c1", parent_id: "ch_kapitel4", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "ð", is_builtin: true, sentences: [], words: [
+  { id: "ch_kapitel4", parent_id: null, title: "Kapitel 4", color: "#0369a1", icon: "📗", is_builtin: false, sentences: [], words: [] },
+  { id: "c1", parent_id: "ch_kapitel4", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
     { word: "birthday", clue: "Geburtstag", important: true, topic: "c1" }, { word: "calendar", clue: "Kalender", important: true, topic: "c1" },
     { word: "sing", clue: "singen", important: false, topic: "c1" }, { word: "month", clue: "Monat", important: true, topic: "c1" },
-    { word: "celebrate", clue: "feiern", important: true, topic: "c1" }, { word: "enjoy", clue: "genieÃen", important: true, topic: "c1" },
+    { word: "celebrate", clue: "feiern", important: true, topic: "c1" }, { word: "enjoy", clue: "genießen", important: true, topic: "c1" },
     { word: "take", clue: "(mit)nehmen", important: true, topic: "c1" }, { word: "balloon", clue: "Luftballon", important: false, topic: "c1" },
-    { word: "bring", clue: "(mit)bringen", important: true, topic: "c1" }, { word: "spring", clue: "FrÃ¼hling", important: true, topic: "c1" },
+    { word: "bring", clue: "(mit)bringen", important: true, topic: "c1" }, { word: "spring", clue: "Frühling", important: true, topic: "c1" },
     { word: "summer", clue: "Sommer", important: true, topic: "c1" }, { word: "autumn", clue: "Herbst", important: true, topic: "c1" },
     { word: "winter", clue: "Winter", important: true, topic: "c1" }, { word: "date", clue: "Datum", important: true, topic: "c1" },
     { word: "first", clue: "erste(r,s)", important: true, topic: "c1" }, { word: "second", clue: "zweite(r,s)", important: true, topic: "c1" },
     { word: "third", clue: "dritte(r,s)", important: true, topic: "c1" }, { word: "dream", clue: "Traum", important: true, topic: "c1" },
     { word: "something", clue: "etwas", important: true, topic: "c1" }, { word: "ride", clue: "reiten, fahren", important: false, topic: "c1" },
   ]},
-  { id: "c2", parent_id: "ch_kapitel4", title: "Party & Essen", color: "#7c3aed", icon: "ð", is_builtin: true, sentences: [], words: [
+  { id: "c2", parent_id: "ch_kapitel4", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
     { word: "fireworks", clue: "Feuerwerk", important: true, topic: "c2" }, { word: "present", clue: "Geschenk", important: true, topic: "c2" },
-    { word: "drink", clue: "GetrÃ¤nk", important: false, topic: "c2" }, { word: "ice", clue: "Eis", important: false, topic: "c2" },
+    { word: "drink", clue: "Getränk", important: false, topic: "c2" }, { word: "ice", clue: "Eis", important: false, topic: "c2" },
     { word: "wonderful", clue: "wunderbar", important: true, topic: "c2" }, { word: "price", clue: "Preis", important: true, topic: "c2" },
     { word: "free", clue: "frei, gratis", important: true, topic: "c2" }, { word: "guest", clue: "Gast", important: false, topic: "c2" },
     { word: "lemonade", clue: "Limonade", important: true, topic: "c2" }, { word: "juice", clue: "Saft", important: true, topic: "c2" },
     { word: "invitation", clue: "Einladung", important: true, topic: "c2" }, { word: "card", clue: "Karte", important: true, topic: "c2" },
-    { word: "lazy", clue: "faul, trÃ¤ge", important: true, topic: "c2" }, { word: "sleep", clue: "schlafen", important: true, topic: "c2" },
-    { word: "buffet", clue: "BÃ¼fett", important: false, topic: "c2" }, { word: "coffee", clue: "Kaffee", important: false, topic: "c2" },
+    { word: "lazy", clue: "faul, träge", important: true, topic: "c2" }, { word: "sleep", clue: "schlafen", important: true, topic: "c2" },
+    { word: "buffet", clue: "Büfett", important: false, topic: "c2" }, { word: "coffee", clue: "Kaffee", important: false, topic: "c2" },
   ]},
-  { id: "c3", parent_id: "ch_kapitel4", title: "Monate", color: "#b45309", icon: "ð", is_builtin: true, sentences: [], words: [
+  { id: "c3", parent_id: "ch_kapitel4", title: "Monate", color: "#b45309", icon: "📅", is_builtin: true, sentences: [], words: [
     { word: "January", clue: "Januar", important: true, topic: "c3" }, { word: "February", clue: "Februar", important: true, topic: "c3" },
-    { word: "March", clue: "MÃ¤rz", important: true, topic: "c3" }, { word: "April", clue: "April", important: true, topic: "c3" },
+    { word: "March", clue: "März", important: true, topic: "c3" }, { word: "April", clue: "April", important: true, topic: "c3" },
     { word: "May", clue: "Mai", important: true, topic: "c3" }, { word: "June", clue: "Juni", important: true, topic: "c3" },
     { word: "July", clue: "Juli", important: true, topic: "c3" }, { word: "August", clue: "August", important: true, topic: "c3" },
     { word: "September", clue: "September", important: true, topic: "c3" }, { word: "October", clue: "Oktober", important: true, topic: "c3" },
     { word: "November", clue: "November", important: true, topic: "c3" }, { word: "December", clue: "Dezember", important: true, topic: "c3" },
   ]},
-  { id: "c4", parent_id: "ch_kapitel4", title: "Kommunikation & Sport", color: "#0369a1", icon: "ð±", is_builtin: true, sentences: [], words: [
+  { id: "c4", parent_id: "ch_kapitel4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
     { word: "holiday", clue: "Urlaub, Ferien", important: true, topic: "c4" }, { word: "text", clue: "SMS senden", important: true, topic: "c4" },
-    { word: "shop", clue: "einkaufen", important: true, topic: "c4" }, { word: "score", clue: "Tor schieÃen", important: true, topic: "c4" },
+    { word: "shop", clue: "einkaufen", important: true, topic: "c4" }, { word: "score", clue: "Tor schießen", important: true, topic: "c4" },
     { word: "goal", clue: "Ziel, Tor", important: true, topic: "c4" }, { word: "collect", clue: "(ein)sammeln", important: true, topic: "c4" },
-    { word: "close", clue: "schlieÃen", important: true, topic: "c4" }, { word: "bag", clue: "Tasche", important: true, topic: "c4" },
-    { word: "case", clue: "HÃ¼lle", important: true, topic: "c4" }, { word: "train", clue: "trainieren", important: true, topic: "c4" },
+    { word: "close", clue: "schließen", important: true, topic: "c4" }, { word: "bag", clue: "Tasche", important: true, topic: "c4" },
+    { word: "case", clue: "Hülle", important: true, topic: "c4" }, { word: "train", clue: "trainieren", important: true, topic: "c4" },
     { word: "plan", clue: "planen", important: true, topic: "c4" }, { word: "field", clue: "Spielfeld", important: false, topic: "c4" },
-    { word: "fun", clue: "SpaÃ", important: false, topic: "c4" }, { word: "gym", clue: "Turnhalle", important: false, topic: "c4" },
+    { word: "fun", clue: "Spaß", important: false, topic: "c4" }, { word: "gym", clue: "Turnhalle", important: false, topic: "c4" },
   ]},
-  { id: "c5", parent_id: "ch_kapitel4", title: "Einkaufen", color: "#be185d", icon: "ðï¸", is_builtin: true, sentences: [], words: [
+  { id: "c5", parent_id: "ch_kapitel4", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
     { word: "cheap", clue: "billig, preiswert", important: true, topic: "c5" }, { word: "expensive", clue: "teuer", important: true, topic: "c5" },
     { word: "customer", clue: "Kunde/Kundin", important: true, topic: "c5" }, { word: "any", clue: "(irgend)ein(e)", important: true, topic: "c5" },
     { word: "somebody", clue: "(irgend)jemand", important: true, topic: "c5" }, { word: "just", clue: "nur, gerade", important: true, topic: "c5" },
     { word: "home", clue: "zu Hause", important: true, topic: "c5" }, { word: "have", clue: "haben, trinken", important: true, topic: "c5" },
     { word: "put", clue: "setzen, legen", important: false, topic: "c5" }, { word: "everything", clue: "alles", important: false, topic: "c5" },
   ]},
-  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "ð", is_builtin: false, parent_id: "ch_kapitel4", sentences: [], words: [] },
+  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: "ch_kapitel4", sentences: [], words: [] },
 ];
 
 var T = "#0f766e", TL = "#ccfbf1", TD = "#134e4a", AM = "#f59e0b", RE = "#ef4444", GR = "#22c55e";
@@ -230,10 +230,10 @@ function buildCW(words, solPhrase) {
 }
 
 var SOLS = [
-  {phrase:"superstar",msg:"â­ Du bist ein SUPERSTAR!"},
-  {phrase:"topschueler",msg:"ð§  Du bist ein TOP-SCHÃLER!"},
-  {phrase:"englishpro",msg:"ð Du bist ein ENGLISH PRO!"},
-  {phrase:"champion",msg:"ð¥ Du bist ein CHAMPION!"},
+  {phrase:"superstar",msg:"⭐ Du bist ein SUPERSTAR!"},
+  {phrase:"topschueler",msg:"🧠 Du bist ein TOP-SCHÜLER!"},
+  {phrase:"englishpro",msg:"🏆 Du bist ein ENGLISH PRO!"},
+  {phrase:"champion",msg:"🥇 Du bist ein CHAMPION!"},
 ];
 
 // FIX 1: shuffleArr + shuffle alias (needed by grammarPickQuestions)
@@ -275,7 +275,7 @@ function makeQuizRound(allWords, usedWords) {
 }
 function makeAllRounds(chapters) {
   var allWords = [];
-  chapters.forEach(function(ch){ (Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
+  chapters.forEach(function(ch){ ch.words.forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
   if (allWords.length < 4) return [];
   var rounds = [], used = new Set();
   for (var i = 0; i < 6; i++) {
@@ -451,23 +451,23 @@ function VokabelTrainer({ words, player, onDone, title }) {
     return (
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:'20px',color:'white',textAlign:'center',marginBottom:14}}>
-          <div style={{fontSize:36,marginBottom:6}}>{corr===shuffled.length?'ð':corr>shuffled.length/2?'ð':'ð'}</div>
-          <div style={{fontSize:20,fontWeight:'bold'}}>{corr} richtig Â· {part} halb Â· {wrong} falsch</div>
+          <div style={{fontSize:36,marginBottom:6}}>{corr===shuffled.length?'🏆':corr>shuffled.length/2?'👍':'📚'}</div>
+          <div style={{fontSize:20,fontWeight:'bold'}}>{corr} richtig · {part} halb · {wrong} falsch</div>
           <div style={{fontSize:12,opacity:.8}}>{shuffled.length} Vokabeln</div>
         </div>
         {results.map(function(r,i){
           var bg=r.status==='correct'?'#d1fae5':r.status==='partial'?'#fef9c3':'#fee2e2';
-          var icon=r.status==='correct'?'â':r.status==='partial'?'~':'â';
+          var icon=r.status==='correct'?'✓':r.status==='partial'?'~':'✗';
           return (
             <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',marginBottom:3,borderRadius:8,background:bg,fontSize:12}}>
               <span style={{fontSize:16,minWidth:20}}>{icon}</span>
               <span style={{color:G600,minWidth:120}}>{r.clue}</span>
               <span style={{fontWeight:'bold',color:G900,flex:1}}>{r.correct}</span>
-              {r.status!=='correct'&&<span style={{color:RE,fontSize:11}}>â {r.typed}</span>}
+              {r.status!=='correct'&&<span style={{color:RE,fontSize:11}}>→ {r.typed}</span>}
             </div>
           );
         })}
-        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>â ZurÃ¼ck</button>
+        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>← Zurück</button>
       </div>
     );
   }
@@ -481,12 +481,12 @@ function VokabelTrainer({ words, player, onDone, title }) {
         </div>
         <span style={{fontSize:11,color:G400}}>{idx+1}/{shuffled.length}</span>
         <button onClick={function(){setDirection(direction==='de2en'?'en2de':'de2en');setInput('');setResult(null);}}
-          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>â Richtung</button>
+          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>⇄ Richtung</button>
       </div>
       <div style={{textAlign:'center',padding:'30px 20px',background:resultBg,borderRadius:16,marginBottom:12,border:'2px solid '+(result?resultColor:G200),transition:'all .3s'}}>
         <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>{qLabel}</div>
         <div style={{fontSize:28,fontWeight:'bold',color:G900,marginBottom:result?12:0}}>{question}</div>
-        {result&&<div style={{fontSize:18,fontWeight:'bold',color:resultColor}}>{result.status==='correct'?'â Richtig!':result.status==='partial'?'~ Fast richtig':'â Falsch'}</div>}
+        {result&&<div style={{fontSize:18,fontWeight:'bold',color:resultColor}}>{result.status==='correct'?'✓ Richtig!':result.status==='partial'?'~ Fast richtig':'✗ Falsch'}</div>}
         {result&&<div style={{fontSize:13,color:G600,marginTop:4}}>Richtig: <strong>{result.correct}</strong>{result.typed&&result.status!=='correct'?'  (du: '+result.typed+')':''}</div>}
       </div>
       {!result&&(
@@ -494,14 +494,14 @@ function VokabelTrainer({ words, player, onDone, title }) {
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submit();}}
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
-            placeholder="Antwort eingebenâ¦"
+            placeholder="Antwort eingeben…"
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-          <button onClick={submit} style={BtnStyle(T,'#fff',{padding:'12px 18px',fontSize:15})}>â</button>
+          <button onClick={submit} style={BtnStyle(T,'#fff',{padding:'12px 18px',fontSize:15})}>✓</button>
         </div>
       )}
       {result&&(
         <button onClick={submit} style={BtnStyle(T,'#fff',{width:'100%',padding:'12px',fontSize:15})}>
-          {idx+1>=shuffled.length?'ð Auswertung':'â NÃ¤chste'}
+          {idx+1>=shuffled.length?'📊 Auswertung':'→ Nächste'}
         </button>
       )}
       <button onClick={function(){if(confirm('Abbrechen?'))onDone();}} style={BtnStyle(G100,G600,{width:'100%',marginTop:8,fontSize:12})}>Abbrechen</button>
@@ -521,7 +521,7 @@ function WorkoutSetup({ chapters, player, onStart }) {
   var allWords = useMemo(function(){
     var w=[];
     chapters.forEach(function(ch){
-      (onlyImportant?(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(x){return x.important;}):ch.words)
+      (onlyImportant?ch.words.filter(function(x){return x.important;}):ch.words)
         .forEach(function(ww){ w.push(Object.assign({},ww,{chapterId:ch.id,chapTitle:ch.title})); });
     });
     return w;
@@ -531,13 +531,13 @@ function WorkoutSetup({ chapters, player, onStart }) {
     allWords.forEach(function(w){ var hist=progressMap[w.word]||[]; s[getWordColor(hist)]++; });
     return s;
   },[allWords,progressMap]);
-  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschrittâ¦</div>;
+  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
   return(
     <div style={{padding:8}}>
       <div style={{background:G50,borderRadius:12,padding:16,marginBottom:14,border:'1px solid '+G200}}>
-        <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>ð Dein Fortschritt</div>
+        <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>📊 Dein Fortschritt</div>
         <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
-          {[['green','ð¢','GrÃ¼n (sicher)'],['yellow','ð¡','Gelb (unsicher)'],['red','ð´','Rot (schwach)'],['new','â¬','Neu']].map(function(x){
+          {[['green','🟢','Grün (sicher)'],['yellow','🟡','Gelb (unsicher)'],['red','🔴','Rot (schwach)'],['new','⬜','Neu']].map(function(x){
             return(
               <div key={x[0]} style={{flex:'1 1 80px',textAlign:'center',padding:'10px 6px',background:COLOR_BG[x[0]],borderRadius:10}}>
                 <div style={{fontSize:20,fontWeight:'bold',color:COLOR_FG[x[0]]}}>{stats[x[0]]}</div>
@@ -547,7 +547,7 @@ function WorkoutSetup({ chapters, player, onStart }) {
           })}
         </div>
         <div style={{fontSize:12,color:G600,padding:'8px 12px',background:'white',borderRadius:8,border:'1px solid '+G200}}>
-          ð¯ Im Workout: <strong>50% rot/neu</strong> Â· <strong>30% gelb</strong> Â· <strong>20% grÃ¼n</strong>
+          🎯 Im Workout: <strong>50% rot/neu</strong> · <strong>30% gelb</strong> · <strong>20% grün</strong>
         </div>
       </div>
       <div style={{marginBottom:14,padding:14,background:'white',borderRadius:12,border:'1px solid '+G200}}>
@@ -562,9 +562,9 @@ function WorkoutSetup({ chapters, player, onStart }) {
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <div onClick={function(){setOnlyImportant(!onlyImportant);}} style={{width:22,height:22,borderRadius:6,border:'2px solid '+(onlyImportant?T:G200),background:onlyImportant?T:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            {onlyImportant&&<span style={{color:'white',fontSize:14}}>â</span>}
+            {onlyImportant&&<span style={{color:'white',fontSize:14}}>✓</span>}
           </div>
-          <span style={{fontSize:13,color:G600}}>Nur â­ fett gedruckte Vokabeln ({allWords.length} verfÃ¼gbar)</span>
+          <span style={{fontSize:13,color:G600}}>Nur ⭐ fett gedruckte Vokabeln ({allWords.length} verfügbar)</span>
         </div>
       </div>
       {allWords.length < 3 && <div style={{color:RE,fontSize:12,marginBottom:10,textAlign:'center'}}>Zu wenige Vokabeln.</div>}
@@ -572,13 +572,13 @@ function WorkoutSetup({ chapters, player, onStart }) {
         var selected = selectWorkoutWords(allWords, progressMap, Math.min(count, allWords.length));
         onStart(selected, progressMap);
       }} disabled={allWords.length<3} style={BtnStyle(T,'#fff',{width:'100%',padding:'12px',fontSize:15,opacity:allWords.length<3?0.5:1})}>
-        ðï¸ Workout starten ({Math.min(count,allWords.length)} Vokabeln)
+        🏋️ Workout starten ({Math.min(count,allWords.length)} Vokabeln)
       </button>
     </div>
   );
 }
 function WorkoutSession({ words, player, progressMap, onDone }) {
-  return <VokabelTrainer words={words} player={player} onDone={onDone} title="ðï¸ Workout" />;
+  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" />;
 }
 
 function SentenceLearner({ chapters, player, onDone }) {
@@ -595,15 +595,15 @@ function SentenceLearner({ chapters, player, onDone }) {
   useEffect(function(){ if(inputRef.current && !result && selectedCh) inputRef.current.focus(); },[idx,result,selectedCh]);
   if(!selectedCh) return(
     <div style={{padding:8}}>
-      <p style={{color:G600,fontSize:13,marginBottom:12}}>WÃ¤hle ein Kapitel zum SÃ¤tze lernen:</p>
-      {chapWithSentences.length===0&&<div style={{textAlign:'center',color:G400,padding:20}}>Noch keine SÃ¤tze gespeichert.</div>}
+      <p style={{color:G600,fontSize:13,marginBottom:12}}>Wähle ein Kapitel zum Sätze lernen:</p>
+      {chapWithSentences.length===0&&<div style={{textAlign:'center',color:G400,padding:20}}>Noch keine Sätze gespeichert.</div>}
       {chapWithSentences.map(function(ch){
         var cnt=ch.sentences.filter(function(s){return s.important;}).length;
         return(
           <button key={ch.id} onClick={function(){setSelectedCh(ch);setIdx(0);setInput('');setResult(null);setResults([]);}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'12px 14px',marginBottom:6,borderRadius:10,border:'2px solid '+ch.color,background:'white',cursor:'pointer'}}>
             <div style={{fontWeight:'bold',color:ch.color}}>{ch.icon} {ch.title}</div>
-            <div style={{fontSize:11,color:G400}}>{cnt} fett gedruckte SÃ¤tze</div>
+            <div style={{fontSize:11,color:G400}}>{cnt} fett gedruckte Sätze</div>
           </button>
         );
       })}
@@ -615,8 +615,8 @@ function SentenceLearner({ chapters, player, onDone }) {
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:20,color:'white',textAlign:'center',marginBottom:14}}>
-          <div style={{fontSize:32,marginBottom:6}}>{corr2===sentences.length?'ð':'ð'}</div>
-          <div style={{fontSize:18,fontWeight:'bold'}}>{corr2}/{sentences.length} SÃ¤tze</div>
+          <div style={{fontSize:32,marginBottom:6}}>{corr2===sentences.length?'🏆':'📚'}</div>
+          <div style={{fontSize:18,fontWeight:'bold'}}>{corr2}/{sentences.length} Sätze</div>
         </div>
         {results.map(function(r,i){
           return(
@@ -627,7 +627,7 @@ function SentenceLearner({ chapters, player, onDone }) {
             </div>
           );
         })}
-        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>â ZurÃ¼ck</button>
+        <button onClick={onDone} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px',marginTop:12})}>← Zurück</button>
       </div>
     );
   }
@@ -654,10 +654,10 @@ function SentenceLearner({ chapters, player, onDone }) {
         </div>
         <span style={{fontSize:11,color:G400}}>{idx+1}/{sentences.length}</span>
         <button onClick={function(){setDirection(direction==='en2de'?'de2en':'en2de');setInput('');setResult(null);}}
-          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>â</button>
+          style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid '+G200,background:G50,cursor:'pointer',color:G600}}>⇄</button>
       </div>
       <div style={{textAlign:'center',padding:'20px 16px',background:result?(result.status==='correct'?'#d1fae5':'#fef9c3'):'#f8fafc',borderRadius:14,marginBottom:12,border:'2px solid '+(result?(result.status==='correct'?GR:AM):G200)}}>
-        <div style={{fontSize:11,color:G400,marginBottom:6}}>Ãbersetze ins {direction==='en2de'?'Deutsche':'Englische'}:</div>
+        <div style={{fontSize:11,color:G400,marginBottom:6}}>Übersetze ins {direction==='en2de'?'Deutsche':'Englische'}:</div>
         <div style={{fontSize:16,fontWeight:'bold',color:G900,lineHeight:1.4}}>{question}</div>
         {result&&<div style={{marginTop:10,fontSize:13,color:result.status==='correct'?T:AM}}><strong>Richtig: </strong>{answer}</div>}
       </div>
@@ -665,18 +665,18 @@ function SentenceLearner({ chapters, player, onDone }) {
         <div style={{display:'flex',gap:8,marginBottom:10}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitSentence();}}
-            placeholder="Ãbersetzungâ¦"
+            placeholder="Übersetzung…"
             style={{flex:1,padding:'10px 12px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-          <button onClick={submitSentence} style={BtnStyle(T)}>â</button>
+          <button onClick={submitSentence} style={BtnStyle(T)}>✓</button>
         </div>
       )}
-      {result&&<button onClick={submitSentence} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px'})}>{idx+1>=sentences.length?'ð Fertig':'â NÃ¤chster'}</button>}
+      {result&&<button onClick={submitSentence} style={BtnStyle(T,'#fff',{width:'100%',padding:'10px'})}>{idx+1>=sentences.length?'📊 Fertig':'→ Nächster'}</button>}
     </div>
   );
 }
 
 var POT_PTS_CUM={1:10,2:30,3:60,4:100,5:140,6:200};
-var POT_ICON={0:'â¬',1:'ð´',2:'ð ',3:'ð¡',4:'ðµ',5:'ð£',6:'â'};
+var POT_ICON={0:'⬜',1:'🔴',2:'🟠',3:'🟡',4:'🔵',5:'🟣',6:'✅'};
 var POT_LABEL={1:'Topf 1',2:'Topf 2',3:'Topf 3',4:'Topf 4',5:'Topf 5',6:'Gelernt'};
 var POT_COL={1:RE,2:'#f97316',3:AM,4:T,5:'#7c3aed',6:GR};
 function ProgressStats({ chapters, player, allCategories }) {
@@ -704,19 +704,19 @@ function ProgressStats({ chapters, player, allCategories }) {
       setLearnedSet(learned); setPotMap(pots); setLoading(false);
     }).catch(function(){ setLoading(false); });
   },[]);
-  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Datenâ¦</div>;
+  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Daten…</div>;
   function toggle(id){setExpanded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
   var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
-  var allWords=[]; chapters.forEach(function(ch){(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).forEach(function(w){allWords.push(w);});});
+  var allWords=[]; chapters.forEach(function(ch){ch.words.forEach(function(w){allWords.push(w);});});
   var totalWords=allWords.length;
   var totalLearned=allWords.filter(function(w){return !!learnedSet[w.word];}).length;
   var overallPct=totalWords>0?Math.round(totalLearned/totalWords*100):0;
   var totalPoints=player.total_score||0;
   var catMap={};
-  (allCategories||[]).forEach(function(cat){ catMap[cat.id]={name:cat.name,icon:cat.icon||'ð·',bg:cat.bg||G100,text:cat.text||G600,total:0,learned:0}; });
+  (allCategories||[]).forEach(function(cat){ catMap[cat.id]={name:cat.name,icon:cat.icon||'🏷',bg:cat.bg||G100,text:cat.text||G600,total:0,learned:0}; });
   allWords.forEach(function(w){
     (w.cats||[]).forEach(function(cid){
-      if(!catMap[cid]) catMap[cid]={name:cid,icon:'ð·',bg:G100,text:G600,total:0,learned:0};
+      if(!catMap[cid]) catMap[cid]={name:cid,icon:'🏷',bg:G100,text:G600,total:0,learned:0};
       catMap[cid].total++;
       if(learnedSet[w.word]) catMap[cid].learned++;
     });
@@ -736,7 +736,7 @@ function ProgressStats({ chapters, player, allCategories }) {
         </div>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:12}}>
-        {[['chapters','ð Kapitel'],['categories','ð·ï¸ Kategorien']].map(function(tab){
+        {[['chapters','📚 Kapitel'],['categories','🏷️ Kategorien']].map(function(tab){
           return <button key={tab[0]} onClick={function(){setViewMode(tab[0]);}}
             style={{flex:1,padding:'7px',borderRadius:8,border:'2px solid '+(viewMode===tab[0]?T:G200),background:viewMode===tab[0]?TL:'white',cursor:'pointer',fontWeight:'bold',fontSize:12,color:viewMode===tab[0]?T:G600,touchAction:'manipulation'}}>
             {tab[1]}
@@ -747,7 +747,7 @@ function ProgressStats({ chapters, player, allCategories }) {
         <div>
           {topLevel.map(function(kap){
             var children=chapters.filter(function(c){return c.parent_id===kap.id;});
-            var kapWords=[]; children.forEach(function(ch){(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).forEach(function(w){kapWords.push(w);});});
+            var kapWords=[]; children.forEach(function(ch){ch.words.forEach(function(w){kapWords.push(w);});});
             var kapTotal=kapWords.length;
             var kapLearned=kapWords.filter(function(w){return !!learnedSet[w.word];}).length;
             var kapPct=kapTotal>0?Math.round(kapLearned/kapTotal*100):0;
@@ -758,12 +758,12 @@ function ProgressStats({ chapters, player, allCategories }) {
                   <span style={{fontSize:20}}>{kap.icon}</span>
                   <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:kap.color||T}}>{kap.title}</div><div style={{fontSize:10,color:G400,marginTop:1}}>{kapLearned}/{kapTotal} Vokabeln gelernt</div></div>
                   <div style={{fontWeight:'bold',fontSize:18,color:pctColor(kapPct),marginRight:4}}>{kapPct}%</div>
-                  <span style={{color:G400,fontSize:11}}>{kapOpen?'â²':'â¼'}</span>
+                  <span style={{color:G400,fontSize:11}}>{kapOpen?'▲':'▼'}</span>
                 </div>
                 <div style={{height:5,background:G100}}><div style={{height:'100%',width:kapPct+'%',background:pctColor(kapPct),transition:'width 0.5s'}}/></div>
                 {kapOpen&&children.map(function(ch){
-                  var chTotal=(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).length;
-                  var chLearned=(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return !!learnedSet[w.word];}).length;
+                  var chTotal=ch.words.length;
+                  var chLearned=ch.words.filter(function(w){return !!learnedSet[w.word];}).length;
                   var chPct=chTotal>0?Math.round(chLearned/chTotal*100):0;
                   var chOpen=expanded[ch.id];
                   return(
@@ -773,11 +773,11 @@ function ProgressStats({ chapters, player, allCategories }) {
                         <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</div><div style={{fontSize:10,color:G400}}>{chLearned}/{chTotal}</div></div>
                         <div style={{width:50,height:4,background:G200,borderRadius:2,overflow:'hidden',marginRight:6}}><div style={{height:'100%',width:chPct+'%',background:pctColor(chPct)}}/></div>
                         <span style={{fontSize:11,fontWeight:'bold',color:pctColor(chPct),minWidth:32,textAlign:'right'}}>{chPct}%</span>
-                        <span style={{color:G400,fontSize:10,marginLeft:4}}>{chOpen?'â²':'â¼'}</span>
+                        <span style={{color:G400,fontSize:10,marginLeft:4}}>{chOpen?'▲':'▼'}</span>
                       </div>
                       {chOpen&&(
                         <div style={{padding:'4px 8px 8px 24px',background:'#fafafa'}}>
-                          {(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).map(function(w,i){
+                          {ch.words.map(function(w,i){
                             var pot=potMap[w.word]||0;
                             return(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 6px',borderBottom:'1px solid '+G100,borderRadius:6}}>
@@ -867,7 +867,7 @@ function QuizSolo({ chapters, onDone }) {
     return (
       <div style={{padding:"8px"}}>
         <div style={{background:"linear-gradient(135deg,"+T+","+TD+")",borderRadius:16,padding:"24px 20px",color:"white",textAlign:"center",marginBottom:16}}>
-          <div style={{fontSize:40,marginBottom:8}}>{won >= 4 ? "ð" : won >= 3 ? "ð¥" : "ð"}</div>
+          <div style={{fontSize:40,marginBottom:8}}>{won >= 4 ? "🏆" : won >= 3 ? "🥈" : "📚"}</div>
           <div style={{fontSize:28,fontWeight:"bold",marginBottom:4}}>{totalScore} Punkte</div>
           <div style={{fontSize:14,opacity:0.8}}>{won} von 6 Runden gewonnen</div>
         </div>
@@ -875,13 +875,13 @@ function QuizSolo({ chapters, onDone }) {
           {roundWins.map(function(s, i) {
             var win = s >= 2;
             return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",marginBottom:4,borderRadius:8,background:win?"#f0fdf4":"#fef2f2",border:"1px solid "+(win?"#bbf7d0":"#fecaca")}}>
-              <span style={{fontSize:16}}>{win ? "â" : "â"}</span>
+              <span style={{fontSize:16}}>{win ? "✓" : "✗"}</span>
               <span style={{fontSize:13,color:G600}}>Runde {i+1}</span>
               <span style={{marginLeft:"auto",fontWeight:"bold",color:win?T:RE}}>{s}/3 richtig</span>
             </div>);
           })}
         </div>
-        <button onClick={onDone} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>â ZurÃ¼ck zum MenÃ¼</button>
+        <button onClick={onDone} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>← Zurück zum Menü</button>
       </div>
     );
   }
@@ -891,7 +891,7 @@ function QuizSolo({ chapters, onDone }) {
     return (
       <div style={{padding:"8px"}}>
         <div style={{textAlign:"center",padding:"32px 20px",background:roundWon?"#f0fdf4":"#fef2f2",borderRadius:16,marginBottom:16,border:"2px solid "+(roundWon?"#22c55e":RE)}}>
-          <div style={{fontSize:40,marginBottom:8}}>{roundWon ? "ð" : "ð"}</div>
+          <div style={{fontSize:40,marginBottom:8}}>{roundWon ? "🎉" : "😔"}</div>
           <div style={{fontSize:22,fontWeight:"bold",color:roundWon?T:RE,marginBottom:4}}>Runde {roundIdx+1} {roundWon?"gewonnen!":"verloren"}</div>
           <div style={{fontSize:14,color:G600}}>{lastScore}/3 Fragen richtig</div>
         </div>
@@ -899,21 +899,21 @@ function QuizSolo({ chapters, onDone }) {
           {roundWins.map(function(s, i) { return <div key={i} style={{width:28,height:28,borderRadius:"50%",background:s>=2?T:RE,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:12,fontWeight:"bold"}}>{s}</div>; })}
           {Array(6-roundWins.length).fill(0).map(function(_,i){ return <div key={"e"+i} style={{width:28,height:28,borderRadius:"50%",background:G200}}></div>; })}
         </div>
-        <button onClick={nextRound} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>Runde {roundIdx+2} starten â</button>
+        <button onClick={nextRound} style={BtnStyle(T,"#fff",{width:"100%",fontSize:15,padding:"12px"})}>Runde {roundIdx+2} starten →</button>
       </div>
     );
   }
   var letters = ["A","B","C","D"];
   var isEn2De = currentQ && currentQ.type === "en2de";
   var question = currentQ ? (isEn2De ? currentQ.correct.word : currentQ.correct.clue) : "";
-  var questionLabel = isEn2De ? "Was bedeutet dieses englische Wort?" : "Wie heiÃt das auf Englisch?";
+  var questionLabel = isEn2De ? "Was bedeutet dieses englische Wort?" : "Wie heißt das auf Englisch?";
   return (
     <div style={{padding:"8px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
         <div style={{display:"flex",gap:4}}>
           {allRounds.map(function(_, i) {
             var active = i === roundIdx, done = i < roundIdx, win = done && roundWins[i] >= 2;
-            return <div key={i} style={{width:24,height:24,borderRadius:"50%",background:active?T:done?(win?GR:RE):G200,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:"bold"}}>{done?(roundWins[i]>=2?"â":"â"):(i+1)}</div>;
+            return <div key={i} style={{width:24,height:24,borderRadius:"50%",background:active?T:done?(win?GR:RE):G200,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:"bold"}}>{done?(roundWins[i]>=2?"✓":"✗"):(i+1)}</div>;
           })}
         </div>
         <span style={{fontSize:11,color:G400,marginLeft:"auto"}}>Frage {qIdx+1}/3</span>
@@ -926,7 +926,7 @@ function QuizSolo({ chapters, onDone }) {
       {currentQ && (<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
         <span style={{fontSize:14}}>{currentQ.correct.chapIcon}</span>
         <span style={{fontSize:11,fontWeight:"bold",color:currentQ.correct.chapColor}}>{currentQ.correct.chapTitle}</span>
-        <span style={{marginLeft:"auto",fontSize:10,color:G400}}>Runde {roundIdx+1} Â· Frage {qIdx+1}</span>
+        <span style={{marginLeft:"auto",fontSize:10,color:G400}}>Runde {roundIdx+1} · Frage {qIdx+1}</span>
       </div>)}
       <div style={{textAlign:"center",padding:"28px 20px",background:G50,borderRadius:16,marginBottom:12,border:"2px solid "+G200}}>
         <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>{questionLabel}</div>
@@ -1176,30 +1176,30 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
     var topLevelKapitel = chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
     return <div style={{padding:8}}>
       <div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200}}>
-        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>ð Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedKapitel.length===0?'Alle':selectedKapitel.length+' ausgewÃ¤hlt'})</span></div>
+        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>📚 Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedKapitel.length===0?'Alle':selectedKapitel.length+' ausgewählt'})</span></div>
         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
           <button onClick={function(){setSelectedKapitel([]);}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(selectedKapitel.length===0?T:G200),background:selectedKapitel.length===0?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:selectedKapitel.length===0?T:G600,touchAction:'manipulation'}}>Alle</button>
           {topLevelKapitel.map(function(kap){ var sel=selectedKapitel.indexOf(kap.id)>=0; return <button key={kap.id} onClick={function(){setSelectedKapitel(function(prev){return sel?prev.filter(function(id){return id!==kap.id;}):prev.concat([kap.id]);});}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(sel?kap.color||T:G200),background:sel?(kap.color||T)+'18':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:sel?kap.color||T:G600,touchAction:'manipulation'}}>{kap.icon} {kap.title}</button>; })}
         </div>
       </div>
       {pendingChallenges.length>0&&<div style={{padding:12,background:'#fffbeb',borderRadius:12,border:'2px solid '+AM,marginBottom:14}}>
-        <div style={{fontWeight:'bold',fontSize:13,color:AM,marginBottom:8}}>âï¸ Herausforderungen ({pendingChallenges.length})</div>
+        <div style={{fontWeight:'bold',fontSize:13,color:AM,marginBottom:8}}>⚔️ Herausforderungen ({pendingChallenges.length})</div>
         {pendingChallenges.map(function(c){ var ac2=avatarColor(c.player1_name||'?');
           return <div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid #fde68a'}}>
             <div style={{width:36,height:36,borderRadius:'50%',background:ac2,color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:15,flexShrink:0}}>{(c.player1_name||'?')[0].toUpperCase()}</div>
             <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{c.player1_name}</div><div style={{fontSize:10,color:G400}}>fordert dich heraus!</div></div>
-            <button onClick={function(){acceptChallenge(c);}} style={{padding:'8px 16px',borderRadius:8,border:'none',background:T,color:'white',cursor:'pointer',fontSize:13,fontWeight:'bold',flexShrink:0,touchAction:'manipulation'}}>â Annehmen</button>
+            <button onClick={function(){acceptChallenge(c);}} style={{padding:'8px 16px',borderRadius:8,border:'none',background:T,color:'white',cursor:'pointer',fontSize:13,fontWeight:'bold',flexShrink:0,touchAction:'manipulation'}}>✓ Annehmen</button>
           </div>; })}
       </div>}
       <div style={{display:'flex',gap:6,marginBottom:12,background:G100,padding:4,borderRadius:10}}>
-        <button onClick={function(){setTab('users');}} style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',background:tab==='users'?'white':G100,color:tab==='users'?T:G600,boxShadow:tab==='users'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>ð¥ Spieler auswÃ¤hlen</button>
-        <button onClick={function(){setTab('code');}} style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',background:tab==='code'?'white':G100,color:tab==='code'?T:G600,boxShadow:tab==='code'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>ð Per Code</button>
+        <button onClick={function(){setTab('users');}} style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',background:tab==='users'?'white':G100,color:tab==='users'?T:G600,boxShadow:tab==='users'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>👥 Spieler auswählen</button>
+        <button onClick={function(){setTab('code');}} style={{flex:1,padding:'9px',borderRadius:8,fontSize:13,fontWeight:'bold',cursor:'pointer',border:'none',background:tab==='code'?'white':G100,color:tab==='code'?T:G600,boxShadow:tab==='code'?'0 1px 4px rgba(0,0,0,0.1)':'none'}}>🔗 Per Code</button>
       </div>
       {tab==='users'&&<div>
         <div style={{position:'relative',marginBottom:10}}>
-          <span style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:G400,fontSize:16,pointerEvents:'none'}}>ð</span>
-          <input value={userSearch} onChange={function(e){setUserSearch(e.target.value);}} placeholder="Spieler suchenâ¦" style={{width:'100%',padding:'11px 36px 11px 36px',fontSize:15,border:'1.5px solid '+G200,borderRadius:10,outline:'none',boxSizing:'border-box',background:'white'}}/>
-          {userSearch&&<button onClick={function(){setUserSearch('');}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>â</button>}
+          <span style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:G400,fontSize:16,pointerEvents:'none'}}>🔍</span>
+          <input value={userSearch} onChange={function(e){setUserSearch(e.target.value);}} placeholder="Spieler suchen…" style={{width:'100%',padding:'11px 36px 11px 36px',fontSize:15,border:'1.5px solid '+G200,borderRadius:10,outline:'none',boxSizing:'border-box',background:'white'}}/>
+          {userSearch&&<button onClick={function(){setUserSearch('');}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>✕</button>}
         </div>
         {filteredUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>{userSearch?'Kein Spieler gefunden.':'Keine anderen Spieler vorhanden.'}</div>}
         {filteredUsers.map(function(u){ var isInactive=u.is_active===false; var ac=avatarColor(u.name);
@@ -1210,23 +1210,23 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</div>
-              <div style={{fontSize:11,color:isInactive?G400:'#22c55e',fontWeight:'500'}}>{isInactive?'â¸ Inaktiv':'â Aktiv'}</div>
+              <div style={{fontSize:11,color:isInactive?G400:'#22c55e',fontWeight:'500'}}>{isInactive?'⏸ Inaktiv':'● Aktiv'}</div>
             </div>
-            <button onClick={function(){challengeUser(u);}} style={{flexShrink:0,padding:'9px 16px',borderRadius:9,border:'none',background:isInactive?G200:T,color:isInactive?G600:'white',cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation',boxShadow:isInactive?'none':'0 2px 5px rgba(15,118,110,0.3)'}}>{isInactive?'âï¸ Einladen':'âï¸ Herausfordern'}</button>
+            <button onClick={function(){challengeUser(u);}} style={{flexShrink:0,padding:'9px 16px',borderRadius:9,border:'none',background:isInactive?G200:T,color:isInactive?G600:'white',cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation',boxShadow:isInactive?'none':'0 2px 5px rgba(15,118,110,0.3)'}}>{isInactive?'✉️ Einladen':'⚔️ Herausfordern'}</button>
           </div>; })}
         <button onClick={createOpenGame} style={{display:'block',width:'100%',padding:'11px',marginTop:10,borderRadius:10,border:'1.5px dashed '+G200,background:G50,cursor:'pointer',fontSize:12,color:G600,fontWeight:'bold',touchAction:'manipulation'}}>+ Offenes Spiel per Code erstellen</button>
       </div>}
       {tab==='code'&&<div>
         <div style={{padding:16,background:'white',borderRadius:12,border:'1px solid '+G200,marginBottom:10}}>
-          <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>ð® Neues Duell erstellen</div>
-          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du erhÃ¤ltst einen 6-stelligen Code. Dein Gegner spielt als Erster.</div>
+          <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>🎮 Neues Duell erstellen</div>
+          <div style={{fontSize:12,color:G400,marginBottom:12}}>Du erhältst einen 6-stelligen Code. Dein Gegner spielt als Erster.</div>
           <button onClick={createOpenGame} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:14})}>Duell erstellen & Code teilen</button>
         </div>
         <div style={{padding:16,background:'white',borderRadius:12,border:'1px solid '+G200}}>
-          <div style={{fontWeight:'bold',fontSize:14,color:'#7c3aed',marginBottom:4}}>ð Beitreten</div>
+          <div style={{fontWeight:'bold',fontSize:14,color:'#7c3aed',marginBottom:4}}>🔗 Beitreten</div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <input value={joinCode} onChange={function(e){setJoinCode(e.target.value.toUpperCase());}} placeholder="CODE" style={{flex:1,padding:'12px 8px',fontSize:20,border:'2px solid #7c3aed',borderRadius:10,outline:'none',letterSpacing:8,textTransform:'uppercase',textAlign:'center',fontWeight:'bold',color:'#7c3aed'}}/>
-            <button onClick={joinByCode} style={{padding:'12px 20px',borderRadius:10,border:'none',background:'#7c3aed',color:'white',cursor:'pointer',fontSize:16,fontWeight:'bold',touchAction:'manipulation'}}>â</button>
+            <button onClick={joinByCode} style={{padding:'12px 20px',borderRadius:10,border:'none',background:'#7c3aed',color:'white',cursor:'pointer',fontSize:16,fontWeight:'bold',touchAction:'manipulation'}}>→</button>
           </div>
           {joinErr&&<div style={{color:RE,fontSize:12,marginTop:8,padding:'6px 10px',background:'#fef2f2',borderRadius:7}}>{joinErr}</div>}
         </div>
@@ -1235,21 +1235,21 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   }
 
   if(phase==='waitingForChallengee') return <div style={{textAlign:'center',padding:32}}>
-    <div style={{fontSize:36,marginBottom:12}}>ð¨</div>
+    <div style={{fontSize:36,marginBottom:12}}>📨</div>
     <h3 style={{color:T,marginBottom:8}}>Herausforderung gesendet!</h3>
     {myCode&&<div style={{fontSize:24,fontWeight:'bold',letterSpacing:6,color:AM,background:G100,padding:'10px 16px',borderRadius:10,display:'inline-block',marginBottom:12}}>{myCode}</div>}
     <p style={{color:G600,fontSize:13,marginBottom:16}}>Warte bis {gameData&&gameData.player2_name||'dein Gegner'} seine Runde gespielt hat.</p>
     <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active')setPhase('readyToPlay');}});}}
-      style={BtnStyle(G100,G600,{padding:'8px 16px',fontSize:12})}>ð Status prÃ¼fen</button>
+      style={BtnStyle(G100,G600,{padding:'8px 16px',fontSize:12})}>🔄 Status prüfen</button>
   </div>;
 
   if(phase==='invite') return <div style={{textAlign:'center',padding:32}}>
-    <div style={{fontSize:32,marginBottom:12}}>â³</div>
-    <h3 style={{color:T,marginBottom:8}}>Warte auf Mitspielerâ¦</h3>
+    <div style={{fontSize:32,marginBottom:12}}>⏳</div>
+    <h3 style={{color:T,marginBottom:8}}>Warte auf Mitspieler…</h3>
     <div style={{fontSize:28,fontWeight:'bold',letterSpacing:8,color:AM,margin:'16px 0',background:G100,padding:'12px 20px',borderRadius:12,display:'inline-block'}}>{myCode}</div>
     <p style={{color:G400,fontSize:13}}>Sobald jemand beitritt, kann er zuerst spielen, dann bist du dran.</p>
     <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d){setGameData(d);if(d.whose_turn==='p1'&&d.status==='active')setPhase('readyToPlay');}});}}
-      style={BtnStyle(G100,G600,{marginTop:16,padding:'8px 16px',fontSize:12})}>ð Aktualisieren</button>
+      style={BtnStyle(G100,G600,{marginTop:16,padding:'8px 16px',fontSize:12})}>🔄 Aktualisieren</button>
   </div>;
 
   if(phase==='catpick'){
@@ -1257,7 +1257,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
     if(catsWithWords.length===0){setPhase('playing');return null;}
     return <div style={{padding:8,textAlign:'center'}}>
       {gameData&&<ScoreBoard/>}
-      <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:8}}>WÃ¤hle eine Kategorie fÃ¼r diese Runde:</div>
+      <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:8}}>Wähle eine Kategorie für diese Runde:</div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:8}}>
         {catsWithWords.map(function(cat){ var cnt=allWordsFlat.filter(function(w){return (w.cats||[]).indexOf(cat.id)>=0;}).length;
           return <button key={cat.id} onClick={function(){startWithCat(cat.id);}} style={{padding:'10px 5px',borderRadius:10,border:'2px solid '+G200,background:'white',cursor:'pointer',textAlign:'center',touchAction:'manipulation'}}>
@@ -1276,28 +1276,28 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
       {gameData&&<ScoreBoard/>}
       {isMyTurnNow
         ? <div style={{padding:20,background:'#d1fae5',borderRadius:14,marginBottom:12,border:'2px solid '+GR}}>
-            <div style={{fontSize:28,marginBottom:8}}>ð¯</div>
+            <div style={{fontSize:28,marginBottom:8}}>🎯</div>
             <div style={{fontWeight:'bold',fontSize:16,color:'#065f46',marginBottom:4}}>Jetzt bist du dran!</div>
             <div style={{fontSize:12,color:G600}}>Runde {(isP1?myWins:oppWins).length+1} von {TOTAL_ROUNDS}</div>
           </div>
         : <div style={{padding:20,background:'#eff6ff',borderRadius:14,marginBottom:12}}>
-            <div style={{fontSize:28,marginBottom:8}}>â³</div>
-            <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} spielt geradeâ¦</div>
+            <div style={{fontSize:28,marginBottom:8}}>⏳</div>
+            <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} spielt gerade…</div>
           </div>}
-      {isMyTurnNow&&<button onClick={startMyTurn} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16})}>â¶ Meine Runde starten</button>}
-      {!isMyTurnNow&&<button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d) setGameData(d);});}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>ð Aktualisieren</button>}
+      {isMyTurnNow&&<button onClick={startMyTurn} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16})}>▶ Meine Runde starten</button>}
+      {!isMyTurnNow&&<button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){if(d) setGameData(d);});}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>🔄 Aktualisieren</button>}
     </div>;
   }
 
   if(phase==='waiting') return <div style={{padding:8,textAlign:'center'}}>
     <ScoreBoard/>
     <div style={{padding:20,background:'#eff6ff',borderRadius:14,marginBottom:12}}>
-      <div style={{fontSize:28,marginBottom:8}}>â³</div>
+      <div style={{fontSize:28,marginBottom:8}}>⏳</div>
       <div style={{fontWeight:'bold',fontSize:14,color:T}}>{oppName} ist dran!</div>
     </div>
     <button onClick={function(){sbSingle('quiz_duels','id=eq.'+gameId).then(function(d){
       if(d){setGameData(d);var myT=(isP1&&d.whose_turn==='p1')||(!isP1&&d.whose_turn==='p2');if(myT||d.status==='finished')setPhase('readyToPlay');}
-    });}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>ð Aktualisieren</button>
+    });}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px'})}>🔄 Aktualisieren</button>
   </div>;
 
   if(phase==='roundResult'){
@@ -1306,7 +1306,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
     var gameOver2=gameData&&gameData.status==='finished';
     return <div style={{padding:8}}>
       <div style={{textAlign:'center',padding:'20px 16px',background:roundWon?'#f0fdf4':'#fef2f2',borderRadius:14,marginBottom:12,border:'2px solid '+(roundWon?GR:RE)}}>
-        <div style={{fontSize:32,marginBottom:6}}>{roundWon?'ð':'ð'}</div>
+        <div style={{fontSize:32,marginBottom:6}}>{roundWon?'🎉':'😔'}</div>
         <div style={{fontSize:17,fontWeight:'bold',color:roundWon?'#065f46':RE}}>Runde {myWins.length}: {roundCorrect2}/3 richtig - {roundWon?'Gewonnen!':'Verloren'}</div>
       </div>
       <ScoreBoard/>
@@ -1315,7 +1315,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
         if(gameOver2){setPhase('finalResult');return;}
         setPhase('waiting'); setRoundCat(null);
         setCurrentRoundIdx(function(i){return i+1;}); setQIdx(0); setMyAnswers([]); setChosen(null);
-      }} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>{gameOver2?'ð Ergebnis sehen':'OK, Gegner ist dran â'}</button>
+      }} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>{gameOver2?'🏁 Ergebnis sehen':'OK, Gegner ist dran →'}</button>
     </div>;
   }
 
@@ -1325,14 +1325,14 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
     var tie=myR2===oppR2; var iWon=myR2>oppR2;
     return <div style={{padding:8}}>
       <div style={{borderRadius:16,padding:'24px 16px',textAlign:'center',marginBottom:12,background:tie?'linear-gradient(135deg,'+AM+',#f59e0b)':iWon?'linear-gradient(135deg,'+GR+',#16a34a)':'linear-gradient(135deg,'+RE+',#dc2626)',color:'white'}}>
-        <div style={{fontSize:48,marginBottom:8}}>{tie?'ð¤':iWon?'ð':'ð'}</div>
+        <div style={{fontSize:48,marginBottom:8}}>{tie?'🤝':iWon?'🏆':'😔'}</div>
         <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>{tie?'Unentschieden!':iWon?'Du hast gewonnen!':'Niederlage'}</div>
         <div style={{fontSize:16,opacity:0.9}}>{myR2} : {oppR2} Runden</div>
       </div>
       <ScoreBoard/>
       <div style={{display:'flex',gap:8,marginTop:8}}>
-        <button onClick={function(){setPhase('setup');setGameId(null);setGameData(null);setRounds([]);setMyAnswers([]);setCurrentRoundIdx(0);}} style={BtnStyle(T,'white',{flex:1,padding:'12px'})}>ð Neues Duell</button>
-        <button onClick={onDone} style={BtnStyle(G100,G600,{flex:1,padding:'12px'})}>â MenÃ¼</button>
+        <button onClick={function(){setPhase('setup');setGameId(null);setGameData(null);setRounds([]);setMyAnswers([]);setCurrentRoundIdx(0);}} style={BtnStyle(T,'white',{flex:1,padding:'12px'})}>🔄 Neues Duell</button>
+        <button onClick={onDone} style={BtnStyle(G100,G600,{flex:1,padding:'12px'})}>← Menü</button>
       </div>
     </div>;
   }
@@ -1350,7 +1350,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
       <div style={{flex:1,textAlign:'center',padding:'8px',background:G100,borderRadius:8}}><div style={{fontSize:9,color:G400}}>Frage</div><div style={{fontSize:17,fontWeight:'bold',color:G600}}>{qIdx+1}/3</div></div>
     </div>
     {currentRound&&<div style={{textAlign:'center',padding:'20px 16px',background:G50,borderRadius:14,marginBottom:10,border:'2px solid '+G200}}>
-      <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{isEn2De2?'Was bedeutet auf Deutsch:':'Wie heiÃt auf Englisch:'}</div>
+      <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{isEn2De2?'Was bedeutet auf Deutsch:':'Wie heißt auf Englisch:'}</div>
       <div style={{fontSize:26,fontWeight:'bold',color:G900}}>{question2}</div>
     </div>}
     <div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginBottom:10}}>
@@ -1398,7 +1398,7 @@ function Puzzle({ data, solPhrase, solMsg, onWord, chapId }) {
   var CS=26;
   return (
     <div>
-      <div style={{fontSize:11,color:G600,textAlign:"center",marginBottom:8,padding:"4px 8px",background:"#f0f9ff",borderRadius:6,border:"1px solid #bae6fd"}}>â¹ï¸ Monate â <strong>GroÃbuchstaben</strong> Â· alle anderen â <strong>Kleinbuchstaben</strong></div>
+      <div style={{fontSize:11,color:G600,textAlign:"center",marginBottom:8,padding:"4px 8px",background:"#f0f9ff",borderRadius:6,border:"1px solid #bae6fd"}}>ℹ️ Monate → <strong>Großbuchstaben</strong> · alle anderen → <strong>Kleinbuchstaben</strong></div>
       <div style={{overflowX:"auto",marginBottom:10}}>
         <table style={{borderCollapse:"collapse",margin:"0 auto"}}>
           <tbody>
@@ -1421,18 +1421,18 @@ function Puzzle({ data, solPhrase, solMsg, onWord, chapId }) {
         </table>
       </div>
       {solCells.length>0&&(<div style={{margin:"8px 0",padding:"8px 12px",background:solOk?"#fef9c3":"#f8fafc",border:"2px solid "+(solOk?AM:G200),borderRadius:8}}>
-        <div style={{fontSize:10,color:G400,marginBottom:5,fontWeight:"bold",textTransform:"uppercase",letterSpacing:1}}>ð LÃ¶sungswort</div>
+        <div style={{fontSize:10,color:G400,marginBottom:5,fontWeight:"bold",textTransform:"uppercase",letterSpacing:1}}>🔑 Lösungswort</div>
         <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{solCells.map(function(sc,i){ var r2=rev[i]; return (<div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}><div style={{width:24,height:24,border:"2px solid "+(r2?AM:G200),borderRadius:4,background:r2?"#fef3c7":"#f1f5f9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:"bold",color:G900}}>{r2||""}</div><span style={{fontSize:7,color:AM,fontWeight:"bold"}}>{sc.pos}</span></div>); })}</div>
         {solOk&&<div style={{marginTop:8,padding:"6px 10px",background:"#fef08a",borderRadius:6,fontSize:14,fontWeight:"bold",color:"#92400e",textAlign:"center"}}>{solMsg}</div>}
       </div>)}
       <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:8,flexWrap:"wrap"}}>
-        <button onClick={check} style={BtnStyle(T)}>â PrÃ¼fen</button>
-        <button onClick={function(){setUser(function(){var u=[];for(var r=0;r<rows;r++){u.push([]);for(var c=0;c<cols;c++)u[r].push("");}return u;});setChecked(false);}} style={BtnStyle(G400)}>âº Reset</button>
-        <button onClick={finish} style={BtnStyle("#7c3aed")}>â AbschlieÃen</button>
+        <button onClick={check} style={BtnStyle(T)}>✓ Prüfen</button>
+        <button onClick={function(){setUser(function(){var u=[];for(var r=0;r<rows;r++){u.push([]);for(var c=0;c<cols;c++)u[r].push("");}return u;});setChecked(false);}} style={BtnStyle(G400)}>↺ Reset</button>
+        <button onClick={finish} style={BtnStyle("#7c3aed")}>✅ Abschließen</button>
       </div>
-      {checked&&<div style={{textAlign:"center",marginBottom:8,padding:"6px 10px",borderRadius:6,fontWeight:"bold",fontSize:13,background:corr===tot?"#d1fae5":"#fee2e2",color:corr===tot?"#065f46":"#991b1b"}}>{corr}/{tot} richtig {corr===tot?"ð Perfekt!":""} Â· PrÃ¼fen: {cc}Ã</div>}
+      {checked&&<div style={{textAlign:"center",marginBottom:8,padding:"6px 10px",borderRadius:6,fontWeight:"bold",fontSize:13,background:corr===tot?"#d1fae5":"#fee2e2",color:corr===tot?"#065f46":"#991b1b"}}>{corr}/{tot} richtig {corr===tot?"🎉 Perfekt!":""} · Prüfen: {cc}×</div>}
       <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:4}}>
-        {[["â Waagerecht",across],["â Senkrecht",down]].map(function(pair){
+        {[["→ Waagerecht",across],["↓ Senkrecht",down]].map(function(pair){
           var t2=pair[0],clues=pair[1];
           return (<div key={t2} style={{flex:"1 1 160px",minWidth:0}}>
             <div style={{fontWeight:"bold",fontSize:12,color:T,borderBottom:"2px solid "+T,marginBottom:4,paddingBottom:2}}>{t2}</div>
@@ -1449,7 +1449,7 @@ function WordSelector({ chapters, onStart, mode }) {
   var [sel, setSel] = useState({});
   var [filter, setFilter] = useState("all");
   var total = Object.values(sel).reduce(function(s,set){ return s+set.size; }, 0);
-  function getFiltered(ch){ return filter==="important" ? (Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return w.important;}) : ch.words; }
+  function getFiltered(ch){ return filter==="important" ? ch.words.filter(function(w){return w.important;}) : ch.words; }
   function togAll(ch){ setSel(function(prev){ var n=Object.assign({},prev); var fi=getFiltered(ch); var cur=n[ch.id]||new Set(); var allS=fi.every(function(w){return cur.has(ch.words.indexOf(w));}); var next=new Set(cur); if(allS) fi.forEach(function(w){next.delete(ch.words.indexOf(w));}); else fi.forEach(function(w){next.add(ch.words.indexOf(w));}); n[ch.id]=next; return n; }); }
   function togW(chId,idx){ setSel(function(prev){ var n=Object.assign({},prev); var cur=new Set(n[chId]||[]); if(cur.has(idx)) cur.delete(idx); else cur.add(idx); n[chId]=cur; return n; }); }
   function getWords(){ var w=[]; chapters.forEach(function(ch){ var s=sel[ch.id]||new Set(); s.forEach(function(i){ if(ch.words[i]) w.push(Object.assign({},ch.words[i],{chapterId:ch.id})); }); }); return w; }
@@ -1457,28 +1457,28 @@ function WordSelector({ chapters, onStart, mode }) {
     <div>
       <div style={{display:"flex",gap:6,marginBottom:12,padding:"8px 12px",background:G50,borderRadius:10,alignItems:"center",flexWrap:"wrap"}}>
         <span style={{fontSize:12,color:G600,fontWeight:"bold"}}>Anzeigen:</span>
-        {[["all","ð Alle"],["important","â­ Nur fett"]].map(function(pair){ return <button key={pair[0]} onClick={function(){setFilter(pair[0]);}} style={{padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:"bold",background:filter===pair[0]?T:"white",color:filter===pair[0]?"white":G600,border:"1.5px solid "+(filter===pair[0]?T:G200),cursor:"pointer"}}>{pair[1]}</button>; })}
+        {[["all","📚 Alle"],["important","⭐ Nur fett"]].map(function(pair){ return <button key={pair[0]} onClick={function(){setFilter(pair[0]);}} style={{padding:"5px 12px",borderRadius:20,fontSize:12,fontWeight:"bold",background:filter===pair[0]?T:"white",color:filter===pair[0]?"white":G600,border:"1.5px solid "+(filter===pair[0]?T:G200),cursor:"pointer"}}>{pair[1]}</button>; })}
       </div>
       <div style={{marginBottom:12,padding:"10px 14px",background:TL,borderRadius:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontSize:13,color:T,fontWeight:"bold"}}>{total} Vokabeln gewÃ¤hlt</span>
-        <button onClick={function(){ if(total>=3) onStart(getWords()); }} disabled={total<3} style={BtnStyle(total>=3?T:G400,"#fff",{padding:"6px 14px",opacity:total<3?0.5:1})}>{mode==="battle"?"âï¸ RÃ¤tsel-Duell":"ð¯ Lernen starten"}</button>
+        <span style={{fontSize:13,color:T,fontWeight:"bold"}}>{total} Vokabeln gewählt</span>
+        <button onClick={function(){ if(total>=3) onStart(getWords()); }} disabled={total<3} style={BtnStyle(total>=3?T:G400,"#fff",{padding:"6px 14px",opacity:total<3?0.5:1})}>{mode==="battle"?"⚔️ Rätsel-Duell":"🎯 Lernen starten"}</button>
       </div>
-      {total<3&&<p style={{fontSize:11,color:G400,textAlign:"center",marginBottom:8}}>Mindestens 3 Vokabeln auswÃ¤hlen</p>}
+      {total<3&&<p style={{fontSize:11,color:G400,textAlign:"center",marginBottom:8}}>Mindestens 3 Vokabeln auswählen</p>}
       {chapters.map(function(ch){ var s=sel[ch.id]||new Set(); var fi=getFiltered(ch); var allS=fi.length>0&&fi.every(function(w){return s.has(ch.words.indexOf(w));}); var someS=fi.some(function(w){return s.has(ch.words.indexOf(w));})&&!allS; var open=openCh===ch.id;
         return (<div key={ch.id} style={{marginBottom:8,border:"2px solid "+(s.size>0?ch.color:G200),borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:s.size>0?(ch.color+"15"):"white",cursor:"pointer"}} onClick={function(){setOpenCh(open?null:ch.id);}}>
             <span style={{fontSize:20}}>{ch.icon}</span>
-            <div style={{flex:1}}><div style={{fontWeight:"bold",fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).length} gesamt Â· {(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return w.important;}).length} â­ Â· {s.size} gewÃ¤hlt</div></div>
+            <div style={{flex:1}}><div style={{fontWeight:"bold",fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{ch.words.length} gesamt · {ch.words.filter(function(w){return w.important;}).length} ⭐ · {s.size} gewählt</div></div>
             <div onClick={function(e){e.stopPropagation();togAll(ch);}} style={{width:22,height:22,borderRadius:6,border:"2px solid "+(allS?ch.color:someS?ch.color:G200),background:allS?ch.color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}>
-              {allS&&<span style={{color:"white",fontSize:13}}>â</span>}{someS&&<span style={{color:ch.color,fontSize:13}}>â</span>}
+              {allS&&<span style={{color:"white",fontSize:13}}>✓</span>}{someS&&<span style={{color:ch.color,fontSize:13}}>–</span>}
             </div>
-            <span style={{color:G400,fontSize:12}}>{open?"â²":"â¼"}</span>
+            <span style={{color:G400,fontSize:12}}>{open?"▲":"▼"}</span>
           </div>
           {open&&(<div style={{padding:"8px 14px 12px",background:"#fafafa",borderTop:"1px solid "+G200}}>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
               {fi.map(function(w){ var ri=ch.words.indexOf(w); var isSel=s.has(ri);
                 return (<div key={ri} onClick={function(){togW(ch.id,ri);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:20,border:"1.5px solid "+(isSel?ch.color:G200),background:isSel?(ch.color+"15"):"white",cursor:"pointer"}}>
-                  {w.important&&<span style={{fontSize:9}}>â­</span>}
+                  {w.important&&<span style={{fontSize:9}}>⭐</span>}
                   <span style={{fontSize:12,fontWeight:w.important?"bold":"normal",color:isSel?ch.color:G600}}>{w.word}</span>
                   <span style={{fontSize:10,color:G400}}>= {w.clue}</span>
                 </div>); })}
@@ -1497,18 +1497,18 @@ function BrowseChapter({ ch }) {
     <div style={{marginBottom:8,border:'2px solid '+ch.color+'30',borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:ch.color+'10',cursor:'pointer'}} onClick={function(){setOpen(function(o){return !o;});}}>
         <span style={{fontSize:20}}>{ch.icon}</span>
-        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).length} Vokabeln Â· {(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return w.important;}).length} â­{sentCount?' Â· '+sentCount+' SÃ¤tze':''}</div></div>
-        <span style={{color:G400,fontSize:12}}>{open?'â²':'â¼'}</span>
+        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{ch.words.length} Vokabeln · {ch.words.filter(function(w){return w.important;}).length} ⭐{sentCount?' · '+sentCount+' Sätze':''}</div></div>
+        <span style={{color:G400,fontSize:12}}>{open?'▲':'▼'}</span>
       </div>
       {open&&(<div style={{padding:'10px 14px',background:'#fafafa',borderTop:'1px solid '+G200}}>
         {sentCount>0&&(<div style={{display:'flex',gap:6,marginBottom:8}}>
-          <button onClick={function(){setShowSent(false);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?G200:ch.color),background:showSent?'white':ch.color+'15',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?G600:ch.color}}>ð Vokabeln</button>
-          <button onClick={function(){setShowSent(true);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?ch.color:G200),background:showSent?ch.color+'15':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?ch.color:G600}}>ð¬ SÃ¤tze ({sentCount})</button>
+          <button onClick={function(){setShowSent(false);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?G200:ch.color),background:showSent?'white':ch.color+'15',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?G600:ch.color}}>📝 Vokabeln</button>
+          <button onClick={function(){setShowSent(true);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?ch.color:G200),background:showSent?ch.color+'15':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?ch.color:G600}}>💬 Sätze ({sentCount})</button>
         </div>)}
         {!showSent&&ch.words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}).map(function(w,i){
-          return(<div key={i} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}><span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'â­ ':''}{w.word}</span><span style={{color:G400}}>{w.clue}</span></div>);
+          return(<div key={i} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}><span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span><span style={{color:G400}}>{w.clue}</span></div>);
         })}
-        {showSent&&(ch.sentences||[]).map(function(s,i){ return(<div key={i} style={{padding:'6px 0',borderBottom:'1px solid '+G100}}><div style={{fontSize:12,fontWeight:s.important?'bold':'normal'}}>{s.important?'â­ ':''}{s.text}</div><div style={{fontSize:11,color:G400}}>{s.translation}</div></div>); })}
+        {showSent&&(ch.sentences||[]).map(function(s,i){ return(<div key={i} style={{padding:'6px 0',borderBottom:'1px solid '+G100}}><div style={{fontSize:12,fontWeight:s.important?'bold':'normal'}}>{s.important?'⭐ ':''}{s.text}</div><div style={{fontSize:11,color:G400}}>{s.translation}</div></div>); })}
       </div>)}
     </div>
   );
@@ -1601,7 +1601,7 @@ function T2LetterField({ word, onCorrect, onWrong }) {
                 border:'2px solid '+(filled?T:G200),display:'flex',alignItems:'center',
                 justifyContent:'center',fontWeight:'bold',fontSize:16,
                 color:filled?T:G400,cursor:filled?'pointer':'default'}}>
-              {filled?filled.l:'â'}
+              {filled?filled.l:'–'}
             </div>;
           })
         }
@@ -1613,10 +1613,10 @@ function T2LetterField({ word, onCorrect, onWrong }) {
         </div>
       )}
       <div style={{display:'flex',gap:6,justifyContent:'center'}}>
-        {!checked&&<button onClick={removeLast} disabled={answer.length===0} style={BtnStyle(G100,G600,{padding:'8px 14px',opacity:answer.length===0?0.4:1})}>â ZurÃ¼ck</button>}
-        {!checked&&<button onClick={check} disabled={!complete} style={BtnStyle(T,'white',{padding:'8px 20px',opacity:complete?1:0.4})}>â PrÃ¼fen</button>}
-        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>â Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>â Falsch â kommt wieder</div>}
-        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:14,padding:'8px'}}>â Richtig! Weiterâ¦</div>}
+        {!checked&&<button onClick={removeLast} disabled={answer.length===0} style={BtnStyle(G100,G600,{padding:'8px 14px',opacity:answer.length===0?0.4:1})}>← Zurück</button>}
+        {!checked&&<button onClick={check} disabled={!complete} style={BtnStyle(T,'white',{padding:'8px 20px',opacity:complete?1:0.4})}>✓ Prüfen</button>}
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>✓ Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>✗ Falsch — kommt wieder</div>}
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:14,padding:'8px'}}>✓ Richtig! Weiter…</div>}
       </div>
     </div>
   );
@@ -1637,7 +1637,7 @@ function CelebrationPopup({ msg, onClose }) {
   return(
     <div style={{position:'fixed',inset:0,zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.4)'}} onClick={onClose}>
       <div style={{background:'white',borderRadius:24,padding:'40px 32px',textAlign:'center',maxWidth:300,margin:16,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-        <div style={{fontSize:60,marginBottom:12}}>ð</div>
+        <div style={{fontSize:60,marginBottom:12}}>🎉</div>
         <div style={{fontSize:20,fontWeight:'bold',color:T,marginBottom:8}}>{msg||'Super gemacht!'}</div>
         <button onClick={onClose} style={BtnStyle(T,'white',{marginTop:12,width:'100%',padding:'12px'})}>Weiter</button>
       </div>
@@ -1716,8 +1716,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       created_at:new Date().toISOString()};
     sbPost('word_disputes',payload).then(function(res){
       if(!res||res._err) return;
-      if(type==='unimportant') alert('â Meldung gesendet. Admin prÃ¼ft die Anfrage.');
-      else alert('â Anfrage gesendet. Admin prÃ¼ft deine Antwort.');
+      if(type==='unimportant') alert('✅ Meldung gesendet. Admin prüft die Anfrage.');
+      else alert('✅ Anfrage gesendet. Admin prüft deine Antwort.');
     }).catch(function(){});
   }
 
@@ -1745,7 +1745,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(pts>0&&setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
     var log={word:current.word,clue:current.clue,typed:opt.word,correct:correct,partial:false,fromPot:1,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
-    if(correct&&moveTo===6)setCelebration('ð "'+current.word+'" gelernt!');
+    if(correct&&moveTo===6)setCelebration('🏆 "'+current.word+'" gelernt!');
     setTimeout(function(){
       setResult({correct:correct,word:current.word,clue:current.clue,answer:current.word,typed:opt.word,fromPot:1,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
       setPhase('showResult');
@@ -1794,7 +1794,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setSessionLog(function(l){return l.concat([log]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
     setPhase('showResult');
-    if(correct && moveTo===6 && fromPot!==6) setCelebration('ð "'+current.word+'" gelernt!');
+    if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
 
   function nextWord(){
@@ -1804,7 +1804,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     pickWord();
   }
 
-  if(dataLoading||!data) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschrittâ¦</div>;
+  if(dataLoading||!data) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
 
   if(phase==='pick'){
     var pct = lsPercent(data);
@@ -1814,7 +1814,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:20,color:'white',textAlign:'center',marginBottom:12}}>
-          <div style={{fontSize:32,marginBottom:6}}>{run.icon||'ð¯'} {run.name}</div>
+          <div style={{fontSize:32,marginBottom:6}}>{run.icon||'🎯'} {run.name}</div>
           <div style={{display:'flex',gap:16,justifyContent:'center',marginBottom:10}}>
             <div><div style={{fontSize:24,fontWeight:'bold'}}>{pct}%</div><div style={{fontSize:10,opacity:.8}}>Fortschritt</div></div>
             <div><div style={{fontSize:24,fontWeight:'bold'}}>{learned}/{totalWords}</div><div style={{fontSize:10,opacity:.8}}>Gelernt</div></div>
@@ -1834,8 +1834,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             </div>;
           })}
         </div>
-        <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>â¶ Lernen starten</button>
-        <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>â ZurÃ¼ck</button>
+        <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
+        <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
       </div>
     );
   }
@@ -1845,7 +1845,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 â Welche Ãbersetzung ist richtig?</div>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
@@ -1862,7 +1862,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           })}
         </div>
         <button onClick={function(){setResult({skipped:true,word:current?current.word:'',clue:current?current.clue:'',answer:current?current.word:'',fromPot:1,toPot:1,pts:0});setPhase('showResult');}}
-          style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Ãberspringen / Nicht gewusst</button>
+          style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
   }
@@ -1871,7 +1871,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
-          <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Topf 2 â Buchstaben sortieren</div>
+          <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Topf 2 — Buchstaben sortieren</div>
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
           <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
         </div>
@@ -1893,7 +1893,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var pts=10;
           if(onUpdateScore)onUpdateScore(pts);
           if(setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
-          if(moveTo===6)setCelebration('ð "'+current.word+'" gelernt!');
+          if(moveTo===6)setCelebration('🏆 "'+current.word+'" gelernt!');
           setResult({correct:true,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:current.word,fromPot:2,toPot:moveTo,pts:pts,newStreak:wObj.streak,reqStreak:reqStreak});
           setPhase('showResult');
         }} onWrong={function(typed){
@@ -1911,7 +1911,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
           setPhase('showResult');
         }}/>}
-        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:2,toPot:2,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Ãberspringen</button>
+        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:2,toPot:2,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
       </div>
     );
   }
@@ -1922,7 +1922,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 â Wie heiÃt das auf Englisch?</div>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
           <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
             {dashWord.split('').map(function(_,i){
@@ -1939,11 +1939,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitAnswer();}}
             autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
-            placeholder={'Englisch ('+dashWord.length+' Buchstaben)â¦'}
+            placeholder={'Englisch ('+dashWord.length+' Buchstaben)…'}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>â</button>
+          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:3,toPot:3,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Ãberspringen / Nicht gewusst</button>
+        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:3,toPot:3,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
   }
@@ -1953,18 +1953,18 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} â {current&&current.pot===5?'Wie heiÃt das auf Deutsch?':'Wie heiÃt das auf Englisch?'}</div>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
           <div style={{fontSize:24,fontWeight:'bold',color:G900,marginBottom:4}}>{current&&(current.pot===5?current.word:current.clue)}</div>
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitAnswer();}}
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
-            placeholder={current&&current.pot===5?'Deutschâ¦':'Englischâ¦'}
+            placeholder={current&&current.pot===5?'Deutsch…':'Englisch…'}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>â</button>
+          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){setResult({skipped:true,answer:current?current.clue:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:current?current.pot:1,toPot:current?current.pot:1,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Ãberspringen / Nicht gewusst</button>
+        <button onClick={function(){setResult({skipped:true,answer:current?current.clue:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:current?current.pot:1,toPot:current?current.pot:1,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
     return(
@@ -1973,22 +1973,22 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {result&&(
           <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.correct?GR:RE)}}>
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
-              {result.skipped?'â­ Ãbersprungen':result.correct?'â Richtig'+(result.partial?' (fast)':''):'â Falsch'}
+              {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
             <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
             {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
             {!result.skipped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} {POT_LABEL[result.fromPot]}</span>
-              <span style={{fontSize:12,color:G400}}>â</span>
+              <span style={{fontSize:12,color:G400}}>→</span>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.toPot]+'22',color:POT_COL[result.toPot],fontWeight:'bold'}}>{POT_ICON[result.toPot]} {POT_LABEL[result.toPot]}</span>
               {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
             </div>}
           </div>
         )}
-        <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>â Weiter</button>
-        <button onClick={function(){setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / MenÃ¼</button>
-        {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>â Antwort anfechten</button>}
-        <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>ð Als unwichtig melden</button>
+        <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>→ Weiter</button>
+        <button onClick={function(){setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
+        {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
+        <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>🔇 Als unwichtig melden</button>
       </div>
     );
   }
@@ -2000,22 +2000,22 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:24,color:'white',textAlign:'center',marginBottom:12}}>
-          <div style={{fontSize:40,marginBottom:8}}>{pct2>=80?'ð':pct2>=60?'ð':'ð'}</div>
+          <div style={{fontSize:40,marginBottom:8}}>{pct2>=80?'🏆':pct2>=60?'👍':'📚'}</div>
           <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>Session beendet</div>
-          <div style={{fontSize:14,opacity:.85}}>{corr3} richtig Â· {wrong3} falsch</div>
+          <div style={{fontSize:14,opacity:.85}}>{corr3} richtig · {wrong3} falsch</div>
           <div style={{marginTop:8,fontSize:16,fontWeight:'bold'}}>{pct2}% Gesamtfortschritt</div>
         </div>
         {sessionLog.length>0&&<div style={{marginBottom:12}}>
           {sessionLog.slice(-10).map(function(l,i){
             return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',marginBottom:3,borderRadius:7,background:l.correct?'#d1fae5':l.skipped?G50:'#fee2e2',fontSize:11}}>
-              <span>{l.correct?'â':l.skipped?'â­':'â'}</span>
+              <span>{l.correct?'✓':l.skipped?'⏭':'✗'}</span>
               <span style={{fontWeight:'bold',flex:1}}>{l.word}</span>
               <span style={{color:G400}}>{l.clue}</span>
               {l.pts>0&&<span style={{color:AM,fontWeight:'bold'}}>+{l.pts}</span>}
             </div>;
           })}
         </div>}
-        <button onClick={onDone} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>â ZurÃ¼ck</button>
+        <button onClick={onDone} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>← Zurück</button>
       </div>
     );
   }
@@ -2043,12 +2043,12 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
       }).catch(function(){});
     }
   },[]);
-  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runsâ¦</div>;
+  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   if(runs.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>Noch keine Runs. Bitte Admin fragen.</div>;
   var gs = streakSettings || DEFAULT_STREAK;
   return(
     <div style={{padding:8}}>
-      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel â Run wÃ¤hlen</div>
+      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
       {runs.map(function(run){
         var wordCount = run.word_count || (run.words ? (typeof run.words==='string' ? JSON.parse(run.words||'[]').length : (run.words||[]).length) : 0);
         var prog = progressMap[run.id];
@@ -2058,10 +2058,10 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
           <button key={run.id} onClick={function(){onStart(run,gs);}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+(T+'44'),background:'white',cursor:'pointer',touchAction:'manipulation'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:22}}>{run.icon||'ð¯'}</span>
+              <span style={{fontSize:22}}>{run.icon||'🎯'}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.name}</div>
-                <div style={{fontSize:10,color:G400}}>{wordCount} Vokabeln{run.is_admin_run?' Â· ð Klassen-Run':''}</div>
+                <div style={{fontSize:10,color:G400}}>{wordCount} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
               </div>
               {grade ? <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',fontSize:16,color:T}}>{grade}</div><div style={{fontSize:10,color:G400}}>{pct}%</div></div> : <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
             </div>
@@ -2074,7 +2074,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
 }
 function LeitersSpielCreate({ player, chapters, onDone }) {
   var [name, setName] = useState('');
-  var [icon, setIcon] = useState('ð¯');
+  var [icon, setIcon] = useState('🎯');
   var [selectedWords, setSelectedWords] = useState([]);
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
@@ -2103,7 +2103,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     else { var toAdd=chWords.filter(function(w){return !isSelected(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
   }
   function save(){
-    if(!name.trim()||selectedWords.length<2){setMsg('Name und mind. 2 WÃ¶rter erforderlich');return;}
+    if(!name.trim()||selectedWords.length<2){setMsg('Name und mind. 2 Wörter erforderlich');return;}
     setSaving(true);
     var wordsJson=JSON.stringify(selectedWords.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapId||'',important:w.important||false};}));
     var newRun={name:name.trim(),icon:icon,player_id:UUID.test(player.id)?player.id:null,
@@ -2112,7 +2112,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     sbPost('ls_runs',newRun).then(function(res){
       setSaving(false);
       if(res&&res._err){setMsg('Fehler: '+res.msg);return;}
-      setMsg('â Run gespeichert!');
+      setMsg('✓ Run gespeichert!');
       setTimeout(onDone,1000);
     }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
@@ -2120,39 +2120,39 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   return(
     <div style={{padding:8}}>
       <div style={{display:'flex',gap:6,marginBottom:12}}>
-        <div style={{fontSize:32,cursor:'pointer'}} onClick={function(){var icons=['ð¯','ð','ð','â­','ð','ðª','ð¥','ð§ '];setIcon(icons[(icons.indexOf(icon)+1)%icons.length]);}}>{icon}</div>
-        <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Run-Nameâ¦"
+        <div style={{fontSize:32,cursor:'pointer'}} onClick={function(){var icons=['🎯','📚','🏆','⭐','🎓','💪','🔥','🧠'];setIcon(icons[(icons.indexOf(icon)+1)%icons.length]);}}>{icon}</div>
+        <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Run-Name…"
           style={{flex:1,padding:'10px 12px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
       </div>
       <div style={{display:'flex',gap:6,marginBottom:10}}>
-        <button onClick={selectImportant} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>â­ Alle wichtigen</button>
+        <button onClick={selectImportant} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>⭐ Alle wichtigen</button>
         <button onClick={selectAll} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>Alle ({allWords.length})</button>
-        <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'7px 10px',fontSize:11})}>â</button>
+        <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'7px 10px',fontSize:11})}>✕</button>
       </div>
-      <div style={{marginBottom:12,padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold'}}>{selectedWords.length} Vokabeln ausgewÃ¤hlt</div>
+      <div style={{marginBottom:12,padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold'}}>{selectedWords.length} Vokabeln ausgewählt</div>
       {topLevel.map(function(kap){
         var children=chapters.filter(function(c){return c.parent_id===kap.id;});
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
           <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
           {children.map(function(ch){
-            var chSel=(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).every(function(w){return isSelected(w);});
-            var chSome=!chSel&&(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).some(function(w){return isSelected(w);});
+            var chSel=ch.words.every(function(w){return isSelected(w);});
+            var chSome=!chSel&&ch.words.some(function(w){return isSelected(w);});
             var open=openCh===ch.id;
             return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
                 <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(chSel?ch.color:chSome?ch.color:G200),background:chSel?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  {chSel&&<span style={{color:'white',fontSize:10}}>â</span>}
-                  {chSome&&<span style={{color:ch.color,fontSize:12}}>â</span>}
+                  {chSel&&<span style={{color:'white',fontSize:10}}>✓</span>}
+                  {chSome&&<span style={{color:ch.color,fontSize:12}}>−</span>}
                 </div>
                 <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return isSelected(w);}).length}/{(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).length}</span>
-                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'â²':'â¼'}</span>
+                <span style={{fontSize:10,color:G400}}>{ch.words.filter(function(w){return isSelected(w);}).length}/{ch.words.length}</span>
+                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
               </div>
               {open&&<div style={{padding:'4px 12px 8px 32px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).map(function(w,i){
+                {ch.words.map(function(w,i){
                   var sel=isSelected(w);
                   return <div key={i} onClick={function(){toggleWord(w);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:20,border:'1.5px solid '+(sel?ch.color:G200),background:sel?ch.color+'18':'white',cursor:'pointer',touchAction:'manipulation'}}>
-                    {w.important&&<span style={{fontSize:9}}>â­</span>}
+                    {w.important&&<span style={{fontSize:9}}>⭐</span>}
                     <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:sel?ch.color:G600}}>{w.word}</span>
                   </div>;
                 })}
@@ -2161,8 +2161,8 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
           })}
         </div>;
       })}
-      {msg&&<div style={{padding:'8px 12px',borderRadius:8,background:msg.startsWith('â')?'#d1fae5':'#fee2e2',color:msg.startsWith('â')?T:RE,marginBottom:8,fontSize:12}}>{msg}</div>}
-      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>{saving?'Speichernâ¦':'ð¾ Run speichern'}</button>
+      {msg&&<div style={{padding:'8px 12px',borderRadius:8,background:msg.startsWith('✓')?'#d1fae5':'#fee2e2',color:msg.startsWith('✓')?T:RE,marginBottom:8,fontSize:12}}>{msg}</div>}
+      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>{saving?'Speichern…':'💾 Run speichern'}</button>
     </div>
   );
 }
@@ -2184,8 +2184,8 @@ function LeitersSpielStreakSettings({ onDone }) {
     setSaving(true);
     sbGet('settings','key=eq.streak_settings').then(function(d){
       var body={key:'streak_settings',value:JSON.stringify(settings)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(settings)},'key=eq.streak_settings').then(function(){setSaving(false);setMsg('â Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('â Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(settings)},'key=eq.streak_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
     }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
   return(
@@ -2205,7 +2205,7 @@ function LeitersSpielStreakSettings({ onDone }) {
         </div>;
       })}
       {msg&&<div style={{padding:'8px',color:T,fontSize:12,marginTop:8}}>{msg}</div>}
-      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:12})}>{saving?'â¦':'ð¾ Speichern'}</button>
+      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:12})}>{saving?'…':'💾 Speichern'}</button>
     </div>
   );
 }
@@ -2223,8 +2223,8 @@ function LeitersSpielGradeSettings({ onDone }) {
     setSaving(true);
     sbGet('settings','key=eq.grade_settings').then(function(d){
       var body={key:'grade_settings',value:JSON.stringify(thresholds)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(thresholds)},'key=eq.grade_settings').then(function(){setSaving(false);setMsg('â Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('â Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(thresholds)},'key=eq.grade_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
     }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
   return(
@@ -2240,7 +2240,7 @@ function LeitersSpielGradeSettings({ onDone }) {
         </div>;
       })}
       {msg&&<div style={{padding:'8px',color:T,fontSize:12,marginTop:8}}>{msg}</div>}
-      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:12})}>{saving?'â¦':'ð¾ Speichern'}</button>
+      <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:12})}>{saving?'…':'💾 Speichern'}</button>
     </div>
   );
 }
@@ -2250,9 +2250,9 @@ function sortWords(words){ return words.slice().sort(function(a,b){return (a.wor
 function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving, setMsg) {
   setSaving(true);
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if(!UUID.test(chapter.id)){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('â (lokal)'); return; }
+  if(!UUID.test(chapter.id)){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
   sbPatch('chapters',{words:newWords},'id=eq.'+chapter.id).then(function(ok){
-    if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('â Gespeichert'); }
+    if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('✓ Gespeichert'); }
     else setMsg('Fehler!');
     setSaving(false);
   });
@@ -2281,9 +2281,9 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
     });
   }
   function toggleChapter(ch){
-    var allIn=chWords.every(function(w){return isInRun(w);});
-    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !chWords.some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
-    else { var toAdd=chWords.filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
+    var allIn=chW.every(function(w){return isInRun(w);});
+    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !chW.some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
+    else { var toAdd=chW.filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
   }
   function setPot(wordStr, pot){
     setWords(function(prev){ return prev.map(function(w){ return normWordKey(w.word)===normWordKey(wordStr)?Object.assign({},w,{pot:pot}):w; }); });
@@ -2308,26 +2308,27 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
           <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
           {children.map(function(ch){
-            var allIn=chWords.every(function(w){return isInRun(w);});
-            var someIn=!allIn&&chWords.some(function(w){return isInRun(w);});
+            var chW=Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]);
+            var allIn=chW.every(function(w){return isInRun(w);});
+            var someIn=!allIn&&chW.some(function(w){return isInRun(w);});
             var open=openCh===ch.id;
             return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
                 <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(allIn?ch.color:someIn?ch.color:G200),background:allIn?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  {allIn&&<span style={{color:'white',fontSize:10}}>â</span>}
-                  {someIn&&<span style={{color:ch.color,fontSize:12}}>â</span>}
+                  {allIn&&<span style={{color:'white',fontSize:10}}>✓</span>}
+                  {someIn&&<span style={{color:ch.color,fontSize:12}}>−</span>}
                 </div>
                 <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{chWords.filter(function(w){return isInRun(w);}).length}/{chWords.length}</span>
-                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'â²':'â¼'}</span>
+                <span style={{fontSize:10,color:G400}}>{chW.filter(function(w){return isInRun(w);}).length}/{chW.length}</span>
+                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
               </div>
               {open&&<div style={{padding:'4px 8px 8px 28px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {chWords.map(function(w,i){
+                {chW.map(function(w,i){
                   var inRun=isInRun(w);
                   var runW=inRun?words.find(function(rw){return normWordKey(rw.word)===normWordKey(w.word);}):null;
                   return <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 6px',borderRadius:8,border:'1.5px solid '+(inRun?ch.color:G200),background:inRun?ch.color+'12':'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){toggle(w);}}>
                     <div style={{display:'flex',alignItems:'center',gap:3}}>
-                      {w.important&&<span style={{fontSize:9}}>â­</span>}
+                      {w.important&&<span style={{fontSize:9}}>⭐</span>}
                       <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:inRun?ch.color:G600}}>{w.word}</span>
                     </div>
                     {inRun&&<div style={{display:'flex',gap:2}} onClick={function(e){e.stopPropagation();}}>
@@ -2341,7 +2342,7 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
         </div>;
       })}
       <div style={{display:'flex',gap:8,marginTop:10}}>
-        <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'11px'})}>{saving?'â¦':'ð¾ Speichern'}</button>
+        <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'11px'})}>{saving?'…':'💾 Speichern'}</button>
         <button onClick={onCancel} style={BtnStyle(G100,G600,{flex:1,padding:'11px'})}>Abbrechen</button>
       </div>
     </div>
@@ -2373,7 +2374,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
     }).catch(function(){ setLoading(false); });
   },[]);
   function deleteRun(runId){
-    if(!confirm('Run lÃ¶schen?')) return;
+    if(!confirm('Run löschen?')) return;
     sbDel('ls_runs','id=eq.'+runId).then(function(){
       setRuns(function(prev){ return prev.filter(function(r){return r.id!==runId;}); });
     });
@@ -2388,25 +2389,25 @@ function LeitersSpielAdminOverview({ chapters, player }) {
     var raw = run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}}
     return Array.isArray(raw)?raw.length:0;
   }
-  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Ladeâ¦</div>;
+  if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
   if(editRun) return <RunEditor run={editRun} chapters={chapters} onSave={function(updated){ setRuns(function(prev){return prev.map(function(r){return r.id===updated.id?updated:r;});}); setEditRun(null); }} onCancel={function(){setEditRun(null);}}/> ;
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
-        {[['runs','ð Runs'],['progress','ð Fortschritt'],['disputes','â Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
+        {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
         {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
         {runs.map(function(run){
           return <div key={run.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:20}}>{run.icon||'ð¯'}</span>
+              <span style={{fontSize:20}}>{run.icon||'🎯'}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div>
-                <div style={{fontSize:10,color:G400}}>{getWordCount(run)} Vokabeln{run.is_admin_run?' Â· ð Klassen-Run':''}</div>
+                <div style={{fontSize:10,color:G400}}>{getWordCount(run)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
               </div>
-              <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>âï¸</button>
-              <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>ð</button>
+              <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>✏️</button>
+              <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>🗑</button>
             </div>
           </div>;
         })}
@@ -2438,13 +2439,13 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                 return <div key={run.id} style={{padding:'8px 10px',borderRadius:8,border:'1px solid '+(prog?T+'33':G200),background:prog?TL:'white',marginBottom:4}}>
                   <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:prog?4:0,cursor:prog?'pointer':'default'}}
                     onClick={function(){if(prog)toggle(expandKey);}}>
-                    <span style={{fontSize:13}}>{run.icon||'ð¯'}</span>
+                    <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
                     <span style={{fontWeight:'bold',fontSize:12,color:G900,flex:1}}>{run.name}</span>
                     {prog
-                      ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% Â· {p5}/{wc} gelernt</span>
+                      ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% · {p5}/{wc} gelernt</span>
                       : <span style={{fontSize:11,color:G400}}>noch nicht gespielt</span>
                     }
-                    {prog&&<span style={{fontSize:10,color:G400,marginLeft:2}}>{isExpanded?'â²':'â¼'}</span>}
+                    {prog&&<span style={{fontSize:10,color:G400,marginLeft:2}}>{isExpanded?'▲':'▼'}</span>}
                   </div>
                   {prog&&<div>
                     <div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginBottom:4}}>
@@ -2454,14 +2455,14 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                       {[[1,RE,'T1',p1],[2,'#f97316','T2',p2],[3,AM,'T3',p3],[4,T,'T4',p4],[5,GR,'Gel.',p5]].map(function(pt){
                         return pt[3]>0 ? <span key={pt[0]} style={{fontSize:10,padding:'1px 5px',borderRadius:10,background:pt[1]+'18',color:pt[1],fontWeight:'bold'}}>{pt[2]}: {pt[3]}</span> : null;
                       })}
-                      <span style={{fontSize:10,color:GR,marginLeft:'auto',fontWeight:'bold'}}>â {prog.totalCorrect||0}</span>
-                      <span style={{fontSize:10,color:RE,fontWeight:'bold'}}>â {prog.totalWrong||0}</span>
+                      <span style={{fontSize:10,color:GR,marginLeft:'auto',fontWeight:'bold'}}>✓ {prog.totalCorrect||0}</span>
+                      <span style={{fontSize:10,color:RE,fontWeight:'bold'}}>✗ {prog.totalWrong||0}</span>
                     </div>
                   </div>}
                   {prog&&isExpanded&&(
                     <div style={{borderTop:'1px solid '+G200,marginTop:5,paddingTop:5,maxHeight:260,overflowY:'auto'}}>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 32px 28px 28px',gap:'2px 6px',fontSize:10,color:G400,padding:'0 2px 4px 2px',fontWeight:'bold',borderBottom:'1px solid '+G100,marginBottom:3}}>
-                        <span>Englisch</span><span>Deutsch</span><span>Topf</span><span style={{color:GR,textAlign:'center'}}>â</span><span style={{color:RE,textAlign:'center'}}>â</span>
+                        <span>Englisch</span><span>Deutsch</span><span>Topf</span><span style={{color:GR,textAlign:'center'}}>✓</span><span style={{color:RE,textAlign:'center'}}>✗</span>
                       </div>
                       {allRunWords.map(function(w,wi){
                         var potColor = [RE,'#f97316',AM,T,GR][w.pot-1]||G400;
@@ -2487,8 +2488,8 @@ function LeitersSpielAdminOverview({ chapters, player }) {
           var isUnimp = d.dispute_type==='unimportant';
           return <div key={d.id} style={{marginBottom:8,padding:'10px 12px',borderRadius:10,border:'2px solid '+(isUnimp?G200:'#7c3aed44'),background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-              <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:isUnimp?G100:'#f3e8ff',color:isUnimp?G600:'#7c3aed',fontWeight:'bold'}}>{isUnimp?'ð Unwichtig':'â Anfechtung'}</span>
-              <span style={{fontSize:11,color:G400}}>{d.player_name} Â· Topf {d.pot}</span>
+              <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:isUnimp?G100:'#f3e8ff',color:isUnimp?G600:'#7c3aed',fontWeight:'bold'}}>{isUnimp?'🔇 Unwichtig':'❓ Anfechtung'}</span>
+              <span style={{fontSize:11,color:G400}}>{d.player_name} · Topf {d.pot}</span>
             </div>
             <div style={{fontSize:14,fontWeight:'bold',color:G900}}>{d.word} <span style={{color:G400,fontWeight:'normal',fontSize:12}}>({d.clue})</span></div>
             {!isUnimp&&d.typed_answer&&<div style={{fontSize:11,color:G600,marginTop:2}}>Eingabe: <em>{d.typed_answer}</em></div>}
@@ -2506,12 +2507,12 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                   }
                   setAllDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
                 }).catch(function(){});
-              }} style={BtnStyle(GR,'white',{flex:1,padding:'6px',fontSize:11})}>â Akzeptieren</button>
+              }} style={BtnStyle(GR,'white',{flex:1,padding:'6px',fontSize:11})}>✓ Akzeptieren</button>
               <button onClick={function(){
                 sbPatch('word_disputes',{status:'rejected',resolved_at:new Date().toISOString()},'id=eq.'+d.id).then(function(){
                   setAllDisputes(function(prev){return prev.filter(function(x){return x.id!==d.id;});});
                 }).catch(function(){});
-              }} style={BtnStyle(RE,'white',{flex:1,padding:'6px',fontSize:11})}>â Ablehnen</button>
+              }} style={BtnStyle(RE,'white',{flex:1,padding:'6px',fontSize:11})}>✕ Ablehnen</button>
             </div>
           </div>;
         })}
@@ -2542,15 +2543,15 @@ function ApiKeyManager({ onClose }) {
   function remove(){ localStorage.removeItem('claude_api_key'); setSaved(''); setKey(''); }
   return(
     <div style={{padding:8}}>
-      <p style={{fontSize:12,color:G600,marginBottom:10}}>API-Key fÃ¼r Claude (Grammar Trainer Batch-Generierung):</p>
+      <p style={{fontSize:12,color:G600,marginBottom:10}}>API-Key für Claude (Grammar Trainer Batch-Generierung):</p>
       {saved&&<div style={{padding:'8px 12px',background:'#d1fae5',borderRadius:8,marginBottom:8,fontSize:11,color:T,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span>â Key gespeichert: {saved.slice(0,8)}â¦</span>
+        <span>✓ Key gespeichert: {saved.slice(0,8)}…</span>
         <button onClick={remove} style={{border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Entfernen</button>
       </div>}
       <div style={{display:'flex',gap:6}}>
-        <input value={key} onChange={function(e){setKey(e.target.value);}} placeholder="sk-ant-â¦" type="password"
+        <input value={key} onChange={function(e){setKey(e.target.value);}} placeholder="sk-ant-…" type="password"
           style={{flex:1,padding:'10px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-        <button onClick={save} style={BtnStyle(T,'white',{padding:'10px 14px'})}>ð¾</button>
+        <button onClick={save} style={BtnStyle(T,'white',{padding:'10px 14px'})}>💾</button>
       </div>
     </div>
   );
@@ -2572,7 +2573,7 @@ function VocabSearch({ chapters, onWordClick }) {
   },[query,allWords]);
   return(
     <div>
-      <input value={query} onChange={function(e){setQuery(e.target.value);}} placeholder="Vokabel suchenâ¦"
+      <input value={query} onChange={function(e){setQuery(e.target.value);}} placeholder="Vokabel suchen…"
         style={{width:'100%',padding:'10px 12px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none',boxSizing:'border-box',marginBottom:8}}/>
       {results.map(function(w,i){ return <div key={i} onClick={function(){if(onWordClick)onWordClick(w);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 10px',marginBottom:3,borderRadius:8,background:'white',border:'1px solid '+G200,cursor:onWordClick?'pointer':'default'}}>
         <span style={{fontWeight:'bold',fontSize:13}}>{w.word}</span>
@@ -2618,18 +2619,18 @@ function UploadPreview({ fileData, chapters, onConfirm, onCancel }) {
       <div style={{marginBottom:10}}>
         <label style={{fontSize:12,color:G600,display:'block',marginBottom:4}}>Import-Modus:</label>
         <div style={{display:'flex',gap:6}}>
-          {[['append','ErgÃ¤nzen'],['replace','Ersetzen']].map(function(m){return <button key={m[0]} onClick={function(){setMode(m[0]);}} style={{flex:1,padding:'6px',borderRadius:6,border:'2px solid '+(mode===m[0]?T:G200),background:mode===m[0]?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:mode===m[0]?T:G600}}>{m[1]}</button>;})}
+          {[['append','Ergänzen'],['replace','Ersetzen']].map(function(m){return <button key={m[0]} onClick={function(){setMode(m[0]);}} style={{flex:1,padding:'6px',borderRadius:6,border:'2px solid '+(mode===m[0]?T:G200),background:mode===m[0]?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:mode===m[0]?T:G600}}>{m[1]}</button>;})}
         </div>
       </div>
-      {dupReport&&<div style={{padding:'8px 10px',background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,marginBottom:8,fontSize:11,color:'#92400e'}}>â ï¸ {dupReport.length} Duplikat(e): {dupReport.slice(0,3).map(function(d){return d.word;}).join(', ')}{dupReport.length>3?'â¦':''}</div>}
-      <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Vorschau ({preview.length} EintrÃ¤ge):</div>
+      {dupReport&&<div style={{padding:'8px 10px',background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:8,marginBottom:8,fontSize:11,color:'#92400e'}}>⚠️ {dupReport.length} Duplikat(e): {dupReport.slice(0,3).map(function(d){return d.word;}).join(', ')}{dupReport.length>3?'…':''}</div>}
+      <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Vorschau ({preview.length} Einträge):</div>
       <div style={{maxHeight:180,overflowY:'auto',border:'1px solid '+G200,borderRadius:8,padding:'4px 8px',marginBottom:10}}>
         {preview.map(function(r,i){return <div key={i} style={{display:'flex',gap:8,padding:'3px 0',borderBottom:'1px solid '+G100,fontSize:11}}>
-          {r.important&&<span>â­</span>}<span style={{fontWeight:'bold'}}>{r.word}</span><span style={{color:G400}}>{r.clue}</span>
+          {r.important&&<span>⭐</span>}<span style={{fontWeight:'bold'}}>{r.word}</span><span style={{color:G400}}>{r.clue}</span>
         </div>;})}
       </div>
       <div style={{display:'flex',gap:6}}>
-        <button onClick={function(){onConfirm(chapterId,preview,mode);}} style={BtnStyle(T,'white',{flex:1,padding:'10px'})}>â Importieren</button>
+        <button onClick={function(){onConfirm(chapterId,preview,mode);}} style={BtnStyle(T,'white',{flex:1,padding:'10px'})}>✓ Importieren</button>
         <button onClick={onCancel} style={BtnStyle(G100,G600,{flex:1,padding:'10px'})}>Abbrechen</button>
       </div>
     </div>
@@ -2645,7 +2646,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [editChIdx, setEditChIdx] = useState(null);
   var [uploadData, setUploadData] = useState(null);
   var [showUpload, setShowUpload] = useState(false);
-  var [newChForm, setNewChForm] = useState({title:'',color:T,icon:'ð',parent_id:'',sentences:[]});
+  var [newChForm, setNewChForm] = useState({title:'',color:T,icon:'📖',parent_id:'',sentences:[]});
   var [showNewCh, setShowNewCh] = useState(false);
   var [expandedCh, setExpandedCh] = useState({});
   var [showApiKey, setShowApiKey] = useState(false);
@@ -2667,10 +2668,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   }
 
   function deleteWord(chapterId, wordIdx) {
-    if(!confirm('Wort lÃ¶schen?')) return;
+    if(!confirm('Wort löschen?')) return;
     var ch = chapters.find(function(c){return c.id===chapterId;});
     if(!ch) return;
-    var newWords = (Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(_,i){return i!==wordIdx;});
+    var newWords = ch.words.filter(function(_,i){return i!==wordIdx;});
     saveChapterWords(ch, newWords, chapters, setChapters, setSaving, setMsg);
   }
 
@@ -2681,19 +2682,19 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       var body={title:form.title,color:form.color,icon:form.icon,parent_id:form.parent_id||null,words:form.words||[],sentences:form.sentences||[]};
       sbPost('chapters',body).then(function(res){
         if(res&&res.id){ setChapters(function(prev){return prev.concat([Object.assign({},body,{id:res.id})]);}) }
-        setSaving(false); setMsg('â Gespeichert'); setShowNewCh(false); setEditCh(null);
+        setSaving(false); setMsg('✓ Gespeichert'); setShowNewCh(false); setEditCh(null);
       });
     } else {
       var upd={title:form.title,color:form.color,icon:form.icon};
       sbPatch('chapters',upd,'id=eq.'+form.id).then(function(){
         setChapters(function(prev){return prev.map(function(c){return c.id===form.id?Object.assign({},c,upd):c;});});
-        setSaving(false); setMsg('â Gespeichert'); setEditCh(null);
+        setSaving(false); setMsg('✓ Gespeichert'); setEditCh(null);
       });
     }
   }
 
   function deleteChapter(ch) {
-    if(!confirm('Kapitel und alle Vokabeln lÃ¶schen?')) return;
+    if(!confirm('Kapitel und alle Vokabeln löschen?')) return;
     sbDel('chapters','id=eq.'+ch.id).then(function(){
       setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
     });
@@ -2737,7 +2738,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     toRemove.forEach(function(entry){
       var ch=chapters.find(function(c){return c.id===entry.chapId;});
       if(!ch) return;
-      var newWords=(Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]) ).filter(function(w){return normWordKey(w.word)!==normWordKey(entry.word);});
+      var newWords=ch.words.filter(function(w){return normWordKey(w.word)!==normWordKey(entry.word);});
       saveChapterWords(ch,newWords,chapters,setChapters,setSaving,setMsg);
     });
     setDupWords(function(prev){return prev?prev.filter(function(v){return normWordKey(v[0].word)!==key;}):prev;});
@@ -2751,11 +2752,11 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   if(showDup) return(
     <div style={{padding:8}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-        <button onClick={function(){setShowDup(false);}} style={BtnStyle(G100,G600,{padding:'5px 10px',fontSize:11})}>â ZurÃ¼ck</button>
+        <button onClick={function(){setShowDup(false);}} style={BtnStyle(G100,G600,{padding:'5px 10px',fontSize:11})}>← Zurück</button>
         <span style={{fontWeight:'bold',fontSize:14,color:G900}}>Duplikate</span>
       </div>
-      {dupLoading&&<div style={{textAlign:'center',padding:30,color:G400}}>Sucheâ¦</div>}
-      {!dupLoading&&dupWords&&dupWords.length===0&&<div style={{textAlign:'center',padding:30,color:GR,fontSize:14}}>â Keine Duplikate gefunden!</div>}
+      {dupLoading&&<div style={{textAlign:'center',padding:30,color:G400}}>Suche…</div>}
+      {!dupLoading&&dupWords&&dupWords.length===0&&<div style={{textAlign:'center',padding:30,color:GR,fontSize:14}}>✓ Keine Duplikate gefunden!</div>}
       {!dupLoading&&(dupWords||[]).map(function(entries,di){
         var key=normWordKey(entries[0].word);
         return <div key={di} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+AM+'66',background:'#fffbeb'}}>
@@ -2764,7 +2765,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             return <div key={ei} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid '+G100}}>
               <span style={{fontSize:11,color:entry.chapColor,fontWeight:'bold',flex:1}}>{entry.chapTitle}</span>
               <span style={{fontSize:11,color:G400}}>{entry.clue}</span>
-              <button onClick={function(){mergeDup(key,ei,entries);}} style={{padding:'3px 8px',borderRadius:6,border:'none',background:T,color:'white',cursor:'pointer',fontSize:10,flexShrink:0}}>â Behalten</button>
+              <button onClick={function(){mergeDup(key,ei,entries);}} style={{padding:'3px 8px',borderRadius:6,border:'none',background:T,color:'white',cursor:'pointer',fontSize:10,flexShrink:0}}>✓ Behalten</button>
             </div>;
           })}
         </div>;
@@ -2775,7 +2776,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','ð Kap.'],['words','ð Vok.'],['leiterspiel','ð¯ LS'],['users','ð¥ User'],['grammar','âï¸ Gram.']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🎯 LS'],['users','👥 User'],['grammar','✏️ Gram.']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -2789,8 +2790,8 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             <div onClick={function(){toggleCh(kap.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:open?(kap.color||T)+'15':'white',cursor:'pointer'}}>
               <span style={{fontSize:20}}>{kap.icon}</span>
               <span style={{flex:1,fontWeight:'bold',fontSize:13,color:kap.color||T}}>{kap.title}</span>
-              {UUID.test(kap.id)&&<button onClick={function(e){e.stopPropagation();if(confirm('Kapitel lÃ¶schen?'))deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>ð</button>}
-              <span style={{color:G400,fontSize:11}}>{open?'â²':'â¼'}</span>
+              {UUID.test(kap.id)&&<button onClick={function(e){e.stopPropagation();if(confirm('Kapitel löschen?'))deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
+              <span style={{color:G400,fontSize:11}}>{open?'▲':'▼'}</span>
             </div>
             {open&&<div style={{borderTop:'1px solid '+G100}}>
               {kids.map(function(ch){
@@ -2800,9 +2801,9 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                     <span style={{fontSize:15}}>{ch.icon}</span>
                     <span style={{flex:1,fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</span>
                     <span style={{fontSize:10,color:G400}}>{(ch.words||[]).length} V</span>
-                    <button onClick={function(e){e.stopPropagation();setEditCh(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:5,marginLeft:4}}>âï¸</button>
-                    {UUID.test(ch.id)&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>ð</button>}
-                    <span style={{color:G400,fontSize:10,marginLeft:2}}>{chOpen?'â²':'â¼'}</span>
+                    <button onClick={function(e){e.stopPropagation();setEditCh(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:5,marginLeft:4}}>✏️</button>
+                    {UUID.test(ch.id)&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
+                    <span style={{color:G400,fontSize:10,marginLeft:2}}>{chOpen?'▲':'▼'}</span>
                   </div>
                   {chOpen&&<div style={{padding:'6px 18px 10px',background:'#f9fafb'}}>
                     {editCh&&editCh.id===ch.id&&(<div style={{padding:10,background:'white',borderRadius:8,border:'1px solid '+T,marginBottom:8}}>
@@ -2812,18 +2813,18 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         <input value={editCh.color||''} onChange={function(e){setEditCh(function(c){return Object.assign({},c,{color:e.target.value});});}} type="color" style={{width:36,height:30,padding:2,border:'1px solid '+G200,borderRadius:6,cursor:'pointer'}}/>
                       </div>
                       <div style={{display:'flex',gap:6}}>
-                        <button onClick={function(){saveChapter(editCh);}} style={BtnStyle(T,'white',{flex:1,padding:'6px',fontSize:11})}>â OK</button>
+                        <button onClick={function(){saveChapter(editCh);}} style={BtnStyle(T,'white',{flex:1,padding:'6px',fontSize:11})}>✓ OK</button>
                         <button onClick={function(){setEditCh(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'6px',fontSize:11})}>Abbrechen</button>
                       </div>
                     </div>)}
                     {(ch.words||[]).slice().sort(function(a,b){return (a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
                       var realIdx=ch.words.indexOf(w);
                       return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:11}}>
-                        <span style={{fontSize:9}}>{w.important?'â­':''}</span>
+                        <span style={{fontSize:9}}>{w.important?'⭐':''}</span>
                         <span style={{fontWeight:'bold',flex:1}}>{w.word}</span>
                         <span style={{color:G400}}>{w.clue}</span>
-                        <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4}}>â</button>
-                        <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4}}>â</button>
+                        <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4}}>✏</button>
+                        <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4}}>✕</button>
                       </div>;
                     })}
                     {editWord&&editWord.chId===ch.id&&(<div style={{padding:8,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:6}}>
@@ -2831,29 +2832,29 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         <input value={editWord.w.word||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}} style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5}} placeholder="EN"/>
                         <input value={editWord.w.clue||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{clue:e.target.value})});});}} style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5}} placeholder="DE"/>
                         <div onClick={function(){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{important:!ew.w.important})});});}} style={{width:28,height:28,borderRadius:6,border:'2px solid '+(editWord.w.important?AM:G200),background:editWord.w.important?AM:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                          <span style={{fontSize:12}}>{editWord.w.important?'â­':'â'}</span>
+                          <span style={{fontSize:12}}>{editWord.w.important?'⭐':'☆'}</span>
                         </div>
                       </div>
                       <div style={{display:'flex',gap:5}}>
-                        <button onClick={function(){doSaveWord(editWord.chId,editWord.w,editWord.idx);}} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>â</button>
-                        <button onClick={function(){setEditWord(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>â</button>
+                        <button onClick={function(){doSaveWord(editWord.chId,editWord.w,editWord.idx);}} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>✓</button>
+                        <button onClick={function(){setEditWord(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>✕</button>
                       </div>
                     </div>)}
-                    <button onClick={function(){setEditWord({w:{word:'',clue:'',important:false},chId:ch.id,idx:null});}} style={{width:'100%',padding:'5px',marginTop:6,borderRadius:6,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Vokabel hinzufÃ¼gen</button>
+                    <button onClick={function(){setEditWord({w:{word:'',clue:'',important:false},chId:ch.id,idx:null});}} style={{width:'100%',padding:'5px',marginTop:6,borderRadius:6,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Vokabel hinzufügen</button>
                     <div style={{display:'flex',gap:5,marginTop:5}}>
                       <label style={{flex:1,padding:'5px',textAlign:'center',borderRadius:6,border:'1px dashed '+G400,background:G50,cursor:'pointer',fontSize:10,color:G600}}>
-                        ð CSV/TSV hochladen
+                        📁 CSV/TSV hochladen
                         <input type="file" accept=".csv,.tsv,.txt" ref={fileRef} onChange={handleFileUpload} style={{display:'none'}}/>
                       </label>
                     </div>
                   </div>}
                 </div>;
               })}
-              <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'ð',parent_id:kap.id,words:[],sentences:[]});}} style={{width:'100%',margin:'8px 0',padding:'7px',borderRadius:8,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Themenbereich zu {kap.title}</button>
+              <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📖',parent_id:kap.id,words:[],sentences:[]});}} style={{width:'100%',margin:'8px 0',padding:'7px',borderRadius:8,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Themenbereich zu {kap.title}</button>
             </div>}
           </div>;
         })}
-        <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'ð',parent_id:'',words:[],sentences:[]});}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',marginTop:4})}>+ Neues Kapitel</button>
+        <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📗',parent_id:'',words:[],sentences:[]});}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',marginTop:4})}>+ Neues Kapitel</button>
         {showNewCh&&(<div style={{padding:12,background:'white',borderRadius:10,border:'2px solid '+T,marginTop:8}}>
           <div style={{fontWeight:'bold',fontSize:12,marginBottom:8}}>{newChForm.parent_id?'Neuer Themenbereich':'Neues Kapitel'}</div>
           <div style={{display:'flex',gap:6,marginBottom:6}}>
@@ -2862,20 +2863,20 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             <input value={newChForm.color} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{color:e.target.value});});}} type="color" style={{width:36,height:30,padding:2,border:'1px solid '+G200,borderRadius:6,cursor:'pointer'}}/>
           </div>
           {!newChForm.parent_id&&(<div style={{marginBottom:6}}>
-            <label style={{fontSize:11,color:G400}}>Ãbergeordnetes Kapitel:</label>
+            <label style={{fontSize:11,color:G400}}>Übergeordnetes Kapitel:</label>
             <select value={newChForm.parent_id||''} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{parent_id:e.target.value||null});});}} style={{width:'100%',padding:'6px',fontSize:12,border:'1px solid '+G200,borderRadius:6,marginTop:3}}>
               <option value="">-- Kein Eltern (Top-Level) --</option>
               {topLevelChapters.map(function(k){return <option key={k.id} value={k.id}>{k.icon} {k.title}</option>;})}
             </select>
           </div>)}
           <div style={{display:'flex',gap:6}}>
-            <button onClick={function(){saveChapter(newChForm);}} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>{saving?'â¦':'â Erstellen'}</button>
+            <button onClick={function(){saveChapter(newChForm);}} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>{saving?'…':'✓ Erstellen'}</button>
             <button onClick={function(){setShowNewCh(false);}} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>Abbrechen</button>
           </div>
         </div>)}
         <div style={{display:'flex',gap:6,marginTop:8}}>
-          <button onClick={findDuplicates} style={BtnStyle(AM,'white',{flex:1,padding:'8px',fontSize:11})}>ð Duplikate suchen</button>
-          <button onClick={function(){setShowApiKey(!showApiKey);}} style={BtnStyle(G100,G600,{flex:1,padding:'8px',fontSize:11})}>ð API-Key</button>
+          <button onClick={findDuplicates} style={BtnStyle(AM,'white',{flex:1,padding:'8px',fontSize:11})}>🔍 Duplikate suchen</button>
+          <button onClick={function(){setShowApiKey(!showApiKey);}} style={BtnStyle(G100,G600,{flex:1,padding:'8px',fontSize:11})}>🔑 API-Key</button>
         </div>
         {showApiKey&&<ApiKeyManager onClose={function(){setShowApiKey(false);}}/>}
       </div>)}
@@ -2899,10 +2900,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
         {(allUsers||[]).filter(function(u){return !u.is_admin;}).map(function(u){
           return <div key={u.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:18}}>ð¤</span>
+              <span style={{fontSize:18}}>👤</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13}}>{u.name}</div>
-                <div style={{fontSize:10,color:G400}}>Punkte: {u.total_score||0} Â· Richtig: {u.total_correct||0}</div>
+                <div style={{fontSize:10,color:G400}}>Punkte: {u.total_score||0} · Richtig: {u.total_correct||0}</div>
               </div>
               <button onClick={function(){
                 var active=u.is_active!==false;
@@ -2932,11 +2933,11 @@ function Leaderboard({ allUsers, player }) {
         var isMe=u.id===player.id;
         return <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,borderRadius:10,background:isMe?TL:'white',border:'2px solid '+(isMe?T:G200)}}>
           <div style={{width:30,height:30,borderRadius:'50%',background:i===0?AM:i===1?G400:i===2?'#b45309':G100,color:i<3?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:14,flexShrink:0}}>
-            {i===0?'ð¥':i===1?'ð¥':i===2?'ð¥':i+1}
+            {i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}
           </div>
           <div style={{flex:1}}>
             <div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div>
-            <div style={{fontSize:10,color:G400}}>â {u.total_correct||0} richtig Â· â {u.total_wrong||0} falsch</div>
+            <div style={{fontSize:10,color:G400}}>✓ {u.total_correct||0} richtig · ✗ {u.total_wrong||0} falsch</div>
           </div>
           <div style={{textAlign:'right'}}>
             <div style={{fontSize:18,fontWeight:'bold',color:isMe?T:G600}}>{u.total_score||0}</div>
@@ -2981,8 +2982,8 @@ function LoginScreen({ onLogin }) {
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)',padding:16}}>
       <div style={{background:'white',borderRadius:24,padding:32,width:'100%',maxWidth:380,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
         <div style={{textAlign:'center',marginBottom:24}}>
-          <div style={{fontSize:48,marginBottom:8}}>ð</div>
-          <h1 style={{fontSize:22,fontWeight:'bold',color:G900,margin:0}}>Vokabel-RÃ¤tsel</h1>
+          <div style={{fontSize:48,marginBottom:8}}>🎓</div>
+          <h1 style={{fontSize:22,fontWeight:'bold',color:G900,margin:0}}>Vokabel-Rätsel</h1>
           <p style={{fontSize:13,color:G400,margin:'4px 0 0'}}>Anmelden</p>
         </div>
         <div style={{marginBottom:12}}>
@@ -3000,7 +3001,7 @@ function LoginScreen({ onLogin }) {
         </div>
         {err&&<div style={{padding:'8px 12px',background:'#fee2e2',borderRadius:8,color:RE,fontSize:12,marginBottom:12}}>{err}</div>}
         <button onClick={doLogin} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:15})}>
-          {loading?'â¦':'â Anmelden'}
+          {loading?'…':'→ Anmelden'}
         </button>
       </div>
     </div>
@@ -3015,7 +3016,7 @@ function RegisterScreen({ onRegister, onBack }) {
   var [loading, setLoading] = useState(false);
   function doRegister() {
     if(!name.trim()||!pw.trim()){setErr('Name und Passwort eingeben');return;}
-    if(pw!==pw2){setErr('PasswÃ¶rter stimmen nicht Ã¼berein');return;}
+    if(pw!==pw2){setErr('Passwörter stimmen nicht überein');return;}
     if(pw.length<4){setErr('Passwort mind. 4 Zeichen');return;}
     setLoading(true); setErr('');
     hashPw(pw).then(function(hash){
@@ -3029,9 +3030,9 @@ function RegisterScreen({ onRegister, onBack }) {
   return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)',padding:16}}>
       <div style={{background:'white',borderRadius:24,padding:32,width:'100%',maxWidth:380,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-        <button onClick={onBack} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:16,padding:0}}>â ZurÃ¼ck</button>
+        <button onClick={onBack} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:16,padding:0}}>← Zurück</button>
         <div style={{textAlign:'center',marginBottom:24}}>
-          <div style={{fontSize:40,marginBottom:6}}>ð¤</div>
+          <div style={{fontSize:40,marginBottom:6}}>👤</div>
           <h1 style={{fontSize:20,fontWeight:'bold',color:G900,margin:0}}>Registrieren</h1>
         </div>
         {[['Name','text',name,setName,'Dein Name'],['Passwort','password',pw,setPw,'Passwort'],['Wiederholen','password',pw2,setPw2,'Passwort wiederholen']].map(function(f,i){
@@ -3042,13 +3043,13 @@ function RegisterScreen({ onRegister, onBack }) {
           </div>;
         })}
         {err&&<div style={{padding:'8px 12px',background:'#fee2e2',borderRadius:8,color:RE,fontSize:12,marginBottom:10}}>{err}</div>}
-        <button onClick={doRegister} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginTop:4})}>{loading?'â¦':'Registrieren'}</button>
+        <button onClick={doRegister} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginTop:4})}>{loading?'…':'Registrieren'}</button>
       </div>
     </div>
   );
 }
 
-// ââ Grammar Trainer ââââââââââââââââââââââââââââââââââââââââââââ
+// ── Grammar Trainer ────────────────────────────────────────────
 var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp' };
 var GRAMMAR_VERBS = [
   {word:'to play',clue:'spielen'},{word:'to work',clue:'arbeiten'},
@@ -3119,7 +3120,7 @@ function GrammarAdmin({ player, chapters }) {
   function saveKey(){
     localStorage.setItem('claude_api_key', apiKey.trim());
     setSavedKey(apiKey.trim());
-    setMsg('â API-Key gespeichert');
+    setMsg('✓ API-Key gespeichert');
   }
 
   function generate(){
@@ -3127,7 +3128,7 @@ function GrammarAdmin({ player, chapters }) {
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
     var topicLabel = topic==='sp'?'Simple Present':'Past Participle';
-    var prompt = 'Erstelle '+batchN+' verschiedene deutsche BeispielsÃ¤tze mit '+topicLabel+' auf Englisch. Jeder Satz soll kurz (max 10 WÃ¶rter), alltagstauglich und fÃ¼r Englischlernende (B1-Niveau) geeignet sein. Antworte NUR mit einem JSON-Array: [{"text":"English sentence","translation":"Deutsche Ãbersetzung","rule":"'+topicLabel+'","important":true}]. Keine ErklÃ¤rungen, kein Markdown, nur das JSON-Array.';
+    var prompt = 'Erstelle '+batchN+' verschiedene deutsche Beispielsätze mit '+topicLabel+' auf Englisch. Jeder Satz soll kurz (max 10 Wörter), alltagstauglich und für Englischlernende (B1-Niveau) geeignet sein. Antworte NUR mit einem JSON-Array: [{"text":"English sentence","translation":"Deutsche Übersetzung","rule":"'+topicLabel+'","important":true}]. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -3141,7 +3142,7 @@ function GrammarAdmin({ player, chapters }) {
     })
     .then(function(arr){
       setPool(function(prev){return prev.concat(arr);});
-      setMsg('â '+arr.length+' SÃ¤tze generiert und gespeichert');
+      setMsg('✓ '+arr.length+' Sätze generiert und gespeichert');
       setGenerating(false);
     })
     .catch(function(e){ setMsg('Fehler: '+e.message); setGenerating(false); });
@@ -3155,11 +3156,11 @@ function GrammarAdmin({ player, chapters }) {
   return(
     <div style={{padding:8}}>
       <div style={{padding:'10px 12px',background:savedKey?'#d1fae5':'#fef3c7',borderRadius:8,border:'1px solid '+(savedKey?GR:AM),marginBottom:10}}>
-        <div style={{fontWeight:'bold',fontSize:12,color:G900,marginBottom:6}}>ð Claude API-Key</div>
+        <div style={{fontWeight:'bold',fontSize:12,color:G900,marginBottom:6}}>🔑 Claude API-Key</div>
         {savedKey
-          ? <div style={{fontSize:11,color:T}}>â Key hinterlegt ({savedKey.slice(0,8)}â¦)<button onClick={function(){setSavedKey('');setApiKey('');localStorage.removeItem('claude_api_key');}} style={{marginLeft:8,border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Ãndern</button></div>
+          ? <div style={{fontSize:11,color:T}}>✓ Key hinterlegt ({savedKey.slice(0,8)}…)<button onClick={function(){setSavedKey('');setApiKey('');localStorage.removeItem('claude_api_key');}} style={{marginLeft:8,border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Ändern</button></div>
           : <div style={{display:'flex',gap:6}}>
-              <input value={apiKey} onChange={function(e){setApiKey(e.target.value);}} placeholder="sk-ant-â¦" type="password"
+              <input value={apiKey} onChange={function(e){setApiKey(e.target.value);}} placeholder="sk-ant-…" type="password"
                 style={{flex:1,padding:'6px 10px',fontSize:12,border:'1px solid '+AM,borderRadius:6,outline:'none'}}/>
               <button onClick={saveKey} style={BtnStyle(AM,'white',{padding:'6px 12px',fontSize:11})}>Speichern</button>
             </div>
@@ -3170,12 +3171,12 @@ function GrammarAdmin({ player, chapters }) {
           return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
-      <div style={{fontSize:12,color:G600,marginBottom:8}}>{loading?'Ladeâ¦':pool.length+' SÃ¤tze im Pool'}</div>
+      <div style={{fontSize:12,color:G600,marginBottom:8}}>{loading?'Lade…':pool.length+' Sätze im Pool'}</div>
       <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
         <select value={batchN} onChange={function(e){setBatchN(Number(e.target.value));}} style={{padding:'6px 10px',borderRadius:6,border:'1px solid '+G200,fontSize:12}}>
-          {[5,10,20,50].map(function(n){return <option key={n} value={n}>{n} SÃ¤tze</option>;})}
+          {[5,10,20,50].map(function(n){return <option key={n} value={n}>{n} Sätze</option>;})}
         </select>
-        <button onClick={generate} disabled={generating||!savedKey} style={BtnStyle(T,'white',{flex:1,padding:'8px',fontSize:11,opacity:(!savedKey)?0.5:1})}>{generating?'Generiereâ¦':'ð¤ KI-Generierung'}</button>
+        <button onClick={generate} disabled={generating||!savedKey} style={BtnStyle(T,'white',{flex:1,padding:'8px',fontSize:11,opacity:(!savedKey)?0.5:1})}>{generating?'Generiere…':'🤖 KI-Generierung'}</button>
       </div>
       {msg&&<div style={{fontSize:11,color:msg.startsWith('Fehler')?RE:T,padding:'6px 10px',background:msg.startsWith('Fehler')?'#fee2e2':'#d1fae5',borderRadius:6,marginBottom:8}}>{msg}</div>}
       <div style={{maxHeight:300,overflowY:'auto'}}>
@@ -3185,7 +3186,7 @@ function GrammarAdmin({ player, chapters }) {
               <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.text}</div>
               <div style={{fontSize:10,color:G600}}>{q.translation}</div>
             </div>
-            <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>Ã</button>
+            <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>×</button>
           </div>;
         })}
       </div>
@@ -3194,7 +3195,7 @@ function GrammarAdmin({ player, chapters }) {
 }
 function GrammarProgress({ ruleStats, sessions }) {
   var rules=Object.keys(ruleStats||{});
-  if(rules.length===0&&(!sessions||sessions.length===0)) return <div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Ãbungen absolviert.</div>;
+  if(rules.length===0&&(!sessions||sessions.length===0)) return <div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Übungen absolviert.</div>;
   return(
     <div>
       {rules.map(function(rule){
@@ -3282,7 +3283,7 @@ function GrammarGame({ player, onDone }) {
       fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:'ErklÃ¤re kurz auf Deutsch, warum "'+q.answer+'" die richtige Antwort ist fÃ¼r: "'+q.sentence+'". SchÃ¼lerin, 6. Klasse. Max 2 SÃ¤tze.'}]})
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:'Erkläre kurz auf Deutsch, warum "'+q.answer+'" die richtige Antwort ist für: "'+q.sentence+'". Schülerin, 6. Klasse. Max 2 Sätze.'}]})
       }).then(function(r){return r.json();}).then(function(data){
         var txt=data.content&&data.content[0]&&data.content[0].text||'';
         setAiExplain(txt); setAiLoading(false);
@@ -3305,11 +3306,11 @@ function GrammarGame({ player, onDone }) {
   if(phase==='menu') return(
     <div style={{padding:8}}>
       <div style={{marginBottom:12,padding:12,background:G50,borderRadius:10,border:'1px solid '+G200}}>
-        <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>ð Fortschritt</div>
+        <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📊 Fortschritt</div>
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]}/>
       </div>
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Thema wÃ¤hlen:</div>
-      {[['sp','Simple Present','Gegenwart â What does she do?'],['pp','Past Participle','Perfekt â I have eaten.']].map(function(t){
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Thema wählen:</div>
+      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Past Participle','Perfekt — I have eaten.']].map(function(t){
         return <button key={t[0]} onClick={function(){startTopic(t[0]);}} style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+T+'44',background:'white',cursor:'pointer',touchAction:'manipulation'}}>
           <div style={{fontWeight:'bold',fontSize:14,color:T}}>{t[1]}</div>
           <div style={{fontSize:11,color:G400}}>{t[2]}</div>
@@ -3318,16 +3319,16 @@ function GrammarGame({ player, onDone }) {
     </div>
   );
 
-  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fragenâ¦</div>;
+  if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fragen…</div>;
 
   if(phase==='empty') return(
     <div style={{padding:16,textAlign:'center'}}>
-      <div style={{fontSize:40,marginBottom:12}}>ð</div>
-      <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:8}}>Noch keine Ãbungen vorhanden</div>
+      <div style={{fontSize:40,marginBottom:12}}>📝</div>
+      <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:8}}>Noch keine Übungen vorhanden</div>
       <div style={{fontSize:13,color:G600,marginBottom:16}}>
-        Admin muss zuerst SÃ¤tze generieren: Admin â âï¸ Grammatik-Tab â Thema wÃ¤hlen â ð¤ KI-Generierung
+        Admin muss zuerst Sätze generieren: Admin → ✏️ Grammatik-Tab → Thema wählen → 🤖 KI-Generierung
       </div>
-      <button onClick={function(){setPhase('menu');setTopic(null);}} style={BtnStyle(T,'white',{padding:'10px 20px'})}>â ZurÃ¼ck</button>
+      <button onClick={function(){setPhase('menu');setTopic(null);}} style={BtnStyle(T,'white',{padding:'10px 20px'})}>← Zurück</button>
     </div>
   );
 
@@ -3336,7 +3337,7 @@ function GrammarGame({ player, onDone }) {
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:14,padding:20,color:'white',textAlign:'center',marginBottom:12}}>
-          <div style={{fontSize:36,marginBottom:6}}>{corr2>=8?'ð':corr2>=6?'ð':'ð'}</div>
+          <div style={{fontSize:36,marginBottom:6}}>{corr2>=8?'🏆':corr2>=6?'👍':'📚'}</div>
           <div style={{fontSize:20,fontWeight:'bold'}}>{corr2}/{results.length} richtig</div>
         </div>
         {results.map(function(r,i){
@@ -3346,7 +3347,7 @@ function GrammarGame({ player, onDone }) {
           </div>;
         })}
         <div style={{display:'flex',gap:6,marginTop:10}}>
-        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>â Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>â Falsch</div>}
+        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>✓ Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>✗ Falsch</div>}
         </div>
       </div>
     );
@@ -3370,21 +3371,21 @@ function GrammarGame({ player, onDone }) {
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submit();}}
-            placeholder="Antwort eingebenâ¦" autoCapitalize="none" autoCorrect="off"
+            placeholder="Antwort eingeben…" autoCapitalize="none" autoCorrect="off"
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={submit} style={BtnStyle(T,'white',{padding:'12px 16px'})}>â</button>
+          <button onClick={submit} style={BtnStyle(T,'white',{padding:'12px 16px'})}>✓</button>
         </div>
       )}
       {result&&(
         <div style={{padding:12,borderRadius:10,background:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.correct?GR:RE),marginBottom:8}}>
-          <div style={{fontWeight:'bold',color:result.correct?T:RE,marginBottom:4}}>{result.correct?'â Richtig!':'â Falsch'}</div>
+          <div style={{fontWeight:'bold',color:result.correct?T:RE,marginBottom:4}}>{result.correct?'✓ Richtig!':'✗ Falsch'}</div>
           <div style={{fontSize:13,color:G900}}>Richtig: <strong>{q.answer}</strong></div>
           {!result.correct&&result.input&&<div style={{fontSize:11,color:G400}}>Deine Antwort: {result.input}</div>}
-          {aiLoading&&<div style={{fontSize:11,color:G400,marginTop:6}}>KI erklÃ¤rtâ¦</div>}
+          {aiLoading&&<div style={{fontSize:11,color:G400,marginTop:6}}>KI erklärt…</div>}
           {aiExplain&&<div style={{fontSize:11,color:G600,marginTop:6,padding:'6px 8px',background:'white',borderRadius:6,border:'1px solid '+G200}}>{aiExplain}</div>}
         </div>
       )}
-      {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'11px'})}>{qIdx+1>=questions.length?'ð Auswertung':'â Weiter'}</button>}
+      {result&&<button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'11px'})}>{qIdx+1>=questions.length?'📊 Auswertung':'→ Weiter'}</button>}
     </div>
   );
 }
@@ -3412,12 +3413,12 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   }
 
   var tabs = isAdmin
-    ? [{id:'admin', label:'âï¸', title:'Admin'}]
+    ? [{id:'admin', label:'⚙️', title:'Admin'}]
     : [
-        {id:'home',     label:'ð ', title:'Home'},
-        {id:'learn',    label:'ð', title:'Lernen'},
-        {id:'games',    label:'ð®', title:'Spiele'},
-        {id:'progress', label:'ð', title:'Fortschritt'},
+        {id:'home',     label:'🏠', title:'Home'},
+        {id:'learn',    label:'📚', title:'Lernen'},
+        {id:'games',    label:'🎮', title:'Spiele'},
+        {id:'progress', label:'📊', title:'Fortschritt'},
       ];
 
   var childChapters = chapters.filter(function(c){return c.parent_id;});
@@ -3448,11 +3449,11 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var inner = renderContent();
 
   var screenTitles = {
-    home:'ð  Start',learn:'ð Lernen',games:'ð® Spiele',progress:'ð Fortschritt',admin:'âï¸ Admin',
-    vocab_trainer:'ð Vokabeltrainer',workout:'ðï¸ Workout',workout_setup:'ðï¸ Workout',sentence_learner:'ð¬ SÃ¤tze',
-    quiz_solo:'ð¯ Quiz Solo',quiz_duel:'âï¸ Quiz Duell',crossword:'ð¤ KreuzwortrÃ¤tsel',browse:'ð Vokabeln',
-    leiterspiel_menu:'ð¯ Leiterspiel',leiterspiel_play:'ð¯ Leiterspiel',leiterspiel_create:'â Run erstellen',
-    grammar:'âï¸ Grammar Trainer',stats:'ð Mein Fortschritt',leaderboard:'ð Rangliste',word_select_trainer:'ð Trainer'
+    home:'🏠 Start',learn:'📚 Lernen',games:'🎮 Spiele',progress:'📊 Fortschritt',admin:'⚙️ Admin',
+    vocab_trainer:'📝 Vokabeltrainer',workout:'🏋️ Workout',workout_setup:'🏋️ Workout',sentence_learner:'💬 Sätze',
+    quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',crossword:'🔤 Kreuzworträtsel',browse:'📖 Vokabeln',
+    leiterspiel_menu:'🎯 Leiterspiel',leiterspiel_play:'🎯 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
+    grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Rangliste',word_select_trainer:'📝 Trainer'
   };
 
   var mainScreens = isAdmin
@@ -3464,10 +3465,10 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     return(
       <div style={{maxWidth:480,margin:'0 auto',minHeight:'100vh',display:'flex',flexDirection:'column',background:'white'}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-          <span style={{fontSize:20}}>ð</span>
+          <span style={{fontSize:20}}>🎓</span>
           <div style={{flex:1}}>
-            <div style={{fontWeight:'bold',fontSize:15,color:'white'}}>Vokabel-RÃ¤tsel</div>
-            <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name} Â· {player&&(player.total_score||0)} Pkt</div>
+            <div style={{fontWeight:'bold',fontSize:15,color:'white'}}>Vokabel-Rätsel</div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name} · {player&&(player.total_score||0)} Pkt</div>
           </div>
           <button onClick={onLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>Abmelden</button>
         </div>
@@ -3475,57 +3476,57 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
         <div style={{flex:1,overflowY:'auto',padding:'12px 10px 70px'}}>
           {screen==='home'&&(<div>
             <div style={{background:'linear-gradient(135deg,'+T+'22,'+T+'08)',borderRadius:16,padding:16,marginBottom:14,border:'1px solid '+T+'22'}}>
-              <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>Hallo, {player&&player.name}! ð</div>
+              <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>Hallo, {player&&player.name}! 👋</div>
               <div style={{fontSize:12,color:G600}}>Heute Vokabeln lernen?</div>
             </div>
             {[
-              {icon:'ðï¸',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
-              {icon:'ð¯',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
-              {icon:'âï¸',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
-              {icon:'âï¸',title:'Grammar Trainer',sub:'Englische Grammatik Ã¼ben',action:function(){go('grammar');}},
+              {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
+              {icon:'🎯',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
+              {icon:'⚔️',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
+              {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
                 <span style={{fontSize:24,flexShrink:0}}>{item.icon}</span>
                 <div><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{item.title}</div><div style={{fontSize:11,color:G400}}>{item.sub}</div></div>
-                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>âº</span>
+                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
               </button>;
             })}
           </div>)}
 
           {screen==='learn'&&(<div>
             {[
-              {icon:'ð',title:'Vokabeltrainer',sub:'Alle Vokabeln Ã¼ben',action:function(){go('word_select_trainer');}},
-              {icon:'ð¬',title:'SÃ¤tze lernen',sub:'SÃ¤tze Ã¼bersetzen',action:function(){go('sentence_learner');}},
-              {icon:'ð',title:'Vokabeln durchblÃ¤ttern',sub:'Alle WÃ¶rter anschauen',action:function(){go('browse');}},
+              {icon:'📝',title:'Vokabeltrainer',sub:'Alle Vokabeln üben',action:function(){go('word_select_trainer');}},
+              {icon:'💬',title:'Sätze lernen',sub:'Sätze übersetzen',action:function(){go('sentence_learner');}},
+              {icon:'📖',title:'Vokabeln durchblättern',sub:'Alle Wörter anschauen',action:function(){go('browse');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
                 <span style={{fontSize:22,flexShrink:0}}>{item.icon}</span>
                 <div><div style={{fontWeight:'bold',fontSize:13}}>{item.title}</div><div style={{fontSize:11,color:G400}}>{item.sub}</div></div>
-                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>âº</span>
+                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
               </button>;
             })}
           </div>)}
 
           {screen==='games'&&(<div>
             {[
-              {icon:'ð¯',title:'Quiz Solo',sub:'6 Runden alleine spielen',action:function(){go('quiz_solo');}},
-              {icon:'âï¸',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
-              {icon:'ð®',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
-              {icon:'âï¸',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
-              ...(player&&player.is_admin?[{icon:'â',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
+              {icon:'🎯',title:'Quiz Solo',sub:'6 Runden alleine spielen',action:function(){go('quiz_solo');}},
+              {icon:'⚔️',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
+              {icon:'🎮',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
+              {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
+              ...(player&&player.is_admin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
                 <span style={{fontSize:22,flexShrink:0}}>{item.icon}</span>
                 <div><div style={{fontWeight:'bold',fontSize:13}}>{item.title}</div><div style={{fontSize:11,color:G400}}>{item.sub}</div></div>
-                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>âº</span>
+                <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
               </button>;
             })}
           </div>)}
 
           {screen==='progress'&&(<div>
             <div style={{display:'flex',gap:6,marginBottom:12}}>
-              <button onClick={function(){go('stats');}} style={BtnStyle(T,'white',{flex:1,padding:'10px',fontSize:12})}>ð Leiterspiel-Fortschritt</button>
-              <button onClick={function(){go('leaderboard');}} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:12})}>ð Rangliste</button>
+              <button onClick={function(){go('stats');}} style={BtnStyle(T,'white',{flex:1,padding:'10px',fontSize:12})}>📊 Leiterspiel-Fortschritt</button>
+              <button onClick={function(){go('leaderboard');}} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:12})}>🏆 Rangliste</button>
             </div>
             <Stats player={player} chapters={childChapters}/>
           </div>)}
@@ -3556,7 +3557,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             grammar:'games',stats:'progress',leaderboard:'progress',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
           go(dest);
-        }} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'5px 10px',borderRadius:8,cursor:'pointer',fontSize:14,touchAction:'manipulation',flexShrink:0}}>â</button>}
+        }} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'5px 10px',borderRadius:8,cursor:'pointer',fontSize:14,touchAction:'manipulation',flexShrink:0}}>←</button>}
         <div style={{flex:1}}>
           <div style={{fontWeight:'bold',fontSize:14,color:'white'}}>{screenTitles[screen]||screen}</div>
           <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name}</div>
@@ -3617,7 +3618,7 @@ function App() {
   if(!player) return <LoginScreen onLogin={handleLogin}/>;
   if(loading) return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)'}}>
-      <div style={{textAlign:'center',color:'white'}}><div style={{fontSize:48,marginBottom:16}}>ð</div><div style={{fontSize:16}}>Lade Datenâ¦</div></div>
+      <div style={{textAlign:'center',color:'white'}}><div style={{fontSize:48,marginBottom:16}}>🎓</div><div style={{fontSize:16}}>Lade Daten…</div></div>
     </div>
   );
 
