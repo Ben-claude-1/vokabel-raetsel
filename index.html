@@ -56,7 +56,7 @@ function sbDel(t, q) {
 }
 function updatePresence(pid) {
   var now = new Date().toISOString();
-  sbGet('settings','key=eq.presence_'+pid+'&select=id').then(function(d){
+  sbGet('settings','key=eq.presence_'+pid+'&select=key').then(function(d){
     if(d&&d.length>0) sbPatch('settings',{value:now},'key=eq.presence_'+pid);
     else sbPost('settings',{key:'presence_'+pid,value:now});
   }).catch(function(){});
@@ -3803,7 +3803,10 @@ function GrammarAdmin({ player, chapters }) {
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
     var topicLabel = topic==='sp'?'Simple Present':'Past Participle';
-    var prompt = 'Erstelle '+batchN+' verschiedene deutsche Beispielsätze mit '+topicLabel+' auf Englisch. Jeder Satz soll kurz (max 10 Wörter), alltagstauglich und für Englischlernende (B1-Niveau) geeignet sein. Antworte NUR mit einem JSON-Array: [{"text":"English sentence","translation":"Deutsche Übersetzung","rule":"'+topicLabel+'","important":true}]. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
+    var promptDetail = topic==='sp'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist immer das Verb in der richtigen Simple-Present-Form. Beispiel: {"sentence":"She ___ (play) football every day.","answer":"plays","rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball."}'
+      : 'Verwende das Present Perfect mit have/has + Past Participle. Die Lücke ist das Past Participle. Beispiel: {"sentence":"I have ___ (eat) breakfast.","answer":"eaten","rule":"Past Participle","translation":"Ich habe Frühstück gegessen."}';
+    var prompt = 'Erstelle '+batchN+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als Lücke), answer, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -3812,7 +3815,7 @@ function GrammarAdmin({ player, chapters }) {
     .then(function(d){
       var text = d.content&&d.content[0]&&d.content[0].text||'';
       var clean = text.replace(/```json|```/g,'').trim();
-      var arr = JSON.parse(clean);
+      var arr = JSON.parse(clean).map(function(q){ return Object.assign({id:Date.now()+'_'+Math.random().toString(36).slice(2)}, q); });
       return saveGrammarPool(topic, pool.concat(arr)).then(function(){ return arr; });
     })
     .then(function(arr){
@@ -3858,7 +3861,8 @@ function GrammarAdmin({ player, chapters }) {
         {pool.map(function(q,i){
           return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:G50,border:'1px solid '+G200}}>
             <div style={{flex:1}}>
-              <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.text}</div>
+              <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.sentence||q.text}</div>
+              {q.answer&&<div style={{fontSize:10,color:T}}>✓ {q.answer}</div>}
               <div style={{fontSize:10,color:G600}}>{q.translation}</div>
             </div>
             <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>×</button>
@@ -3938,8 +3942,15 @@ function GrammarGame({ player, setPlayer, onDone }) {
       if(!p||p.length===0){
         setLoading(false); setPhase('empty'); return;
       }
-      setPool(p);
-      var qs=grammarPickQuestions(p,ruleStats,Math.min(10,p.length));
+      // normalize legacy format: {text} → {sentence, answer}
+      var normalized=p.map(function(q,i){
+        var s=q.sentence||q.text||'';
+        var a=q.answer||q.text||'';
+        return Object.assign({id:q.id||('q'+i)},q,{sentence:s,answer:a});
+      }).filter(function(q){return q.sentence&&q.answer;});
+      if(!normalized||normalized.length===0){ setLoading(false); setPhase('empty'); return; }
+      setPool(normalized);
+      var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length));
       setQuestions(qs); setQIdx(0); setResults([]); setInput(''); setResult(null); setPhase('game');
       setLoading(false);
     }).catch(function(){setLoading(false);});
@@ -4248,17 +4259,18 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       }).catch(function(){});
     }
     function loadPresence(){
-      var uids = (allUsersRef.current||[]).map(function(u){return 'presence_'+u.id;});
-      if(!uids.length) return;
-      sbGet('settings','key=in.('+uids.join(',')+')'+'&select=key,value').then(function(d){
-        if(!Array.isArray(d)) return;
-        var cutoff = Date.now()-90000;
-        var ids = [];
-        d.forEach(function(r){
-          try{ if(new Date(r.value).getTime()>cutoff) ids.push(r.key.replace('presence_','')); }catch(e){}
-        });
-        setOnlineIds(ids);
-      }).catch(function(){});
+      var users = allUsersRef.current||[];
+      if(!users.length) return;
+      var cutoff = Date.now()-90000;
+      Promise.all(users.map(function(u){
+        return sbGet('settings','key=eq.presence_'+u.id+'&select=key,value').then(function(d){
+          if(!d||!d.length) return null;
+          try{ if(new Date(d[0].value).getTime()>cutoff) return u.id; }catch(e){}
+          return null;
+        }).catch(function(){ return null; });
+      })).then(function(results){
+        setOnlineIds(results.filter(Boolean));
+      });
     }
     sendHeartbeat();
     loadPresence();
