@@ -2673,6 +2673,12 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [dupLoading, setDupLoading] = useState(false);
   var [showDup, setShowDup] = useState(false);
   var fileRef = useRef();
+  var imgRef = useRef();
+  var [imgLoading, setImgLoading] = useState(false);
+  var [imgMsg, setImgMsg] = useState('');
+  var [imgDraft, setImgDraft] = useState(null);
+  var [imgTargetCh, setImgTargetCh] = useState('');
+  var [imgMode, setImgMode] = useState('existing');
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   function toggleCh(id){ setExpandedCh(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;}); }
@@ -2736,6 +2742,44 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     var newWords = base.concat(toAdd);
     saveChapterWords(ch, newWords, chapters, setChapters, setSaving, setMsg);
     setShowUpload(false);
+  }
+
+  function uploadImg(file) {
+    if(!file) return;
+    setImgLoading(true); setImgMsg('Bild wird analysiert…'); setImgDraft(null);
+    var reader=new FileReader();
+    reader.onload=function(){
+      var b64=reader.result.split(',')[1];
+      sbGet('settings','key=eq.anthropic_key').then(function(d){
+        var key=(d&&d[0]&&d[0].value)||localStorage.getItem('claude_api_key')||'';
+        if(!key){setImgMsg('Kein API-Key hinterlegt. Bitte unter 🔑 API-Key eintragen.');setImgLoading(false);return;}
+        fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
+            {type:'text',text:'Analysiere diese Schulbuch-Seite fuer einen Englisch-Vokabeltrainer.\n\nVokabeln sind zwischen horizontalen Trennlinien angeordnet. Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthaelt.\n\nimportant:true wenn die englische Vokabel FETT gedruckt ist, sonst false.\n\nVerben immer mit "to": "to play", "to sing".\n\nAntworte NUR mit JSON, kein Markdown:\n{"words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"}]}\n\nErlaubte Typen: "verb","noun","adjective","phrase","other"'}
+          ]}]})
+        }).then(function(r){return r.json();}).then(function(d){
+          var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+          var parsed=JSON.parse(txt);
+          setImgDraft(parsed.words||[]);
+          setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln erkannt');
+          setImgLoading(false);
+        }).catch(function(e){setImgMsg('Fehler: '+e.message);setImgLoading(false);});
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function doImportOcr(words) {
+    if(!imgTargetCh){setImgMsg('Bitte Themenbereich auswählen');return;}
+    var ch=chapters.find(function(c){return c.id===imgTargetCh;});
+    if(!ch) return;
+    var existing=safeWords(ch.words).map(function(w){return normWordKey(w.word);});
+    var toAdd=words.filter(function(w){return existing.indexOf(normWordKey(w.word))<0;});
+    saveChapterWords(ch,safeWords(ch.words).concat(toAdd),chapters,setChapters,setSaving,setMsg);
+    setImgDraft(null); setImgMsg('✅ '+toAdd.length+' Vokabeln importiert');
   }
 
   function findDuplicates() {
@@ -2802,6 +2846,40 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
 
       {tab==='chapters'&&(<div>
+        <div style={{marginBottom:14,padding:12,background:G50,borderRadius:12,border:'2px dashed '+G200}}>
+          <div style={{fontWeight:'bold',fontSize:13,color:T,marginBottom:8}}>📷 Schulbuch-Seite per Bild importieren</div>
+          <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+            <select value={imgTargetCh} onChange={function(e){setImgTargetCh(e.target.value);}}
+              style={{flex:1,minWidth:0,padding:'7px 8px',fontSize:13,border:'1.5px solid '+T,borderRadius:8,outline:'none',background:'white'}}>
+              <option value=''>-- Themenbereich auswählen --</option>
+              {childChapters.map(function(c){
+                var par=topLevelChapters.find(function(p){return p.id===c.parent_id;});
+                return <option key={c.id} value={c.id}>{par?par.icon+' '+par.title+' > ':''}{c.icon} {c.title}</option>;
+              })}
+            </select>
+            <input ref={imgRef} type='file' accept='image/*' style={{display:'none'}} onChange={function(e){if(e.target.files[0])uploadImg(e.target.files[0]);e.target.value='';}}/>
+            <button onClick={function(){imgRef.current&&imgRef.current.click();}} disabled={imgLoading}
+              style={{padding:'7px 14px',borderRadius:8,border:'none',background:T,color:'white',fontWeight:'bold',fontSize:13,cursor:'pointer',opacity:imgLoading?0.6:1,touchAction:'manipulation'}}>
+              {imgLoading?'⏳ Analysiere…':'📷 Bild hochladen'}
+            </button>
+          </div>
+          {imgMsg&&<div style={{fontSize:12,padding:'6px 10px',borderRadius:6,marginBottom:8,
+            background:imgMsg.startsWith('✅')?'#d1fae5':imgMsg.startsWith('Fehler')||imgMsg.startsWith('Kein')?'#fef2f2':'#eff6ff',
+            color:imgMsg.startsWith('✅')?'#065f46':imgMsg.startsWith('Fehler')||imgMsg.startsWith('Kein')?RE:T}}>{imgMsg}</div>}
+          {imgDraft&&imgDraft.length>0&&(
+            <div>
+              <div style={{maxHeight:160,overflowY:'auto',border:'1px solid '+G200,borderRadius:8,marginBottom:8}}>
+                {imgDraft.map(function(w,i){return <div key={i} style={{display:'flex',gap:8,padding:'4px 10px',borderBottom:'1px solid '+G100,fontSize:11,background:i%2===0?'white':G50}}>
+                  {w.important&&<span>⭐</span>}<span style={{fontWeight:'bold',flex:1}}>{w.word}</span><span style={{color:G400}}>{w.clue}</span>
+                </div>;})}
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={function(){doImportOcr(imgDraft);}} style={{flex:1,padding:'8px',borderRadius:8,border:'none',background:T,color:'white',fontWeight:'bold',fontSize:12,cursor:'pointer'}}>✓ Importieren</button>
+                <button onClick={function(){setImgDraft(null);setImgMsg('');}} style={{padding:'8px 12px',borderRadius:8,border:'none',background:G100,color:G600,fontSize:12,cursor:'pointer'}}>✕</button>
+              </div>
+            </div>
+          )}
+        </div>
         {topLevelChapters.map(function(kap){
           var kids=childChapters.filter(function(c){return c.parent_id===kap.id;}).slice().sort(naturalSort);
           var open=expandedCh[kap.id];
