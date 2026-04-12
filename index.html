@@ -3984,6 +3984,7 @@ function CrosswordGame({ chapters, onDone }) {
   var [puzzle, setPuzzle] = useState(null);
   var [sel, setSel] = useState({});
   var [filter, setFilter] = useState('all');
+  var [openKap, setOpenKap] = useState({});
   var [openCh, setOpenCh] = useState(null);
 
   function cwValid(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; }
@@ -4018,8 +4019,19 @@ function CrosswordGame({ chapters, onDone }) {
     var cw=buildCW(words,sol.phrase);
     setPuzzle({cw:cw,sol:sol});
   }
+
   var total=Object.values(sel).reduce(function(s,set){return s+set.size;},0);
-  var validChaps=chapters.filter(function(c){return safeWords(c.words).some(cwValid);});
+  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+  var childMap={};
+  chapters.filter(function(c){return c.parent_id;}).forEach(function(c){
+    if(!childMap[c.parent_id]) childMap[c.parent_id]=[];
+    childMap[c.parent_id].push(c);
+  });
+
+  // kapitel-level counts
+  function kapSelCount(kap){
+    return (childMap[kap.id]||[]).reduce(function(s,ch){return s+(sel[ch.id]||new Set()).size;},0);
+  }
 
   if(puzzle){
     return (
@@ -4043,38 +4055,58 @@ function CrosswordGame({ chapters, onDone }) {
         <button onClick={startPuzzle} disabled={total<4} style={BtnStyle(total>=4?T:G400,'#fff',{padding:'6px 14px',opacity:total<4?0.5:1,touchAction:'manipulation'})}>🔤 Rätsel starten</button>
       </div>
       {total<4&&<p style={{fontSize:11,color:G400,textAlign:'center',marginBottom:8}}>Mindestens 4 Vokabeln auswählen</p>}
-      {validChaps.map(function(c){
-        var ws=safeWords(c.words); var s=sel[c.id]||new Set(); var fi=getFiltered(c);
-        var allS=fi.length>0&&fi.every(function(w){return s.has(ws.indexOf(w));}); var someS=fi.some(function(w){return s.has(ws.indexOf(w));})&&!allS;
-        var open=openCh===c.id;
+      {topLevel.map(function(kap){
+        var kids=(childMap[kap.id]||[]).filter(function(c){return getFiltered(c).length>0;}).slice().sort(naturalSort);
+        if(kids.length===0) return null;
+        var kapSel=kapSelCount(kap);
+        var kapOpen=openKap[kap.id];
         return (
-          <div key={c.id} style={{marginBottom:8,border:'2px solid '+(s.size>0?c.color:G200),borderRadius:12,overflow:'hidden'}}>
-            <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:s.size>0?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){setOpenCh(open?null:c.id);}}>
-              <span style={{fontSize:20}}>{c.icon}</span>
+          <div key={kap.id} style={{marginBottom:10,border:'2px solid '+(kapSel>0?(kap.color||T):G200),borderRadius:12,overflow:'hidden'}}>
+            <div onClick={function(){setOpenKap(function(p){var n=Object.assign({},p);n[kap.id]=!p[kap.id];return n;});}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',background:kapSel>0?((kap.color||T)+'15'):'white',cursor:'pointer',touchAction:'manipulation'}}>
+              <span style={{fontSize:20}}>{kap.icon}</span>
               <div style={{flex:1}}>
-                <div style={{fontWeight:'bold',fontSize:13,color:c.color}}>{c.title}</div>
-                <div style={{fontSize:11,color:G400}}>{fi.length} wählbar · {s.size} gewählt</div>
+                <div style={{fontWeight:'bold',fontSize:14,color:kap.color||T}}>{kap.title}</div>
+                <div style={{fontSize:11,color:G400}}>{kids.length} Themenbereiche{kapSel>0?' · '+kapSel+' gewählt':''}</div>
               </div>
-              <div onClick={function(e){e.stopPropagation();togAll(c);}} style={{width:22,height:22,borderRadius:6,border:'2px solid '+(allS?c.color:someS?c.color:G200),background:allS?c.color:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',touchAction:'manipulation'}}>
-                {allS&&<span style={{color:'white',fontSize:13}}>✓</span>}{someS&&<span style={{color:c.color,fontSize:13}}>–</span>}
-              </div>
-              <span style={{color:G400,fontSize:12}}>{open?'▲':'▼'}</span>
+              <span style={{color:G400,fontSize:12}}>{kapOpen?'▲':'▼'}</span>
             </div>
-            {open&&(<div style={{padding:'8px 14px 12px',background:'#fafafa',borderTop:'1px solid '+G200}}>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {fi.map(function(w){var ri=ws.indexOf(w);var isSel=s.has(ri);
-                  return (<div key={ri} onClick={function(){togW(c.id,ri);}} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:20,border:'1.5px solid '+(isSel?c.color:G200),background:isSel?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}}>
-                    {w.important&&<span style={{fontSize:9}}>⭐</span>}
-                    <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',color:isSel?c.color:G600}}>{w.word}</span>
-                    <span style={{fontSize:10,color:G400}}>= {w.clue}</span>
-                  </div>);
-                })}
-              </div>
+            {kapOpen&&(<div style={{borderTop:'1px solid '+G200}}>
+              {kids.map(function(c){
+                var ws=safeWords(c.words); var s=sel[c.id]||new Set(); var fi=getFiltered(c);
+                var allS=fi.length>0&&fi.every(function(w){return s.has(ws.indexOf(w));}); var someS=fi.some(function(w){return s.has(ws.indexOf(w));})&&!allS;
+                var open=openCh===c.id;
+                return (
+                  <div key={c.id} style={{borderBottom:'1px solid '+G100}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px 9px 20px',background:s.size>0?(c.color+'10'):'#fafafa',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){setOpenCh(open?null:c.id);}}>
+                      <span style={{fontSize:16}}>{c.icon}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:'bold',fontSize:12,color:c.color}}>{c.title}</div>
+                        <div style={{fontSize:10,color:G400}}>{fi.length} wählbar · {s.size} gewählt</div>
+                      </div>
+                      <div onClick={function(e){e.stopPropagation();togAll(c);}} style={{width:20,height:20,borderRadius:5,border:'2px solid '+(allS?c.color:someS?c.color:G200),background:allS?c.color:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',touchAction:'manipulation'}}>
+                        {allS&&<span style={{color:'white',fontSize:11}}>✓</span>}{someS&&<span style={{color:c.color,fontSize:11}}>–</span>}
+                      </div>
+                      <span style={{color:G400,fontSize:11}}>{open?'▲':'▼'}</span>
+                    </div>
+                    {open&&(<div style={{padding:'8px 14px 10px 20px',background:'#f9fafb'}}>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                        {fi.map(function(w){var ri=ws.indexOf(w);var isSel=s.has(ri);
+                          return (<div key={ri} onClick={function(){togW(c.id,ri);}} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 9px',borderRadius:20,border:'1.5px solid '+(isSel?c.color:G200),background:isSel?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}}>
+                            {w.important&&<span style={{fontSize:9}}>⭐</span>}
+                            <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:isSel?c.color:G600}}>{w.word}</span>
+                            <span style={{fontSize:10,color:G400}}>= {w.clue}</span>
+                          </div>);
+                        })}
+                      </div>
+                    </div>)}
+                  </div>
+                );
+              })}
             </div>)}
           </div>
         );
       })}
-      {validChaps.length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit gültigen Vokabeln gefunden.</div>}
+      {topLevel.length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit gültigen Vokabeln gefunden.</div>}
     </div>
   );
 }
@@ -4112,7 +4144,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     function loadPresence(){
       var uids = (allUsersRef.current||[]).map(function(u){return 'presence_'+u.id;});
       if(!uids.length) return;
-      sbGet('settings','key=in.('+uids.join(',')+'&select=key,value').then(function(d){
+      sbGet('settings','key=in.('+uids.join(',')+')'+'&select=key,value').then(function(d){
         if(!Array.isArray(d)) return;
         var cutoff = Date.now()-90000;
         var ids = [];
