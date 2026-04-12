@@ -979,8 +979,17 @@ function QuizSolo({ chapters, globalWords, onDone }) {
   );
 }
 
-function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, onlineIds, onDone }) {
+function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, onlineIds, quizScoring, setQuizScoring, onDone }) {
   var [view, setView] = useState('menu');
+  var [history, setHistory] = useState([]);
+  var [histLoaded, setHistLoaded] = useState(false);
+  function loadHistory(){
+    if(histLoaded) return;
+    sbGet('quiz_duels','or=(player1_id.eq.'+player.id+',player2_id.eq.'+player.id+')&status=eq.finished&select=id,player1_id,player1_name,player2_name,round_wins_p1,round_wins_p2,created_at&order=created_at.desc&limit=20').then(function(d){
+      if(Array.isArray(d)) setHistory(d);
+      setHistLoaded(true);
+    }).catch(function(){setHistLoaded(true);});
+  }
   var [selectedChapIds, setSelectedChapIds] = useState([]);
   var [pendingGames, setPendingGames] = useState([]);
   var [myGames, setMyGames] = useState([]);
@@ -1068,25 +1077,73 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
     })}
   </div>;
 
-  if(view==='leaderboard') return <div style={{padding:8}}>
+  if(view==='history') return <div style={{padding:8}}>
     <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
-    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Quiz-Rangliste</div>
-    {lbData.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Keine Daten vorhanden.</div>}
-    {lbData.map(function(u,i){
-      var isMe=u.id===String(player.id);
-      return <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,borderRadius:10,background:isMe?TL:'white',border:'2px solid '+(isMe?T:G200)}}>
-        <div style={{width:28,height:28,borderRadius:'50%',background:i===0?AM:i===1?G400:i===2?'#b45309':G100,color:i<3?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:12}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
-        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div><div style={{fontSize:10,color:G400}}>{u.games} Spiele</div></div>
-        <div style={{textAlign:'right'}}><div style={{fontSize:16,fontWeight:'bold',color:isMe?T:G600}}>{u.wins}</div><div style={{fontSize:9,color:G400}}>Siege</div></div>
+    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Meine letzten Duelle</div>
+    {!histLoaded&&<div style={{textAlign:'center',color:G400,padding:20}}>Laden...</div>}
+    {histLoaded&&history.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Noch keine Duelle gespielt.</div>}
+    {history.map(function(g){
+      var isP1=String(g.player1_id)===String(player.id);
+      var opp=isP1?g.player2_name:g.player1_name;
+      var myWinsArr=JSON.parse(isP1?g.round_wins_p1||'[]':g.round_wins_p2||'[]');
+      var oppWinsArr=JSON.parse(isP1?g.round_wins_p2||'[]':g.round_wins_p1||'[]');
+      var myR=myWinsArr.filter(function(s){return s>=2;}).length;
+      var oppR=oppWinsArr.filter(function(s){return s>=2;}).length;
+      var myCorrect=myWinsArr.reduce(function(s,v){return s+v;},0);
+      var oppCorrect=oppWinsArr.reduce(function(s,v){return s+v;},0);
+      var result=myR>oppR?'win':myR<oppR?'loss':'draw';
+      var sc=quizScoring||{correct:10,win:50,loss:-50,draw:30};
+      var myPts=myCorrect*sc.correct+(result==='win'?sc.win:result==='draw'?sc.draw:sc.loss);
+      var d=new Date(g.created_at); var dateStr=d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();
+      return <div key={g.id} style={{padding:'10px 12px',marginBottom:8,borderRadius:10,border:'2px solid '+(result==='win'?GR:result==='loss'?RE:AM),background:result==='win'?'#f0fdf4':result==='loss'?'#fef2f2':'#fffbeb'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+          <span style={{fontSize:18}}>{result==='win'?'🏆':result==='loss'?'😔':'🤝'}</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900}}>vs {opp}</div>
+            <div style={{fontSize:10,color:G400}}>{dateStr}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontWeight:'bold',fontSize:14,color:result==='win'?GR:result==='loss'?RE:AM}}>{myR}:{oppR}</div>
+            <div style={{fontSize:10,fontWeight:'bold',color:myPts>=0?GR:RE}}>{myPts>=0?'+':''}{myPts} Pkt</div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:6,fontSize:11}}>
+          <div style={{flex:1,padding:'4px 8px',background:'rgba(0,0,0,0.05)',borderRadius:6,textAlign:'center'}}>
+            <div style={{color:G400}}>Ich</div>
+            <div style={{fontWeight:'bold',color:G900}}>{myCorrect}/18 richtig</div>
+          </div>
+          <div style={{flex:1,padding:'4px 8px',background:'rgba(0,0,0,0.05)',borderRadius:6,textAlign:'center'}}>
+            <div style={{color:G400}}>{opp}</div>
+            <div style={{fontWeight:'bold',color:G900}}>{oppCorrect}/18 richtig</div>
+          </div>
+        </div>
       </div>;
     })}
   </div>;
+
+  if(view==='leaderboard') {
+    var lbPlayers=(allUsers||[]).filter(function(u){return !u.is_admin;}).slice().sort(function(a,b){return (b.total_score||0)-(a.total_score||0);});
+    return <div style={{padding:8}}>
+      <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
+      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Gesamt-Rangliste</div>
+      {lbPlayers.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Keine Daten vorhanden.</div>}
+      {lbPlayers.map(function(u,i){
+        var isMe=String(u.id)===String(player.id);
+        return <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,borderRadius:10,background:isMe?TL:'white',border:'2px solid '+(isMe?T:G200)}}>
+          <div style={{width:28,height:28,borderRadius:'50%',background:i===0?AM:i===1?G400:i===2?'#b45309':G100,color:i<3?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:12}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+          <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div><div style={{fontSize:10,color:G400}}>{u.total_correct||0} richtig beantwortet</div></div>
+          <div style={{textAlign:'right'}}><div style={{fontSize:16,fontWeight:'bold',color:isMe?T:G600}}>{u.total_score||0}</div><div style={{fontSize:9,color:G400}}>Punkte</div></div>
+        </div>;
+      })}
+    </div>;
+  }
 
   return <div style={{padding:8}}>
     {[
       {icon:'➕',title:'Neues Spiel starten',sub:'Kapitel auswaehlen und losspielen',action:function(){setView('new');}},
       {icon:'▶️',title:'Spiel fortsetzen',sub:'Offene Duelle und Herausforderungen',action:function(){loadContinue();setView('continue');}},
-      {icon:'🏆',title:'Rangliste',sub:'Wer hat die meisten Duelle gewonnen?',action:function(){loadLeaderboard();setView('leaderboard');}},
+      {icon:'📊',title:'Meine Historie',sub:'Letzte Duelle und Statistiken',action:function(){loadHistory();setView('history');}},
+      {icon:'🏆',title:'Rangliste',sub:'Gesamtpunkte aller Spieler',action:function(){loadLeaderboard();setView('leaderboard');}},
     ].map(function(item,i){
       return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'14px',marginBottom:8,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
         <span style={{fontSize:26,flexShrink:0}}>{item.icon}</span>
@@ -1097,7 +1154,7 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
   </div>;
 }
 
-function QuizDuel({ chapters, allChapters, globalWords, player, onDone, allUsers, allCategories, onlineIds, initialGameId }) {
+function QuizDuel({ chapters, allChapters, globalWords, player, setPlayer, onDone, allUsers, setAllUsers, allCategories, onlineIds, quizScoring, initialGameId }) {
   var [phase, setPhase] = useState("setup");
   var [selectedKapitel, setSelectedKapitel] = useState([]);
   var [tab, setTab] = useState("users");
@@ -1237,7 +1294,30 @@ function QuizDuel({ chapters, allChapters, globalWords, player, onDone, allUsers
         var update = {};
         if(isP1){ update.round_wins_p1 = JSON.stringify(newWins); update.whose_turn = 'p2'; }
         else { update.round_wins_p2 = JSON.stringify(newWins); update.whose_turn = 'p1'; }
-        if(newWins.length>=6&&otherWins.length>=6) update.status='finished';
+        if(newWins.length>=6&&otherWins.length>=6){
+          update.status='finished';
+          var sc=quizScoring||{correct:10,win:50,loss:-50,draw:30};
+          var myTotal=newWins.reduce(function(s,v){return s+v;},0);
+          var oppTotal=otherWins.reduce(function(s,v){return s+v;},0);
+          var myRW=newWins.filter(function(s){return s>=2;}).length;
+          var oppRW=otherWins.filter(function(s){return s>=2;}).length;
+          var iWon2=myRW>oppRW; var isDraw2=myRW===oppRW;
+          var myPts=myTotal*sc.correct+(iWon2?sc.win:isDraw2?sc.draw:sc.loss);
+          var oppPts=oppTotal*sc.correct+(!iWon2?(isDraw2?sc.draw:sc.win):sc.loss);
+          var myNewScore=Math.max(0,(player.total_score||0)+myPts);
+          var oppId2=String(isP1?gameData.player2_id:gameData.player1_id);
+          var oppUser2=(allUsers||[]).find(function(u){return String(u.id)===oppId2;});
+          var oppNewScore=Math.max(0,((oppUser2&&oppUser2.total_score)||0)+oppPts);
+          sbPatch('players',{total_score:myNewScore},'id=eq.'+player.id);
+          sbPatch('players',{total_score:oppNewScore},'id=eq.'+oppId2);
+          if(setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:myNewScore});});
+          if(setAllUsers) setAllUsers(function(prev){return prev.map(function(u){
+            if(String(u.id)===String(player.id)) return Object.assign({},u,{total_score:myNewScore});
+            if(String(u.id)===oppId2) return Object.assign({},u,{total_score:oppNewScore});
+            return u;
+          });});
+          update._myPts=myPts; update._oppPts=oppPts;
+        }
         sbPatch('quiz_duels',update,'id=eq.'+gameId).then(function(){
           setGameData(function(prev){return Object.assign({},prev,update);});
           setPhase('roundResult');
@@ -1473,11 +1553,27 @@ function QuizDuel({ chapters, allChapters, globalWords, player, onDone, allUsers
     var myR2=myWins.filter(function(s){return s>=2;}).length;
     var oppR2=oppWins.filter(function(s){return s>=2;}).length;
     var tie=myR2===oppR2; var iWon=myR2>oppR2;
+    var sc2=quizScoring||{correct:10,win:50,loss:-50,draw:30};
+    var myCorrectTotal2=myWins.reduce(function(s,v){return s+v;},0);
+    var myPtsEarned=myCorrectTotal2*sc2.correct+(iWon?sc2.win:tie?sc2.draw:sc2.loss);
     return <div style={{padding:8}}>
       <div style={{borderRadius:16,padding:'24px 16px',textAlign:'center',marginBottom:12,background:tie?'linear-gradient(135deg,'+AM+',#f59e0b)':iWon?'linear-gradient(135deg,'+GR+',#16a34a)':'linear-gradient(135deg,'+RE+',#dc2626)',color:'white'}}>
         <div style={{fontSize:48,marginBottom:8}}>{tie?'🤝':iWon?'🏆':'😔'}</div>
         <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>{tie?'Unentschieden!':iWon?'Du hast gewonnen!':'Niederlage'}</div>
         <div style={{fontSize:16,opacity:0.9}}>{myR2} : {oppR2} Runden</div>
+        <div style={{marginTop:8,padding:'6px 14px',background:'rgba(255,255,255,0.2)',borderRadius:20,display:'inline-block',fontSize:14,fontWeight:'bold'}}>
+          {myPtsEarned>=0?'+':''}{myPtsEarned} Punkte
+        </div>
+      </div>
+      <div style={{padding:'10px 14px',background:G50,borderRadius:10,border:'1px solid '+G200,marginBottom:10,fontSize:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+          <span style={{color:G600}}>Richtige Antworten ({myCorrectTotal2}/18):</span>
+          <span style={{fontWeight:'bold',color:T}}>+{myCorrectTotal2*sc2.correct} Pkt</span>
+        </div>
+        <div style={{display:'flex',justifyContent:'space-between'}}>
+          <span style={{color:G600}}>{iWon?'Sieg-Bonus':tie?'Unentschieden':' Niederlage'}:</span>
+          <span style={{fontWeight:'bold',color:iWon?GR:tie?AM:RE}}>{iWon?'+'+sc2.win:tie?'+'+sc2.draw:sc2.loss} Pkt</span>
+        </div>
       </div>
       <ScoreBoard/>
       <div style={{display:'flex',gap:8,marginTop:8}}>
@@ -2809,6 +2905,46 @@ function UploadPreview({ fileData, chapters, onConfirm, onCancel }) {
   );
 }
 
+function QuizScoringAdmin() {
+  var [sc, setSc] = useState({correct:10,win:50,loss:-50,draw:30});
+  var [loaded, setLoaded] = useState(false);
+  var [saving, setSaving] = useState(false);
+  var [msg, setMsg] = useState('');
+  useEffect(function(){
+    sbGet('settings','key=eq.quiz_scoring&select=value').then(function(d){
+      if(Array.isArray(d)&&d.length>0){try{var s=JSON.parse(d[0].value);if(s)setSc(s);}catch(e){}}
+      setLoaded(true);
+    }).catch(function(){setLoaded(true);});
+  },[]);
+  function save(){
+    setSaving(true);
+    var body={key:'quiz_scoring',value:JSON.stringify(sc)};
+    sbGet('settings','key=eq.quiz_scoring&select=id').then(function(d){
+      var p=d&&d.length>0 ? sbPatch('settings',{value:body.value},'key=eq.quiz_scoring') : sbPost('settings',body);
+      Promise.resolve(p).then(function(){setSaving(false);setMsg('Gespeichert!');setTimeout(function(){setMsg('');},2500);});
+    }).catch(function(){setSaving(false);});
+  }
+  if(!loaded) return <div style={{color:G400,fontSize:12,padding:12}}>Laden...</div>;
+  function Field(label, key, hint){
+    return <div style={{marginBottom:10}}>
+      <label style={{fontSize:12,fontWeight:'bold',color:G600,display:'block',marginBottom:3}}>{label}</label>
+      <div style={{display:'flex',alignItems:'center',gap:6}}>
+        <input type='number' value={sc[key]} onChange={function(e){setSc(function(prev){var n=Object.assign({},prev);n[key]=parseInt(e.target.value)||0;return n;});}} style={{width:80,padding:'7px 10px',fontSize:14,border:'1.5px solid '+G200,borderRadius:7,outline:'none'}}/>
+        <span style={{fontSize:11,color:G400}}>{hint}</span>
+      </div>
+    </div>;
+  }
+  return <div>
+    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:12}}>Quiz-Duell Punktevergabe</div>
+    {Field('Richtige Antwort','correct','Punkte pro richtig beantworteter Frage')}
+    {Field('Sieg-Bonus','win','Zusatzpunkte für den Gewinner')}
+    {Field('Niederlage','loss','Punkte-Abzug für den Verlierer (negativ eingeben)')}
+    {Field('Unentschieden','draw','Punkte für beide bei Gleichstand')}
+    {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
+    <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{padding:'9px 20px',fontSize:12})}>{saving?'Speichern...':'Speichern'}</button>
+  </div>;
+}
+
 function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onDone }) {
   var [tab, setTab] = useState('chapters');
   var [saving, setSaving] = useState(false);
@@ -2996,7 +3132,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🎯 LS'],['users','👥 User'],['grammar','✏️ Gram.']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🎯 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -3199,6 +3335,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             </div>
           </div>;
         })}
+      </div>)}
+
+      {tab==='quiz'&&(<div>
+        <QuizScoringAdmin/>
       </div>)}
 
       {tab==='grammar'&&(<div>
@@ -3684,6 +3824,14 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [lsRun, setLsRun] = useState(null);
   var [lsStreak, setLsStreak] = useState(null);
   var [onlineIds, setOnlineIds] = useState([]);
+  var [quizScoring, setQuizScoring] = useState({correct:10,win:50,loss:-50,draw:30});
+
+  useEffect(function(){
+    if(!player) return;
+    sbGet('settings','key=eq.quiz_scoring&select=value').then(function(d){
+      if(Array.isArray(d)&&d.length>0){try{var s=JSON.parse(d[0].value);if(s)setQuizScoring(s);}catch(e){}}
+    }).catch(function(){});
+  },[player&&player.id]);
 
   useEffect(function(){
     if(!player) return;
@@ -3745,8 +3893,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}}/>;
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
     if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} onDone={function(){go('quiz_duel_menu');}}/>;}
-    if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('quiz_duel_menu');}}/>;}
-    if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('games');}}/>;
+    if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} setAllUsers={setAllUsers} setPlayer={setPlayer} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} onDone={function(){go('quiz_duel_menu');}}/>;}
+    if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} setQuizScoring={setQuizScoring} onDone={function(){go('games');}}/>;
 
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
     if(screen==='crossword'&&screenData) return <div style={{padding:8}}><Puzzle data={screenData.cw} solPhrase={screenData.sol.phrase} solMsg={screenData.sol.msg} chapId={screenData.chapId}/></div>;
