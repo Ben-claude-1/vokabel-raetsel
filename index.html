@@ -267,6 +267,33 @@ function getWordType(w) {
   if(months.indexOf(word)>=0) return 'month';
   return 'noun';
 }
+
+// Rule-based quick type detection (no API needed)
+function quickDetectType(word, clue) {
+  var w = (word||'').trim().toLowerCase();
+  var c = (clue||'').trim().toLowerCase();
+  if(w.startsWith('to ')) return 'verb';
+  if(w.includes(',') || w.includes(';') || c.includes(',') || c.includes(';')) return 'phrase';
+  if(w.split(' ').length >= 3) return 'phrase';
+  if(c.match(/^(to\s+\w+|[\w]+en|[\w]+eln|[\w]+ern|[\w]+ieren)$/) && !c.includes(' ')) return 'verb';
+  if(c.match(/(lich|ig|isch|sam|haft|los|voll|bar)$/) || w.match(/(ful|less|ous|ive|ent|ant|able|ible|al|ic|tic)$/)) return 'adjective';
+  return null; // unknown — needs AI
+}
+
+// AI batch categorization: sends all words to Claude API, returns {word -> type} map
+function aiCategorizeWords(words, apiKey) {
+  if(!words||!words.length||!apiKey) return Promise.resolve({});
+  var list = words.map(function(w,i){ return (i+1)+'. "'+w.word+'" = "'+w.clue+'"'; }).join('\n');
+  var prompt = 'Kategorisiere diese englischen Vokabeln. Antworte NUR mit einer JSON-Map {"wort":"typ",...}.\nErlaubte Typen: verb, noun, adjective, phrase, other\nRegeln: Verben beginnen oft mit "to", Phrasen haben mehrere Wörter oder Kommas.\n\n'+list;
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+  }).then(function(r){return r.json();}).then(function(d){
+    var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+    try{ return JSON.parse(txt); }catch(e){ return {}; }
+  }).catch(function(){ return {}; });
+}
 function wordDisplay(w) {
   if(!w) return '';
   var word = w.word||'';
@@ -3109,6 +3136,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [expandedCh, setExpandedCh] = useState({});
   var [showApiKey, setShowApiKey] = useState(false);
   var [showCreateRun, setShowCreateRun] = useState(false);
+  var [autoTyping, setAutoTyping] = useState({});  // chapterId -> 'loading'|'done'|'error'
   var [dupWords, setDupWords] = useState(null);
   var [dupLoading, setDupLoading] = useState(false);
   var [showNewUser, setShowNewUser] = useState(false);
@@ -3160,6 +3188,44 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
         setSaving(false); setMsg('✓ Gespeichert'); setEditCh(null);
       });
     }
+  }
+
+  function autoTypeChapter(ch) {
+    var words = safeWords(ch.words);
+    // Step 1: apply quick rules
+    var updated = words.map(function(w){
+      if(w.type) return w;
+      var detected = quickDetectType(w.word, w.clue);
+      return detected ? Object.assign({},w,{type:detected}) : w;
+    });
+    var stillMissing = updated.filter(function(w){return !w.type;});
+    setAutoTyping(function(p){return Object.assign({},p,{[ch.id]:'loading'});});
+    function finish(finalWords) {
+      saveChapterWords(ch, finalWords, chapters, setChapters, setSaving, setMsg);
+      setAutoTyping(function(p){return Object.assign({},p,{[ch.id]:'done'});});
+      setTimeout(function(){setAutoTyping(function(p){var n=Object.assign({},p);delete n[ch.id];return n;});},3000);
+    }
+    if(!stillMissing.length){ finish(updated); return; }
+    sbGet('settings','key=eq.anthropic_key').then(function(kd){
+      var apiKey=(kd&&kd[0]&&kd[0].value)||localStorage.getItem('claude_api_key')||'';
+      if(!apiKey){
+        // No API key: use 'other' as fallback
+        var fallback=updated.map(function(w){return w.type?w:Object.assign({},w,{type:'other'});});
+        finish(fallback);
+        return;
+      }
+      aiCategorizeWords(stillMissing, apiKey).then(function(map){
+        var final=updated.map(function(w){
+          if(w.type) return w;
+          var t=map[w.word]||map[(w.word||'').toLowerCase()];
+          var valid=['verb','noun','adjective','phrase','other'];
+          return Object.assign({},w,{type:(valid.indexOf(t)>=0?t:'other')});
+        });
+        finish(final);
+      }).catch(function(){
+        setAutoTyping(function(p){return Object.assign({},p,{[ch.id]:'error'});});
+      });
+    });
   }
 
   function deleteChapter(ch) {
@@ -3342,7 +3408,15 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                     <span style={{fontSize:15}}>{ch.icon}</span>
                     <span style={{flex:1,fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</span>
                     <span style={{fontSize:10,color:G400}}>{(ch.words||[]).length} V</span>
-                    <button onClick={function(e){e.stopPropagation();setEditCh(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:5,marginLeft:4}}>✏️</button>
+                    {(function(){
+                      var noType=safeWords(ch.words).filter(function(w){return !w.type;}).length;
+                      var st=autoTyping[ch.id];
+                      if(st==='done') return <span style={{fontSize:9,color:GR,fontWeight:'bold',flexShrink:0}}>✓ Typen</span>;
+                      if(st==='loading') return <span style={{fontSize:9,color:G400,flexShrink:0}}>🤖…</span>;
+                      if(noType>0) return <button onClick={function(e){e.stopPropagation();autoTypeChapter(ch);}} style={{padding:'2px 6px',fontSize:9,border:'1px solid #7c3aed',background:'white',color:'#7c3aed',cursor:'pointer',borderRadius:5,flexShrink:0,fontWeight:'bold'}} title={''+noType+' ohne Typ'}>🤖 {noType}</button>;
+                      return null;
+                    })()}
+                    <button onClick={function(e){e.stopPropagation();setEditCh(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:5,marginLeft:2}}>✏️</button>
                     {UUID.test(ch.id)&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
                     <span style={{color:G400,fontSize:10,marginLeft:2}}>{chOpen?'▲':'▼'}</span>
                   </div>
@@ -3409,6 +3483,13 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             </div>}
           </div>;
         })}
+        <button onClick={function(){
+          var allChild=chapters.filter(function(c){return c.parent_id;});
+          var missing=allChild.filter(function(c){return safeWords(c.words).some(function(w){return !w.type;});});
+          if(!missing.length){setMsg('✓ Alle Vokabeln haben bereits einen Typ!');return;}
+          missing.forEach(function(ch){autoTypeChapter(ch);});
+          setMsg('🤖 Kategorisiere '+missing.length+' Themenbereiche…');
+        }} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'9px',marginTop:4,fontSize:12})}>🤖 Alle Vokabeln auto-kategorisieren</button>
         <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📗',parent_id:'',words:[],sentences:[]});}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',marginTop:4})}>+ Neues Kapitel</button>
         {showNewCh&&(<div style={{padding:12,background:'white',borderRadius:10,border:'2px solid '+T,marginTop:8}}>
           <div style={{fontWeight:'bold',fontSize:12,marginBottom:8}}>{newChForm.parent_id?'Neuer Themenbereich':'Neues Kapitel'}</div>
