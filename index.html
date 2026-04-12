@@ -2474,34 +2474,46 @@ function KapitelProgress({ player, chapters, onDone }) {
 }
 
 function LeitersSpielStreakSettings({ onDone }) {
-  var [settings, setSettings] = useState(DEFAULT_STREAK);
+  var [settings, setSettings] = useState({required:[2,1,1,1,1]});
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
   useEffect(function(){
     sbGet('settings','key=eq.streak_settings').then(function(d){
-      if(d&&d[0]){try{setSettings(JSON.parse(d[0].value));}catch(e){}}
+      if(d&&d[0]){try{
+        var parsed=JSON.parse(d[0].value);
+        if(parsed&&Array.isArray(parsed.required)) setSettings(parsed);
+        else if(parsed&&parsed.upThresholds){
+          var req=[1,2,3,4,5].map(function(p){return parsed.upThresholds[p]||1;});
+          setSettings({required:req});
+        }
+      }catch(e){}}
     }).catch(function(){});
   },[]);
   function save(){
     setSaving(true);
+    var r=settings.required||[2,1,1,1,1];
+    var ut={1:r[0],2:r[1],3:r[2],4:r[3],5:r[4]};
+    var dt={1:0,2:1,3:1,4:1,5:1};
+    var full={required:r,upThresholds:ut,downThresholds:dt};
+    var val=JSON.stringify(full);
     sbGet('settings','key=eq.streak_settings').then(function(d){
-      var body={key:'streak_settings',value:JSON.stringify(settings)};
-      if(d&&d[0]){ sbPatch('settings',{value:JSON.stringify(settings)},'key=eq.streak_settings').then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
-      else { sbPost('settings',body).then(function(){setSaving(false);setMsg('✓ Gespeichert');}).catch(function(){setSaving(false);setMsg('Fehler');}); }
+      var p=d&&d[0] ? sbPatch('settings',{value:val},'key=eq.streak_settings') : sbPost('settings',{key:'streak_settings',value:val});
+      Promise.resolve(p).then(function(){setSaving(false);setMsg('✓ Gespeichert');setTimeout(function(){setMsg('');},2500);}).catch(function(){setSaving(false);setMsg('Fehler');});
     }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
+  var req=settings.required||[2,1,1,1,1];
   return(
     <div style={{padding:8}}>
       <p style={{fontSize:12,color:G400,marginBottom:12}}>Wie oft muss ein Wort in jedem Topf richtig beantwortet werden?</p>
       {[1,2,3,4,5].map(function(p){
-        var req=(settings.required||[])[p-1]||2;
+        var r=req[p-1]||1;
         return <div key={p} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderBottom:'1px solid '+G100}}>
           <span style={{fontSize:16}}>{POT_ICON[p]}</span>
           <span style={{flex:1,fontSize:13,color:G600,fontWeight:'bold'}}>{POT_LABEL[p]}</span>
           <div style={{display:'flex',gap:4}}>
             {[1,2,3,4,5].map(function(n){
-              return <button key={n} onClick={function(){setSettings(function(s){var nr=s.required.slice();nr[p-1]=n;return Object.assign({},s,{required:nr});});}}
-                style={{width:28,height:28,borderRadius:6,border:'2px solid '+(req===n?T:G200),background:req===n?T:'white',color:req===n?'white':G600,cursor:'pointer',fontWeight:'bold',fontSize:12,touchAction:'manipulation'}}>{n}</button>;
+              return <button key={n} onClick={function(){setSettings(function(s){var nr=(s.required||[2,1,1,1,1]).slice();nr[p-1]=n;return Object.assign({},s,{required:nr});});}}
+                style={{width:28,height:28,borderRadius:6,border:'2px solid '+(r===n?T:G200),background:r===n?T:'white',color:r===n?'white':G600,cursor:'pointer',fontWeight:'bold',fontSize:12,touchAction:'manipulation'}}>{n}</button>;
             })}
           </div>
         </div>;
@@ -3071,6 +3083,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [showNewCh, setShowNewCh] = useState(false);
   var [expandedCh, setExpandedCh] = useState({});
   var [showApiKey, setShowApiKey] = useState(false);
+  var [showCreateRun, setShowCreateRun] = useState(false);
   var [dupWords, setDupWords] = useState(null);
   var [dupLoading, setDupLoading] = useState(false);
   var [showNewUser, setShowNewUser] = useState(false);
@@ -3320,15 +3333,18 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         <button onClick={function(){setEditCh(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'6px',fontSize:11})}>Abbrechen</button>
                       </div>
                     </div>)}
-                    {(ch.words||[]).slice().sort(function(a,b){return (a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
-                      var realIdx=ch.words.indexOf(w);
-                      return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:11}}>
-                        <span style={{fontSize:9}}>{w.important?'⭐':''}</span>
-                        <span style={{fontWeight:'bold',flex:1}}>{w.word}</span>
-                        <span style={{color:G400,fontSize:10,marginRight:2}}>{w.clue}</span>
-                        {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:3,background:G100,color:G600,flexShrink:0}}>{w.type}</span>}
-                        <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4}}>✏</button>
-                        <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4}}>✕</button>
+                    {safeWords(ch.words).slice().sort(function(a,b){return (a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
+                      var ws=safeWords(ch.words); var realIdx=ws.indexOf(w);
+                      var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
+                      var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
+                      var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
+                      return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11}}>
+                        {w.important&&<span style={{fontSize:9,flexShrink:0}}>⭐</span>}
+                        <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+                        <span style={{color:G400,fontSize:10,flexShrink:0}}>{w.clue}</span>
+                        {w.type&&<span style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
+                        <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
+                        <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
                       </div>;
                     })}
                     {editWord&&editWord.chId===ch.id&&(<div style={{padding:8,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:6}}>
@@ -3403,11 +3419,20 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       </div>)}
 
       {tab==='leiterspiel'&&(<div>
-        <LeitersSpielAdminOverview chapters={chapters} player={player}/>
-        <div style={{marginTop:10,borderTop:'1px solid '+G200,paddingTop:10}}>
-          <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Einstellungen</div>
-          <LeitersSpielStreakSettings onDone={function(){}}/>
-        </div>
+        {showCreateRun
+          ? <div>
+              <button onClick={function(){setShowCreateRun(false);}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:10,padding:0}}>← Zurück</button>
+              <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){setShowCreateRun(false);}}/>
+            </div>
+          : <div>
+              <button onClick={function(){setShowCreateRun(true);}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',fontSize:13,marginBottom:10})}>➕ Neuen Run erstellen</button>
+              <LeitersSpielAdminOverview chapters={chapters} player={player}/>
+              <div style={{marginTop:10,borderTop:'1px solid '+G200,paddingTop:10}}>
+                <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Einstellungen</div>
+                <LeitersSpielStreakSettings onDone={function(){}}/>
+              </div>
+            </div>
+        }
       </div>)}
 
       {tab==='users'&&(<div>
