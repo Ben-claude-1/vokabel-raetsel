@@ -3818,44 +3818,100 @@ function GrammarGame({ player, onDone }) {
 }
 
 function CrosswordGame({ chapters, onDone }) {
-  var [chapId, setChapId] = useState(null);
   var [puzzle, setPuzzle] = useState(null);
-  var ch = chapId ? chapters.find(function(c){ return c.id===chapId; }) : null;
+  var [sel, setSel] = useState({});
+  var [filter, setFilter] = useState('all');
+  var [openCh, setOpenCh] = useState(null);
 
-  function startPuzzle(chapter) {
-    var words = safeWords(chapter.words).filter(function(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; });
-    words = words.map(function(w){ return Object.assign({},w,{word:w.word.replace(/[^A-Za-z]/g,'').toUpperCase()}); });
-    if(words.length < 4) { alert('Dieses Kapitel hat zu wenig Vokabeln für ein Kreuzworträtsel (mind. 4 benötigt).'); return; }
-    var sol = SOLS[Math.floor(Math.random()*SOLS.length)];
-    var cw = buildCW(words, sol.phrase);
-    setChapId(chapter.id);
-    setPuzzle({cw:cw, sol:sol, chapId:chapter.id});
+  function cwValid(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; }
+  function getFiltered(ch){
+    var ws=safeWords(ch.words);
+    return ws.filter(function(w){ return cwValid(w)&&(filter==='all'||w.important); });
   }
+  function togAll(ch){
+    var ws=safeWords(ch.words);
+    var fi=ws.filter(function(w){ return cwValid(w)&&(filter==='all'||w.important); });
+    setSel(function(prev){
+      var n=Object.assign({},prev); var cur=n[ch.id]||new Set();
+      var allS=fi.every(function(w){return cur.has(ws.indexOf(w));});
+      var next=new Set(cur);
+      if(allS) fi.forEach(function(w){next.delete(ws.indexOf(w));});
+      else fi.forEach(function(w){next.add(ws.indexOf(w));});
+      n[ch.id]=next; return n;
+    });
+  }
+  function togW(chId,idx){
+    setSel(function(prev){var n=Object.assign({},prev);var cur=new Set(n[chId]||[]);if(cur.has(idx))cur.delete(idx);else cur.add(idx);n[chId]=cur;return n;});
+  }
+  function getWords(){
+    var w=[];
+    chapters.forEach(function(ch){var ws=safeWords(ch.words);var s=sel[ch.id]||new Set();s.forEach(function(i){if(ws[i]&&cwValid(ws[i]))w.push(Object.assign({},ws[i]));});});
+    return w;
+  }
+  function startPuzzle(){
+    var words=getWords().map(function(w){return Object.assign({},w,{word:w.word.replace(/[^A-Za-z]/g,'').toUpperCase()});});
+    if(words.length<4){alert('Mindestens 4 Vokabeln auswählen (mind. 3 englische Buchstaben je Wort).');return;}
+    var sol=SOLS[Math.floor(Math.random()*SOLS.length)];
+    var cw=buildCW(words,sol.phrase);
+    setPuzzle({cw:cw,sol:sol});
+  }
+  var total=Object.values(sel).reduce(function(s,set){return s+set.size;},0);
+  var validChaps=chapters.filter(function(c){return safeWords(c.words).some(cwValid);});
 
-  if(puzzle) {
+  if(puzzle){
     return (
       <div style={{padding:8}}>
-        <button onClick={function(){setPuzzle(null);setChapId(null);}} style={{marginBottom:10,background:'none',border:'none',color:T,cursor:'pointer',fontSize:13}}>← Kapitel wechseln</button>
-        <Puzzle data={puzzle.cw} solPhrase={puzzle.sol.phrase} solMsg={puzzle.sol.msg} chapId={puzzle.chapId}/>
+        <button onClick={function(){setPuzzle(null);}} style={{marginBottom:10,background:'none',border:'none',color:T,cursor:'pointer',fontSize:13,touchAction:'manipulation'}}>← Andere Vokabeln wählen</button>
+        <Puzzle data={puzzle.cw} solPhrase={puzzle.sol.phrase} solMsg={puzzle.sol.msg}/>
       </div>
     );
   }
 
   return (
     <div style={{padding:8}}>
-      <div style={{fontWeight:'bold',fontSize:15,marginBottom:4}}>Kapitel wählen</div>
-      <div style={{fontSize:12,color:G400,marginBottom:14}}>Wähle ein Kapitel für dein Kreuzworträtsel</div>
-      {chapters.filter(function(c){return safeWords(c.words).length>=4;}).map(function(c){
+      <div style={{display:'flex',gap:6,marginBottom:12,padding:'8px 12px',background:G50,borderRadius:10,alignItems:'center',flexWrap:'wrap'}}>
+        <span style={{fontSize:12,color:G600,fontWeight:'bold'}}>Anzeigen:</span>
+        {[['all','📚 Alle'],['important','⭐ Nur wichtige']].map(function(pair){
+          return <button key={pair[0]} onClick={function(){setFilter(pair[0]);}} style={{padding:'5px 12px',borderRadius:20,fontSize:12,fontWeight:'bold',background:filter===pair[0]?T:'white',color:filter===pair[0]?'white':G600,border:'1.5px solid '+(filter===pair[0]?T:G200),cursor:'pointer',touchAction:'manipulation'}}>{pair[1]}</button>;
+        })}
+      </div>
+      <div style={{marginBottom:12,padding:'10px 14px',background:TL,borderRadius:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span style={{fontSize:13,color:T,fontWeight:'bold'}}>{total} Vokabeln gewählt</span>
+        <button onClick={startPuzzle} disabled={total<4} style={BtnStyle(total>=4?T:G400,'#fff',{padding:'6px 14px',opacity:total<4?0.5:1,touchAction:'manipulation'})}>🔤 Rätsel starten</button>
+      </div>
+      {total<4&&<p style={{fontSize:11,color:G400,textAlign:'center',marginBottom:8}}>Mindestens 4 Vokabeln auswählen</p>}
+      {validChaps.map(function(c){
+        var ws=safeWords(c.words); var s=sel[c.id]||new Set(); var fi=getFiltered(c);
+        var allS=fi.length>0&&fi.every(function(w){return s.has(ws.indexOf(w));}); var someS=fi.some(function(w){return s.has(ws.indexOf(w));})&&!allS;
+        var open=openCh===c.id;
         return (
-          <button key={c.id} onClick={function(){startPuzzle(c);}} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
-            <span style={{fontSize:22,flexShrink:0}}>🔤</span>
-            <div><div style={{fontWeight:'bold',fontSize:13}}>{c.title}</div><div style={{fontSize:11,color:G400}}>{safeWords(c.words).length} Vokabeln</div></div>
-            <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
-          </button>
+          <div key={c.id} style={{marginBottom:8,border:'2px solid '+(s.size>0?c.color:G200),borderRadius:12,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:s.size>0?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){setOpenCh(open?null:c.id);}}>
+              <span style={{fontSize:20}}>{c.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:'bold',fontSize:13,color:c.color}}>{c.title}</div>
+                <div style={{fontSize:11,color:G400}}>{fi.length} wählbar · {s.size} gewählt</div>
+              </div>
+              <div onClick={function(e){e.stopPropagation();togAll(c);}} style={{width:22,height:22,borderRadius:6,border:'2px solid '+(allS?c.color:someS?c.color:G200),background:allS?c.color:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',touchAction:'manipulation'}}>
+                {allS&&<span style={{color:'white',fontSize:13}}>✓</span>}{someS&&<span style={{color:c.color,fontSize:13}}>–</span>}
+              </div>
+              <span style={{color:G400,fontSize:12}}>{open?'▲':'▼'}</span>
+            </div>
+            {open&&(<div style={{padding:'8px 14px 12px',background:'#fafafa',borderTop:'1px solid '+G200}}>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {fi.map(function(w){var ri=ws.indexOf(w);var isSel=s.has(ri);
+                  return (<div key={ri} onClick={function(){togW(c.id,ri);}} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 10px',borderRadius:20,border:'1.5px solid '+(isSel?c.color:G200),background:isSel?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}}>
+                    {w.important&&<span style={{fontSize:9}}>⭐</span>}
+                    <span style={{fontSize:12,fontWeight:w.important?'bold':'normal',color:isSel?c.color:G600}}>{w.word}</span>
+                    <span style={{fontSize:10,color:G400}}>= {w.clue}</span>
+                  </div>);
+                })}
+              </div>
+            </div>)}
+          </div>
         );
       })}
-      {chapters.filter(function(c){return safeWords(c.words).length>=4;}).length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit genug Vokabeln gefunden.</div>}
-      <button onClick={onDone} style={{marginTop:16,width:'100%',padding:'10px',borderRadius:10,border:'1px solid '+G200,background:'none',cursor:'pointer',fontSize:13,color:G400}}>Zurück</button>
+      {validChaps.length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit gültigen Vokabeln gefunden.</div>}
     </div>
   );
 }
@@ -3993,6 +4049,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🎯',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
+              {icon:'🔤',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
