@@ -2680,6 +2680,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [showApiKey, setShowApiKey] = useState(false);
   var [dupWords, setDupWords] = useState(null);
   var [dupLoading, setDupLoading] = useState(false);
+  var [showNewUser, setShowNewUser] = useState(false);
+  var [newUserName, setNewUserName] = useState('');
+  var [newUserPw, setNewUserPw] = useState('');
+  var [newUserErr, setNewUserErr] = useState('');
   var [showDup, setShowDup] = useState(false);
   var fileRef = useRef();
   var imgRef = useRef();
@@ -3014,6 +3018,24 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       </div>)}
 
       {tab==='users'&&(<div>
+        <button onClick={function(){setShowNewUser(!showNewUser);setNewUserErr('');setNewUserName('');setNewUserPw('');}} style={{width:'100%',padding:'9px',borderRadius:8,border:'2px dashed '+T,background:'white',color:T,fontWeight:'bold',fontSize:12,cursor:'pointer',marginBottom:10}}>+ Neuer Spieler</button>
+        {showNewUser&&(<div style={{padding:'12px',borderRadius:10,border:'1px solid '+G200,background:'#f0fdf4',marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:'bold',color:T,marginBottom:8}}>Neuen Spieler anlegen</div>
+          <input value={newUserName} onChange={function(e){setNewUserName(e.target.value);}} placeholder="Name" style={{width:'100%',padding:'8px 10px',fontSize:13,border:'1px solid '+G200,borderRadius:7,marginBottom:6,boxSizing:'border-box'}}/>
+          <input value={newUserPw} onChange={function(e){setNewUserPw(e.target.value);}} placeholder="Passwort" type="password" style={{width:'100%',padding:'8px 10px',fontSize:13,border:'1px solid '+G200,borderRadius:7,marginBottom:6,boxSizing:'border-box'}}/>
+          {newUserErr&&<div style={{fontSize:11,color:RE,marginBottom:6}}>{newUserErr}</div>}
+          <button onClick={function(){
+            if(!newUserName.trim()||!newUserPw.trim()){setNewUserErr('Name und Passwort eingeben');return;}
+            if(newUserPw.length<4){setNewUserErr('Passwort mind. 4 Zeichen');return;}
+            hashPw(newUserPw).then(function(hash){
+              sbPost('players',{name:newUserName.trim(),password_hash:hash,total_score:0,total_correct:0,total_wrong:0,is_admin:false,is_active:true}).then(function(res){
+                if(res&&res._err){setNewUserErr('Fehler: Name bereits vergeben?');return;}
+                setAllUsers(function(prev){return prev.concat([res||{name:newUserName.trim(),id:Date.now(),total_score:0,total_correct:0,total_wrong:0,is_active:true}]);});
+                setShowNewUser(false);setNewUserName('');setNewUserPw('');setMsg('Spieler angelegt!');setTimeout(function(){setMsg('');},3000);
+              }).catch(function(){setNewUserErr('Verbindungsfehler');});
+            });
+          }} style={{width:'100%',padding:'8px',borderRadius:7,border:'none',background:T,color:'white',fontWeight:'bold',fontSize:12,cursor:'pointer'}}>Anlegen</button>
+        </div>)}
         {(allUsers||[]).filter(function(u){return !u.is_admin;}).map(function(u){
           return <div key={u.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
