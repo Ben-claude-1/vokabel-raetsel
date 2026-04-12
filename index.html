@@ -3817,6 +3817,49 @@ function GrammarGame({ player, onDone }) {
   );
 }
 
+function CrosswordGame({ chapters, onDone }) {
+  var [chapId, setChapId] = useState(null);
+  var [puzzle, setPuzzle] = useState(null);
+  var ch = chapId ? chapters.find(function(c){ return c.id===chapId; }) : null;
+
+  function startPuzzle(chapter) {
+    var words = (chapter.words||[]).filter(function(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; });
+    words = words.map(function(w){ return Object.assign({},w,{word:w.word.replace(/[^A-Za-z]/g,'').toUpperCase()}); });
+    if(words.length < 4) { alert('Dieses Kapitel hat zu wenig Vokabeln für ein Kreuzworträtsel (mind. 4 benötigt).'); return; }
+    var sol = SOLS[Math.floor(Math.random()*SOLS.length)];
+    var cw = buildCW(words, sol.phrase);
+    setChapId(chapter.id);
+    setPuzzle({cw:cw, sol:sol, chapId:chapter.id});
+  }
+
+  if(puzzle) {
+    return (
+      <div style={{padding:8}}>
+        <button onClick={function(){setPuzzle(null);setChapId(null);}} style={{marginBottom:10,background:'none',border:'none',color:T,cursor:'pointer',fontSize:13}}>← Kapitel wechseln</button>
+        <Puzzle data={puzzle.cw} solPhrase={puzzle.sol.phrase} solMsg={puzzle.sol.msg} chapId={puzzle.chapId}/>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{padding:8}}>
+      <div style={{fontWeight:'bold',fontSize:15,marginBottom:4}}>Kapitel wählen</div>
+      <div style={{fontSize:12,color:G400,marginBottom:14}}>Wähle ein Kapitel für dein Kreuzworträtsel</div>
+      {chapters.filter(function(c){return (c.words||[]).length>=4;}).map(function(c){
+        return (
+          <button key={c.id} onClick={function(){startPuzzle(c);}} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
+            <span style={{fontSize:22,flexShrink:0}}>🔤</span>
+            <div><div style={{fontWeight:'bold',fontSize:13}}>{c.title}</div><div style={{fontSize:11,color:G400}}>{(c.words||[]).length} Vokabeln</div></div>
+            <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
+          </button>
+        );
+      })}
+      {chapters.filter(function(c){return (c.words||[]).length>=4;}).length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit genug Vokabeln gefunden.</div>}
+      <button onClick={onDone} style={{marginTop:16,width:'100%',padding:'10px',borderRadius:10,border:'1px solid '+G200,background:'none',cursor:'pointer',fontSize:13,color:G400}}>Zurück</button>
+    </div>
+  );
+}
+
 function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout }) {
   var isAdmin = !!(player && player.is_admin);
   var [screen, setScreen] = useState(isAdmin ? 'admin' : 'home');
@@ -3897,7 +3940,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} setQuizScoring={setQuizScoring} onDone={function(){go('games');}}/>;
 
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
-    if(screen==='crossword'&&screenData) return <div style={{padding:8}}><Puzzle data={screenData.cw} solPhrase={screenData.sol.phrase} solMsg={screenData.sol.msg} chapId={screenData.chapId}/></div>;
+    if(screen==='crossword') return <CrosswordGame chapters={childChapters} onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} allUsers={allUsers}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;

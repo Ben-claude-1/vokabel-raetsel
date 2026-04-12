@@ -1,18 +1,16 @@
 {
   "permissions": {
     "defaultMode": "bypassPermissions",
+    "skipDangerousModePermissionPrompt": true,
     "allow": [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "Agent",
-      "Skill",
-      "TodoWrite",
-      "WebFetch",
-      "WebSearch"
+      "Bash(*)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebFetch(*)",
+      "WebSearch(*)"
     ]
   }
 }
