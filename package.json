@@ -1,0 +1,30 @@
+{
+  "name": "lernapp",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:login": "playwright test tests/login.spec.js",
+    "test:admin": "playwright test tests/admin-tabs.spec.js",
+    "test:editor": "playwright test tests/run-editor.spec.js",
+    "test:report": "playwright show-report"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ben-claude-1/vokabel-raetsel.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ben-claude-1/vokabel-raetsel/issues"
+  },
+  "homepage": "https://github.com/Ben-claude-1/vokabel-raetsel#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "http-server": "^14.1.1"
+  }
+}
