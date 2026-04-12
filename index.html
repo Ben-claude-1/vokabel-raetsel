@@ -98,7 +98,7 @@ function hashPw(pw) { return Promise.resolve(simpleHash(pw)); }
 
 const BUILTIN = [
   { id: "ch_kapitel4", parent_id: null, title: "Kapitel 4", color: "#0369a1", icon: "📗", is_builtin: false, sentences: [], words: [] },
-  { id: "c1", parent_id: "ch_kapitel4", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
+  { id: "c1", parent_id: "ch_k4_legacy", title: "Geburtstag & Jahreszeiten", color: "#0f766e", icon: "🎂", is_builtin: true, sentences: [], words: [
     { word: "birthday", clue: "Geburtstag", important: true, topic: "c1" }, { word: "calendar", clue: "Kalender", important: true, topic: "c1" },
     { word: "sing", clue: "singen", important: false, topic: "c1" }, { word: "month", clue: "Monat", important: true, topic: "c1" },
     { word: "celebrate", clue: "feiern", important: true, topic: "c1" }, { word: "enjoy", clue: "genießen", important: true, topic: "c1" },
@@ -110,7 +110,7 @@ const BUILTIN = [
     { word: "third", clue: "dritte(r,s)", important: true, topic: "c1" }, { word: "dream", clue: "Traum", important: true, topic: "c1" },
     { word: "something", clue: "etwas", important: true, topic: "c1" }, { word: "ride", clue: "reiten, fahren", important: false, topic: "c1" },
   ]},
-  { id: "c2", parent_id: "ch_kapitel4", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
+  { id: "c2", parent_id: "ch_k4_legacy", title: "Party & Essen", color: "#7c3aed", icon: "🎉", is_builtin: true, sentences: [], words: [
     { word: "fireworks", clue: "Feuerwerk", important: true, topic: "c2" }, { word: "present", clue: "Geschenk", important: true, topic: "c2" },
     { word: "drink", clue: "Getränk", important: false, topic: "c2" }, { word: "ice", clue: "Eis", important: false, topic: "c2" },
     { word: "wonderful", clue: "wunderbar", important: true, topic: "c2" }, { word: "price", clue: "Preis", important: true, topic: "c2" },
@@ -128,7 +128,7 @@ const BUILTIN = [
     { word: "September", clue: "September", important: true, topic: "c3" }, { word: "October", clue: "Oktober", important: true, topic: "c3" },
     { word: "November", clue: "November", important: true, topic: "c3" }, { word: "December", clue: "Dezember", important: true, topic: "c3" },
   ]},
-  { id: "c4", parent_id: "ch_kapitel4", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
+  { id: "c4", parent_id: "ch_k4_legacy", title: "Kommunikation & Sport", color: "#0369a1", icon: "📱", is_builtin: true, sentences: [], words: [
     { word: "holiday", clue: "Urlaub, Ferien", important: true, topic: "c4" }, { word: "text", clue: "SMS senden", important: true, topic: "c4" },
     { word: "shop", clue: "einkaufen", important: true, topic: "c4" }, { word: "score", clue: "Tor schießen", important: true, topic: "c4" },
     { word: "goal", clue: "Ziel, Tor", important: true, topic: "c4" }, { word: "collect", clue: "(ein)sammeln", important: true, topic: "c4" },
@@ -137,14 +137,14 @@ const BUILTIN = [
     { word: "plan", clue: "planen", important: true, topic: "c4" }, { word: "field", clue: "Spielfeld", important: false, topic: "c4" },
     { word: "fun", clue: "Spaß", important: false, topic: "c4" }, { word: "gym", clue: "Turnhalle", important: false, topic: "c4" },
   ]},
-  { id: "c5", parent_id: "ch_kapitel4", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
+  { id: "c5", parent_id: "ch_k4_legacy", title: "Einkaufen", color: "#be185d", icon: "🛍️", is_builtin: true, sentences: [], words: [
     { word: "cheap", clue: "billig, preiswert", important: true, topic: "c5" }, { word: "expensive", clue: "teuer", important: true, topic: "c5" },
     { word: "customer", clue: "Kunde/Kundin", important: true, topic: "c5" }, { word: "any", clue: "(irgend)ein(e)", important: true, topic: "c5" },
     { word: "somebody", clue: "(irgend)jemand", important: true, topic: "c5" }, { word: "just", clue: "nur, gerade", important: true, topic: "c5" },
     { word: "home", clue: "zu Hause", important: true, topic: "c5" }, { word: "have", clue: "haben, trinken", important: true, topic: "c5" },
     { word: "put", clue: "setzen, legen", important: false, topic: "c5" }, { word: "everything", clue: "alles", important: false, topic: "c5" },
   ]},
-  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: "ch_kapitel4", sentences: [], words: [] },
+  { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: "ch_k4_legacy", sentences: [], words: [] },
 ];
 
 var T = "#0f766e", TL = "#ccfbf1", TD = "#134e4a", AM = "#f59e0b", RE = "#ef4444", GR = "#22c55e";
@@ -1576,11 +1576,18 @@ function T2LetterField({ word, onCorrect, onWrong }) {
   function reset(){ setTiles(shuffleArr(initLetters)); setAnswer([]); setChecked(false); setCorrect(false); }
   var displayWord = word;
   var answerDisplay = (function(){
-    if(!checked) return answer.map(function(t){return t.l;});
     var res=[]; var ai=0;
     for(var ci=0;ci<displayWord.length;ci++){
       if(displayWord[ci]===' '){ res.push({l:' ',isSpace:true}); }
       else { res.push({l:answer[ai]?answer[ai].l:'',isSpace:false}); ai++; }
+    }
+    return res;
+  })();
+  var slotsDisplay = (function(){
+    var res=[]; var ai=0;
+    for(var ci=0;ci<word.length;ci++){
+      if(word[ci]===' '){ res.push({isSpace:true}); }
+      else { res.push({isSpace:false,idx:ai}); ai++; }
     }
     return res;
   })();
@@ -1594,8 +1601,9 @@ function T2LetterField({ word, onCorrect, onWrong }) {
               if(item.isSpace) return <span key={'sp'+i} style={{width:12}}/>;
               return <div key={i} style={{width:32,height:36,borderRadius:8,background:tileBg,border:'2px solid '+(correct?GR:RE),display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:16,color:tileCol}}>{item.l}</div>;
             })
-          : Array.from({length:wordNoSpaces.length}).map(function(_,i){
-            var filled = answer[i];
+          : slotsDisplay.map(function(item,i){
+            if(item.isSpace) return <span key={'sp'+i} style={{width:12,display:'inline-block'}}/>;
+            var filled = answer[item.idx];
             return <div key={i} onClick={filled?function(){removeLast()}:undefined}
               style={{width:32,height:36,borderRadius:8,background:filled?'white':G50,
                 border:'2px solid '+(filled?T:G200),display:'flex',alignItems:'center',
@@ -2289,6 +2297,9 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   function setPot(wordStr, pot){
     setWords(function(prev){ return prev.map(function(w){ return normWordKey(w.word)===normWordKey(wordStr)?Object.assign({},w,{pot:pot}):w; }); });
   }
+  function getRunPot(wordStr){ var found=words.find(function(w){return normWordKey(w.word)===normWordKey(wordStr);}); return found?found.pot:1; }
+  function removeWord(wordStr){ setWords(function(prev){return prev.filter(function(w){return normWordKey(w.word)!==normWordKey(wordStr);});}); }
+  function addWord(wObj){ setWords(function(prev){return prev.concat([{word:wObj.word,clue:wObj.clue,pot:1}]);}); }
   function save(){
     setSaving(true);
     var wordsJson = JSON.stringify(words);
