@@ -3096,7 +3096,7 @@ function Stats({ player, chapters }) {
   );
 }
 
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin, onRegister }) {
   var [name, setName] = useState('');
   var [pw, setPw] = useState('');
   var [err, setErr] = useState('');
@@ -3142,6 +3142,10 @@ function LoginScreen({ onLogin }) {
         <button onClick={doLogin} disabled={loading} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:15})}>
           {loading?'…':'→ Anmelden'}
         </button>
+        {onRegister&&<div style={{textAlign:'center',marginTop:16}}>
+          <span style={{fontSize:13,color:G400}}>Noch kein Konto? </span>
+          <button onClick={onRegister} style={{border:'none',background:'none',color:T,fontSize:13,fontWeight:'bold',cursor:'pointer',padding:0}}>Registrieren</button>
+        </div>}
       </div>
     </div>
   );
@@ -3754,7 +3758,7 @@ function App() {
   }
 
   if(!player&&showRegister) return <RegisterScreen onRegister={function(u){handleLogin(u);setShowRegister(false);}} onBack={function(){setShowRegister(false);}}/>;
-  if(!player) return <LoginScreen onLogin={handleLogin}/>;
+  if(!player) return <LoginScreen onLogin={handleLogin} onRegister={function(){setShowRegister(true);}}/>;
   if(loading) return(
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)'}}>
       <div style={{textAlign:'center',color:'white'}}><div style={{fontSize:48,marginBottom:16}}>🎓</div><div style={{fontSize:16}}>Lade Daten…</div></div>
