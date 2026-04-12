@@ -260,6 +260,12 @@ function getWordType(w) {
   if(months.indexOf(word)>=0) return 'month';
   return 'noun';
 }
+function wordDisplay(w) {
+  if(!w) return '';
+  var word = w.word||'';
+  if(getWordType(w)==='verb' && !word.toLowerCase().startsWith('to ')) return 'to '+word;
+  return word;
+}
 function makeQuizRound(allWords, usedWords) {
   var pool = allWords.filter(function(w){ return !usedWords.has(w.word); });
   if (pool.length < 3) pool = allWords;
@@ -1702,7 +1708,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(w.pot===1){
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
-      var others=shuffleArr(allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word);})).slice(0,3);
+      var wType=getWordType(w);
+      var sameType=allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word)&&getWordType(ww)===wType;});
+      var quizPool=sameType.length>=3?sameType:allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word);});
+      var others=shuffleArr(quizPool).slice(0,3);
       setQuizOptions(shuffleArr([{word:w.word,clue:w.clue}].concat(others.map(function(d){return {word:d.word,clue:d.clue};}))));
       setQuizChosen(null); setPhase('quiz');
     } else if(w.pot===2){
@@ -1765,7 +1774,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var typed = input.trim();
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
-    var correctAnswer = isPot5 ? current.clue : current.word;
+    var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
     var newData = JSON.parse(JSON.stringify(data));
@@ -1883,7 +1892,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
           <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
         </div>
-        {current&&<T2LetterField word={current.word} onCorrect={function(){
+        {current&&<T2LetterField word={wordDisplay(current)} onCorrect={function(){
           var newData=JSON.parse(JSON.stringify(data));
           var potArr=(newData.pots[2]||[]);
           var wIdx=potArr.findIndex(function(w){return normWordKey(w.word)===normWordKey(current.word);});
@@ -1925,7 +1934,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   if(phase==='dashes'){
-    var dashWord = (current?current.word:'').replace(/ /g,'');
+    var dashWord = wordDisplay(current).replace(/ /g,'');
     return(
       <div style={{padding:8}}>
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
@@ -2919,21 +2928,32 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                       return <div key={wi} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:11}}>
                         <span style={{fontSize:9}}>{w.important?'⭐':''}</span>
                         <span style={{fontWeight:'bold',flex:1}}>{w.word}</span>
-                        <span style={{color:G400}}>{w.clue}</span>
+                        <span style={{color:G400,fontSize:10,marginRight:2}}>{w.clue}</span>
+                        {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:3,background:G100,color:G600,flexShrink:0}}>{w.type}</span>}
                         <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4}}>✏</button>
                         <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4}}>✕</button>
                       </div>;
                     })}
                     {editWord&&editWord.chId===ch.id&&(<div style={{padding:8,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:6}}>
                       <div style={{display:'flex',gap:5,marginBottom:5}}>
-                        <input value={editWord.w.word||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}} style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5}} placeholder="EN"/>
+                        <input value={editWord.w.word||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}} style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5}} placeholder="EN (z.B. to play)"/>
                         <input value={editWord.w.clue||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{clue:e.target.value})});});}} style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5}} placeholder="DE"/>
                         <div onClick={function(){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{important:!ew.w.important})});});}} style={{width:28,height:28,borderRadius:6,border:'2px solid '+(editWord.w.important?AM:G200),background:editWord.w.important?AM:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
                           <span style={{fontSize:12}}>{editWord.w.important?'⭐':'☆'}</span>
                         </div>
                       </div>
+                      <div style={{marginBottom:5}}>
+                        <select value={editWord.w.type||'noun'} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{type:e.target.value})});});}}
+                          style={{width:'100%',padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5,background:'white'}}>
+                          <option value="verb">Verb (to ...)</option>
+                          <option value="noun">Substantiv</option>
+                          <option value="adjective">Adjektiv</option>
+                          <option value="phrase">Phrase / Wendung</option>
+                          <option value="other">Sonstiges</option>
+                        </select>
+                      </div>
                       <div style={{display:'flex',gap:5}}>
-                        <button onClick={function(){doSaveWord(editWord.chId,editWord.w,editWord.idx);}} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>✓</button>
+                        <button onClick={function(){doSaveWord(editWord.chId,editWord.w,editWord.idx);}} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:10})}>✓ Speichern</button>
                         <button onClick={function(){setEditWord(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>✕</button>
                       </div>
                     </div>)}
