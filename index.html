@@ -275,7 +275,7 @@ function makeQuizRound(allWords, usedWords) {
 }
 function makeAllRounds(chapters) {
   var allWords = [];
-  chapters.forEach(function(ch){ ch.words.forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
+  chapters.forEach(function(ch){ safeWords(ch.words).forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
   if (allWords.length < 4) return [];
   var rounds = [], used = new Set();
   for (var i = 0; i < 6; i++) {
@@ -521,7 +521,7 @@ function WorkoutSetup({ chapters, player, onStart }) {
   var allWords = useMemo(function(){
     var w=[];
     chapters.forEach(function(ch){
-      (onlyImportant?ch.words.filter(function(x){return x.important;}):ch.words)
+      (onlyImportant?safeWords(ch.words).filter(function(x){return x.important;}):ch.words)
         .forEach(function(ww){ w.push(Object.assign({},ww,{chapterId:ch.id,chapTitle:ch.title})); });
     });
     return w;
@@ -707,7 +707,7 @@ function ProgressStats({ chapters, player, allCategories }) {
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Daten…</div>;
   function toggle(id){setExpanded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
   var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
-  var allWords=[]; chapters.forEach(function(ch){ch.words.forEach(function(w){allWords.push(w);});});
+  var allWords=[]; chapters.forEach(function(ch){safeWords(ch.words).forEach(function(w){allWords.push(w);});});
   var totalWords=allWords.length;
   var totalLearned=allWords.filter(function(w){return !!learnedSet[w.word];}).length;
   var overallPct=totalWords>0?Math.round(totalLearned/totalWords*100):0;
@@ -747,7 +747,7 @@ function ProgressStats({ chapters, player, allCategories }) {
         <div>
           {topLevel.map(function(kap){
             var children=chapters.filter(function(c){return c.parent_id===kap.id;});
-            var kapWords=[]; children.forEach(function(ch){ch.words.forEach(function(w){kapWords.push(w);});});
+            var kapWords=[]; children.forEach(function(ch){safeWords(ch.words).forEach(function(w){kapWords.push(w);});});
             var kapTotal=kapWords.length;
             var kapLearned=kapWords.filter(function(w){return !!learnedSet[w.word];}).length;
             var kapPct=kapTotal>0?Math.round(kapLearned/kapTotal*100):0;
@@ -762,8 +762,8 @@ function ProgressStats({ chapters, player, allCategories }) {
                 </div>
                 <div style={{height:5,background:G100}}><div style={{height:'100%',width:kapPct+'%',background:pctColor(kapPct),transition:'width 0.5s'}}/></div>
                 {kapOpen&&children.map(function(ch){
-                  var chTotal=ch.words.length;
-                  var chLearned=ch.words.filter(function(w){return !!learnedSet[w.word];}).length;
+                  var chTotal=safeWords(ch.words).length;
+                  var chLearned=safeWords(ch.words).filter(function(w){return !!learnedSet[w.word];}).length;
                   var chPct=chTotal>0?Math.round(chLearned/chTotal*100):0;
                   var chOpen=expanded[ch.id];
                   return(
@@ -777,7 +777,7 @@ function ProgressStats({ chapters, player, allCategories }) {
                       </div>
                       {chOpen&&(
                         <div style={{padding:'4px 8px 8px 24px',background:'#fafafa'}}>
-                          {ch.words.map(function(w,i){
+                          {safeWords(ch.words).map(function(w,i){
                             var pot=potMap[w.word]||0;
                             return(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 6px',borderBottom:'1px solid '+G100,borderRadius:6}}>
@@ -1449,7 +1449,7 @@ function WordSelector({ chapters, onStart, mode }) {
   var [sel, setSel] = useState({});
   var [filter, setFilter] = useState("all");
   var total = Object.values(sel).reduce(function(s,set){ return s+set.size; }, 0);
-  function getFiltered(ch){ return filter==="important" ? ch.words.filter(function(w){return w.important;}) : ch.words; }
+  function getFiltered(ch){ return filter==="important" ? safeWords(ch.words).filter(function(w){return w.important;}) : ch.words; }
   function togAll(ch){ setSel(function(prev){ var n=Object.assign({},prev); var fi=getFiltered(ch); var cur=n[ch.id]||new Set(); var allS=fi.every(function(w){return cur.has(ch.words.indexOf(w));}); var next=new Set(cur); if(allS) fi.forEach(function(w){next.delete(ch.words.indexOf(w));}); else fi.forEach(function(w){next.add(ch.words.indexOf(w));}); n[ch.id]=next; return n; }); }
   function togW(chId,idx){ setSel(function(prev){ var n=Object.assign({},prev); var cur=new Set(n[chId]||[]); if(cur.has(idx)) cur.delete(idx); else cur.add(idx); n[chId]=cur; return n; }); }
   function getWords(){ var w=[]; chapters.forEach(function(ch){ var s=sel[ch.id]||new Set(); s.forEach(function(i){ if(ch.words[i]) w.push(Object.assign({},ch.words[i],{chapterId:ch.id})); }); }); return w; }
@@ -1468,7 +1468,7 @@ function WordSelector({ chapters, onStart, mode }) {
         return (<div key={ch.id} style={{marginBottom:8,border:"2px solid "+(s.size>0?ch.color:G200),borderRadius:12,overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:s.size>0?(ch.color+"15"):"white",cursor:"pointer"}} onClick={function(){setOpenCh(open?null:ch.id);}}>
             <span style={{fontSize:20}}>{ch.icon}</span>
-            <div style={{flex:1}}><div style={{fontWeight:"bold",fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{ch.words.length} gesamt · {ch.words.filter(function(w){return w.important;}).length} ⭐ · {s.size} gewählt</div></div>
+            <div style={{flex:1}}><div style={{fontWeight:"bold",fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{safeWords(ch.words).length} gesamt · {safeWords(ch.words).filter(function(w){return w.important;}).length} ⭐ · {s.size} gewählt</div></div>
             <div onClick={function(e){e.stopPropagation();togAll(ch);}} style={{width:22,height:22,borderRadius:6,border:"2px solid "+(allS?ch.color:someS?ch.color:G200),background:allS?ch.color:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}>
               {allS&&<span style={{color:"white",fontSize:13}}>✓</span>}{someS&&<span style={{color:ch.color,fontSize:13}}>–</span>}
             </div>
@@ -1497,7 +1497,7 @@ function BrowseChapter({ ch }) {
     <div style={{marginBottom:8,border:'2px solid '+ch.color+'30',borderRadius:12,overflow:'hidden'}}>
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:ch.color+'10',cursor:'pointer'}} onClick={function(){setOpen(function(o){return !o;});}}>
         <span style={{fontSize:20}}>{ch.icon}</span>
-        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{ch.words.length} Vokabeln · {ch.words.filter(function(w){return w.important;}).length} ⭐{sentCount?' · '+sentCount+' Sätze':''}</div></div>
+        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:ch.color}}>{ch.title}</div><div style={{fontSize:11,color:G400}}>{safeWords(ch.words).length} Vokabeln · {safeWords(ch.words).filter(function(w){return w.important;}).length} ⭐{sentCount?' · '+sentCount+' Sätze':''}</div></div>
         <span style={{color:G400,fontSize:12}}>{open?'▲':'▼'}</span>
       </div>
       {open&&(<div style={{padding:'10px 14px',background:'#fafafa',borderTop:'1px solid '+G200}}>
@@ -2098,9 +2098,9 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   function selectImportant(){ setSelectedWords(allWords.filter(function(w){return w.important;}).map(function(w){return{word:w.word,clue:w.clue,pot:1};})); }
   function toggleChapter(ch){
     var chWords=Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]);
-    var allSel=chWords.every(function(w){return isSelected(w);});
-    if(allSel){ setSelectedWords(function(prev){return prev.filter(function(sw){return !chWords.some(function(cw){return normWordKey(cw.word)===normWordKey(sw.word);});}); }); }
-    else { var toAdd=chWords.filter(function(w){return !isSelected(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
+    var allSel=safeWords(ch.words).every(function(w){return isSelected(w);});
+    if(allSel){ setSelectedWords(function(prev){return prev.filter(function(sw){return !safeWords(ch.words).some(function(cw){return normWordKey(cw.word)===normWordKey(sw.word);});}); }); }
+    else { var toAdd=safeWords(ch.words).filter(function(w){return !isSelected(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
   }
   function save(){
     if(!name.trim()||selectedWords.length<2){setMsg('Name und mind. 2 Wörter erforderlich');return;}
@@ -2135,8 +2135,8 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
           <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
           {children.map(function(ch){
-            var chSel=ch.words.every(function(w){return isSelected(w);});
-            var chSome=!chSel&&ch.words.some(function(w){return isSelected(w);});
+            var chSel=safeWords(ch.words).every(function(w){return isSelected(w);});
+            var chSome=!chSel&&safeWords(ch.words).some(function(w){return isSelected(w);});
             var open=openCh===ch.id;
             return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
@@ -2145,11 +2145,11 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
                   {chSome&&<span style={{color:ch.color,fontSize:12}}>−</span>}
                 </div>
                 <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{ch.words.filter(function(w){return isSelected(w);}).length}/{ch.words.length}</span>
+                <span style={{fontSize:10,color:G400}}>{safeWords(ch.words).filter(function(w){return isSelected(w);}).length}/{safeWords(ch.words).length}</span>
                 <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
               </div>
               {open&&<div style={{padding:'4px 12px 8px 32px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {ch.words.map(function(w,i){
+                {safeWords(ch.words).map(function(w,i){
                   var sel=isSelected(w);
                   return <div key={i} onClick={function(){toggleWord(w);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:20,border:'1.5px solid '+(sel?ch.color:G200),background:sel?ch.color+'18':'white',cursor:'pointer',touchAction:'manipulation'}}>
                     {w.important&&<span style={{fontSize:9}}>⭐</span>}
@@ -2671,7 +2671,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     if(!confirm('Wort löschen?')) return;
     var ch = chapters.find(function(c){return c.id===chapterId;});
     if(!ch) return;
-    var newWords = ch.words.filter(function(_,i){return i!==wordIdx;});
+    var newWords = safeWords(ch.words).filter(function(_,i){return i!==wordIdx;});
     saveChapterWords(ch, newWords, chapters, setChapters, setSaving, setMsg);
   }
 
@@ -2738,7 +2738,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     toRemove.forEach(function(entry){
       var ch=chapters.find(function(c){return c.id===entry.chapId;});
       if(!ch) return;
-      var newWords=ch.words.filter(function(w){return normWordKey(w.word)!==normWordKey(entry.word);});
+      var newWords=safeWords(ch.words).filter(function(w){return normWordKey(w.word)!==normWordKey(entry.word);});
       saveChapterWords(ch,newWords,chapters,setChapters,setSaving,setMsg);
     });
     setDupWords(function(prev){return prev?prev.filter(function(v){return normWordKey(v[0].word)!==key;}):prev;});
