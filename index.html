@@ -3856,13 +3856,17 @@ function GrammarGame({ player, setPlayer, onDone }) {
     setResult(newRes);
     if(!correct){
       setAiLoading(true);
-      fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,messages:[{role:'user',content:'Erkläre kurz auf Deutsch, warum "'+q.answer+'" die richtige Antwort ist für: "'+q.sentence+'". Schülerin, 6. Klasse. Max 2 Sätze.'}]})
-      }).then(function(r){return r.json();}).then(function(data){
-        var txt=data.content&&data.content[0]&&data.content[0].text||'';
-        setAiExplain(txt); setAiLoading(false);
+      sbGet('settings','key=eq.anthropic_key').then(function(kd){
+        var apiKey=(kd&&kd[0]&&kd[0].value)||localStorage.getItem('claude_api_key')||'';
+        if(!apiKey){ setAiLoading(false); return; }
+        fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({model:'claude-haiku-4-20250514',max_tokens:200,messages:[{role:'user',content:'Erkläre kurz auf Deutsch, warum "'+q.answer+'" die richtige Antwort ist für: "'+q.sentence+'". Schülerin, 6. Klasse. Max 2 Sätze.'}]})
+        }).then(function(r){return r.json();}).then(function(data){
+          var txt=data.content&&data.content[0]&&data.content[0].text||'';
+          setAiExplain(txt); setAiLoading(false);
+        }).catch(function(){setAiLoading(false);});
       }).catch(function(){setAiLoading(false);});
     } else { setAiExplain(''); }
   }
@@ -3928,11 +3932,12 @@ function GrammarGame({ player, setPlayer, onDone }) {
         {results.map(function(r,i){
           return <div key={i} style={{padding:'6px 8px',marginBottom:3,borderRadius:7,background:r.correct?'#d1fae5':'#fee2e2',fontSize:11}}>
             <div style={{fontWeight:'bold',color:G900}}>{r.q.sentence}</div>
-            <div style={{color:r.correct?T:RE}}>Antwort: {r.q.answer}{!r.correct&&<span style={{color:G400}}> (du: {r.input})</span>}</div>
+            <div style={{color:r.correct?T:RE}}>Antwort: <strong>{r.q.answer}</strong>{!r.correct&&<span style={{color:G400}}> (du: {r.input})</span>}</div>
           </div>;
         })}
-        <div style={{display:'flex',gap:6,marginTop:10}}>
-        {checked&&correct&&<div style={{color:GR,fontWeight:'bold',fontSize:13,padding:'6px'}}>✓ Richtig!</div>}{checked&&!correct&&<div style={{color:RE,fontWeight:'bold',fontSize:13,padding:'6px'}}>✗ Falsch</div>}
+        <div style={{display:'flex',gap:6,marginTop:12}}>
+          <button onClick={function(){setPhase('menu');setTopic(null);setResults([]);setQIdx(0);}} style={BtnStyle(G100,G600,{flex:1,padding:'11px',fontSize:13})}>← Menü</button>
+          <button onClick={function(){startTopic(topic);}} style={BtnStyle(T,'white',{flex:1,padding:'11px',fontSize:13})}>🔄 Nochmal</button>
         </div>
       </div>
     );
@@ -4082,6 +4087,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [lsStreak, setLsStreak] = useState(null);
   var [onlineIds, setOnlineIds] = useState([]);
   var [quizScoring, setQuizScoring] = useState({correct:10,win:50,loss:-50,draw:30});
+  var allUsersRef = useRef(allUsers);
+  allUsersRef.current = allUsers;
 
   useEffect(function(){
     if(!player) return;
@@ -4103,7 +4110,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       }).catch(function(){});
     }
     function loadPresence(){
-      sbGet('settings','key=like.presence_%25&select=key,value').then(function(d){
+      var uids = (allUsersRef.current||[]).map(function(u){return 'presence_'+u.id;});
+      if(!uids.length) return;
+      sbGet('settings','key=in.('+uids.join(',')+'&select=key,value').then(function(d){
         if(!Array.isArray(d)) return;
         var cutoff = Date.now()-90000;
         var ids = [];
