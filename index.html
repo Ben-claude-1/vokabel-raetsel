@@ -990,21 +990,41 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
       setHistLoaded(true);
     }).catch(function(){setHistLoaded(true);});
   }
-  var [selectedChapIds, setSelectedChapIds] = useState([]);
+  var [sel, setSel] = useState({});
+  var [cwFilter, setCwFilter] = useState('all');
+  var [openCh, setOpenCh] = useState(null);
   var [pendingGames, setPendingGames] = useState([]);
   var [myGames, setMyGames] = useState([]);
   var [lbLoaded, setLbLoaded] = useState(false);
   var [lbData, setLbData] = useState([]);
   var [joinGameId, setJoinGameId] = useState(null);
 
-  var topChapters = (allChapters||chapters).filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
   var leafChapters = (allChapters||chapters).filter(function(c){return c.parent_id;});
-  var filteredLeaf = selectedChapIds.length>0
-    ? leafChapters.filter(function(c){return selectedChapIds.indexOf(c.parent_id)>=0||selectedChapIds.indexOf(c.id)>=0;})
-    : leafChapters;
-  var chaptersForGame = filteredLeaf.length>=1 ? filteredLeaf : leafChapters;
+  var selTotal = Object.values(sel).reduce(function(s,set){return s+set.size;},0);
+  var chaptersForGame = selTotal===0 ? leafChapters :
+    leafChapters.map(function(ch){
+      var ws=safeWords(ch.words); var s=sel[ch.id]||new Set();
+      var filtered=[]; s.forEach(function(i){if(ws[i])filtered.push(ws[i]);});
+      return Object.assign({},ch,{words:filtered});
+    }).filter(function(ch){return ch.words.length>0;});
   var globalWords = [];
-  leafChapters.forEach(function(ch){ (ch.words||[]).forEach(function(w){ globalWords.push(Object.assign({},w,{chapId:ch.id})); }); });
+  leafChapters.forEach(function(ch){ safeWords(ch.words).forEach(function(w){ globalWords.push(Object.assign({},w,{chapId:ch.id})); }); });
+
+  function qTogAll(ch){
+    var ws=safeWords(ch.words);
+    var fi=ws.filter(function(w){return cwFilter==='all'||w.important;});
+    setSel(function(prev){
+      var n=Object.assign({},prev); var cur=n[ch.id]||new Set();
+      var allS=fi.every(function(w){return cur.has(ws.indexOf(w));});
+      var next=new Set(cur);
+      if(allS) fi.forEach(function(w){next.delete(ws.indexOf(w));});
+      else fi.forEach(function(w){next.add(ws.indexOf(w));});
+      n[ch.id]=next; return n;
+    });
+  }
+  function qTogW(chId,idx){
+    setSel(function(prev){var n=Object.assign({},prev);var cur=new Set(n[chId]||[]);if(cur.has(idx))cur.delete(idx);else cur.add(idx);n[chId]=cur;return n;});
+  }
 
   function loadContinue(){
     setPendingGames([]); setMyGames([]);
@@ -1030,27 +1050,51 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
     }).catch(function(){setLbLoaded(true);});
   }
 
-  function ChapPicker(){
-    return <div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200}}>
-      <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedChapIds.length===0?'Alle':selectedChapIds.length+' ausgewählt'})</span></div>
-      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-        <button onClick={function(){setSelectedChapIds([]);}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(selectedChapIds.length===0?T:G200),background:selectedChapIds.length===0?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:selectedChapIds.length===0?T:G600}}>Alle</button>
-        {topChapters.map(function(kap){ var sel=selectedChapIds.indexOf(kap.id)>=0;
-          return <button key={kap.id} onClick={function(){setSelectedChapIds(function(prev){return sel?prev.filter(function(id){return id!==kap.id;}):prev.concat([kap.id]);});}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(sel?kap.color||T:G200),background:sel?(kap.color||T)+'18':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:sel?kap.color||T:G600}}>{kap.icon} {kap.title}</button>;
-        })}
-      </div>
-    </div>;
-  }
-
-  if(view==='playing_duel') return <QuizDuel chapters={chaptersForGame} allChapters={leafChapters} globalWords={globalWords} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} initialGameId={joinGameId} onDone={function(){setJoinGameId(null);setView('menu');}}/>;
+  if(view==='playing_duel') return <QuizDuel chapters={chaptersForGame} allChapters={leafChapters} globalWords={globalWords} player={player} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} initialGameId={joinGameId} onDone={function(){setJoinGameId(null);setView('menu');}}/>;
   if(view==='playing_solo') return <QuizSolo chapters={chaptersForGame} globalWords={globalWords} onDone={function(){setView('menu');}}/>;
 
   if(view==='new') return <div style={{padding:8}}>
-    <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
-    <ChapPicker/>
-    <div style={{fontSize:12,color:G600,marginBottom:8}}>{chaptersForGame.length} Kapitel gewaehlt - {chaptersForGame.reduce(function(s,c){return s+(c.words||[]).length;},0)} Vokabeln</div>
-    <button onClick={function(){setView('playing_duel');}} style={Object.assign({},BtnStyle(T,'white'),{width:'100%',padding:'13px',fontSize:14,marginBottom:8})}>Gegen Spieler: Duell starten</button>
-    <button onClick={function(){setView('playing_solo');}} style={Object.assign({},BtnStyle(G100,G600),{width:'100%',padding:'13px',fontSize:14})}>Alleine spielen (Solo)</button>
+    <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>← Zurück</button>
+    <div style={{display:'flex',gap:6,marginBottom:10,padding:'8px 10px',background:G50,borderRadius:10,alignItems:'center',flexWrap:'wrap'}}>
+      <span style={{fontSize:12,color:G600,fontWeight:'bold'}}>Anzeigen:</span>
+      {[['all','📚 Alle'],['important','⭐ Nur wichtige']].map(function(pair){
+        return <button key={pair[0]} onClick={function(){setCwFilter(pair[0]);}} style={{padding:'4px 10px',borderRadius:16,fontSize:11,fontWeight:'bold',background:cwFilter===pair[0]?T:'white',color:cwFilter===pair[0]?'white':G600,border:'1.5px solid '+(cwFilter===pair[0]?T:G200),cursor:'pointer',touchAction:'manipulation'}}>{pair[1]}</button>;
+      })}
+      <span style={{marginLeft:'auto',fontSize:11,color:T,fontWeight:'bold'}}>{selTotal===0?'Alle':selTotal+' gewählt'}</span>
+    </div>
+    {leafChapters.map(function(c){
+      var ws=safeWords(c.words); var s=sel[c.id]||new Set();
+      var fi=ws.filter(function(w){return cwFilter==='all'||w.important;});
+      var allS=fi.length>0&&fi.every(function(w){return s.has(ws.indexOf(w));}); var someS=fi.some(function(w){return s.has(ws.indexOf(w));})&&!allS;
+      var open2=openCh===c.id;
+      return <div key={c.id} style={{marginBottom:7,border:'2px solid '+(s.size>0?c.color:G200),borderRadius:11,overflow:'hidden'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:s.size>0?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){setOpenCh(open2?null:c.id);}}>
+          <span style={{fontSize:18}}>{c.icon}</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:'bold',fontSize:12,color:c.color}}>{c.title}</div>
+            <div style={{fontSize:10,color:G400}}>{fi.length} wählbar · {s.size} gewählt</div>
+          </div>
+          <div onClick={function(e){e.stopPropagation();qTogAll(c);}} style={{width:20,height:20,borderRadius:5,border:'2px solid '+(allS?c.color:someS?c.color:G200),background:allS?c.color:'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer',touchAction:'manipulation'}}>
+            {allS&&<span style={{color:'white',fontSize:11}}>✓</span>}{someS&&<span style={{color:c.color,fontSize:11}}>–</span>}
+          </div>
+          <span style={{color:G400,fontSize:10}}>{open2?'▲':'▼'}</span>
+        </div>
+        {open2&&<div style={{padding:'6px 12px 10px',background:'#fafafa',borderTop:'1px solid '+G200}}>
+          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+            {fi.map(function(w){var ri=ws.indexOf(w);var isSel=s.has(ri);
+              return <div key={ri} onClick={function(){qTogW(c.id,ri);}} style={{display:'flex',alignItems:'center',gap:3,padding:'4px 8px',borderRadius:16,border:'1.5px solid '+(isSel?c.color:G200),background:isSel?(c.color+'15'):'white',cursor:'pointer',touchAction:'manipulation'}}>
+                {w.important&&<span style={{fontSize:8}}>⭐</span>}
+                <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:isSel?c.color:G600}}>{w.word}</span>
+              </div>;
+            })}
+          </div>
+        </div>}
+      </div>;
+    })}
+    <div style={{position:'sticky',bottom:0,background:'white',paddingTop:8,paddingBottom:4,borderTop:'1px solid '+G200,marginTop:8}}>
+      <button onClick={function(){setView('playing_duel');}} style={Object.assign({},BtnStyle(T,'white'),{width:'100%',padding:'12px',fontSize:13,marginBottom:6})}>⚔️ Duell starten ({selTotal===0?'alle Vokabeln':selTotal+' gewählt'})</button>
+      <button onClick={function(){setView('playing_solo');}} style={Object.assign({},BtnStyle(G100,G600),{width:'100%',padding:'12px',fontSize:13})}>🎯 Solo spielen</button>
+    </div>
   </div>;
 
   if(view==='continue') return <div style={{padding:8}}>
@@ -1122,17 +1166,26 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
   </div>;
 
   if(view==='leaderboard') {
-    var lbPlayers=(allUsers||[]).filter(function(u){return !u.is_admin;}).slice().sort(function(a,b){return (b.total_score||0)-(a.total_score||0);});
+    var lbArr=lbData.slice().sort(function(a,b){return b.wins-a.wins||(b.games-a.games);});
     return <div style={{padding:8}}>
-      <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
-      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Gesamt-Rangliste</div>
-      {lbPlayers.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Keine Daten vorhanden.</div>}
-      {lbPlayers.map(function(u,i){
+      <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>← Zurück</button>
+      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:4}}>⚔️ Quiz-Duell Rangliste</div>
+      <div style={{fontSize:11,color:G400,marginBottom:10}}>Nur Duell-Ergebnisse — für Gesamtpunkte → Home → 🏆 Gesamtrangliste</div>
+      {!lbLoaded&&<div style={{textAlign:'center',color:G400,padding:24}}>Laden...</div>}
+      {lbLoaded&&lbArr.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Noch keine Duelle gespielt.</div>}
+      {lbArr.map(function(u,i){
         var isMe=String(u.id)===String(player.id);
+        var winPct=u.games>0?Math.round(u.wins/u.games*100):0;
         return <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,borderRadius:10,background:isMe?TL:'white',border:'2px solid '+(isMe?T:G200)}}>
           <div style={{width:28,height:28,borderRadius:'50%',background:i===0?AM:i===1?G400:i===2?'#b45309':G100,color:i<3?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:12}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
-          <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div><div style={{fontSize:10,color:G400}}>{u.total_correct||0} richtig beantwortet</div></div>
-          <div style={{textAlign:'right'}}><div style={{fontSize:16,fontWeight:'bold',color:isMe?T:G600}}>{u.total_score||0}</div><div style={{fontSize:9,color:G400}}>Punkte</div></div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div>
+            <div style={{fontSize:10,color:G400}}>{u.wins} Siege · {u.games} Spiele · {winPct}% Siegrate</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:16,fontWeight:'bold',color:isMe?T:G600}}>{u.wins}</div>
+            <div style={{fontSize:9,color:G400}}>Siege</div>
+          </div>
         </div>;
       })}
     </div>;
@@ -1403,15 +1456,7 @@ function QuizDuel({ chapters, allChapters, globalWords, player, setPlayer, onDon
       var colors=['#0f766e','#7c3aed','#b45309','#0369a1','#be185d','#15803d','#dc2626','#0891b2'];
       var idx=0; for(var i=0;i<name.length;i++)idx=(idx+name.charCodeAt(i))%colors.length; return colors[idx];
     }
-    var topLevelKapitel = chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
     return <div style={{padding:8}}>
-      <div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200}}>
-        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>📚 Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedKapitel.length===0?'Alle':selectedKapitel.length+' ausgewählt'})</span></div>
-        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-          <button onClick={function(){setSelectedKapitel([]);}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(selectedKapitel.length===0?T:G200),background:selectedKapitel.length===0?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:selectedKapitel.length===0?T:G600,touchAction:'manipulation'}}>Alle</button>
-          {topLevelKapitel.map(function(kap){ var sel=selectedKapitel.indexOf(kap.id)>=0; return <button key={kap.id} onClick={function(){setSelectedKapitel(function(prev){return sel?prev.filter(function(id){return id!==kap.id;}):prev.concat([kap.id]);});}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(sel?kap.color||T:G200),background:sel?(kap.color||T)+'18':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:sel?kap.color||T:G600,touchAction:'manipulation'}}>{kap.icon} {kap.title}</button>; })}
-        </div>
-      </div>
       {pendingChallenges.length>0&&<div style={{padding:12,background:'#fffbeb',borderRadius:12,border:'2px solid '+AM,marginBottom:14}}>
         <div style={{fontWeight:'bold',fontSize:13,color:AM,marginBottom:8}}>⚔️ Herausforderungen ({pendingChallenges.length})</div>
         {pendingChallenges.map(function(c){ var ac2=avatarColor(c.player1_name||'?');
@@ -2906,7 +2951,7 @@ function UploadPreview({ fileData, chapters, onConfirm, onCancel }) {
 }
 
 function QuizScoringAdmin() {
-  var [sc, setSc] = useState({correct:10,win:50,loss:-50,draw:30});
+  var [sc, setSc] = useState({correct:10,win:50,loss:-50,draw:30,grammar_correct:10});
   var [loaded, setLoaded] = useState(false);
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
@@ -2935,13 +2980,81 @@ function QuizScoringAdmin() {
     </div>;
   }
   return <div>
-    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:12}}>Quiz-Duell Punktevergabe</div>
-    {Field('Richtige Antwort','correct','Punkte pro richtig beantworteter Frage')}
+    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:4}}>Quiz-Duell Punktevergabe</div>
+    <div style={{fontSize:11,color:G400,marginBottom:10}}>Punkte werden zur Gesamtpunktzahl des Spielers addiert.</div>
+    {Field('Richtige Antwort (Quiz)','correct','Punkte pro richtig beantworteter Frage im Duell')}
     {Field('Sieg-Bonus','win','Zusatzpunkte für den Gewinner')}
     {Field('Niederlage','loss','Punkte-Abzug für den Verlierer (negativ eingeben)')}
     {Field('Unentschieden','draw','Punkte für beide bei Gleichstand')}
+    <div style={{marginTop:12,marginBottom:4,borderTop:'1px solid '+G200,paddingTop:12,fontWeight:'bold',fontSize:12,color:G600}}>Grammatik-Trainer</div>
+    {Field('Richtige Antwort (Grammatik)','grammar_correct','Punkte pro richtig beantworteter Grammatikfrage')}
     {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
     <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{padding:'9px 20px',fontSize:12})}>{saving?'Speichern...':'Speichern'}</button>
+  </div>;
+}
+
+function VocabCheckAdmin({ chapters }) {
+  var [selChId, setSelChId] = useState('');
+  var [results, setResults] = useState(null);
+  var [loading, setLoading] = useState(false);
+  var [msg, setMsg] = useState('');
+  var childChaps = chapters.filter(function(c){return c.parent_id;});
+
+  function runCheck(){
+    var ch = childChaps.find(function(c){return c.id===selChId;});
+    if(!ch){setMsg('Bitte Kapitel wählen');return;}
+    var words = safeWords(ch.words);
+    if(!words.length){setMsg('Keine Vokabeln in diesem Kapitel');return;}
+    setLoading(true); setResults(null); setMsg('Prüfe '+words.length+' Vokabeln…');
+    sbGet('settings','key=eq.anthropic_key').then(function(d){
+      var key=(d&&d[0]&&d[0].value)||localStorage.getItem('claude_api_key')||'';
+      if(!key){setMsg('Kein API-Key hinterlegt (Admin → 🔑)');setLoading(false);return;}
+      var pairs = words.map(function(w){return w.word+' = '+w.clue;}).join('\n');
+      fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:
+          'Du bist ein Englisch-Lehrer. Prüfe diese englisch-deutschen Vokabelpaare auf korrekte Übersetzung.\n\nVokabeln:\n'+pairs+'\n\nAntworte NUR mit JSON-Array:\n[{"word":"...","clue":"...","ok":true,"note":""},{"word":"...","clue":"...","ok":false,"note":"Korrekt wäre: spielen"}]\n\nok:true wenn die Übersetzung stimmt (auch Synonyme oder leichte Abweichungen sind ok). ok:false nur bei klaren Fehlern. note nur bei ok:false befüllen.'
+        }]})
+      }).then(function(r){return r.json();}).then(function(data){
+        var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+        var parsed=JSON.parse(txt);
+        setResults(parsed); setLoading(false);
+        var bad=parsed.filter(function(r){return !r.ok;}).length;
+        setMsg(bad===0?'✅ Alle '+parsed.length+' Vokabeln korrekt!':'⚠️ '+bad+' mögliche Fehler gefunden');
+      }).catch(function(e){setMsg('Fehler: '+e.message);setLoading(false);});
+    }).catch(function(){setMsg('Fehler beim Laden des API-Keys');setLoading(false);});
+  }
+
+  return <div>
+    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:4}}>🔍 Vokabel-Übersetzungsprüfung</div>
+    <div style={{fontSize:11,color:G400,marginBottom:10}}>KI prüft ob englisch-deutsche Übersetzungen korrekt sind</div>
+    <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
+      <select value={selChId} onChange={function(e){setSelChId(e.target.value);setResults(null);setMsg('');}}
+        style={{flex:1,minWidth:0,padding:'7px 8px',fontSize:13,border:'1.5px solid '+T,borderRadius:8,outline:'none',background:'white'}}>
+        <option value=''>-- Kapitel wählen --</option>
+        {childChaps.map(function(c){
+          return <option key={c.id} value={c.id}>{c.icon} {c.title} ({safeWords(c.words).length} V.)</option>;
+        })}
+      </select>
+      <button onClick={runCheck} disabled={loading||!selChId} style={BtnStyle(T,'white',{padding:'7px 14px',fontSize:13,opacity:(!selChId||loading)?0.5:1,touchAction:'manipulation'})}>
+        {loading?'⏳ Prüfe…':'🔍 Prüfen'}
+      </button>
+    </div>
+    {msg&&<div style={{fontSize:12,padding:'6px 10px',borderRadius:6,marginBottom:8,
+      background:msg.startsWith('✅')?'#d1fae5':msg.startsWith('⚠️')?'#fff7ed':msg.startsWith('Fehler')||msg.startsWith('Kein')?'#fef2f2':'#eff6ff',
+      color:msg.startsWith('✅')?'#065f46':msg.startsWith('⚠️')?'#92400e':msg.startsWith('Fehler')||msg.startsWith('Kein')?RE:T}}>{msg}</div>}
+    {results&&results.length>0&&<div style={{maxHeight:320,overflowY:'auto',border:'1px solid '+G200,borderRadius:8}}>
+      {results.map(function(r,i){
+        return <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 10px',borderBottom:'1px solid '+G100,background:r.ok?'white':'#fff7ed'}}>
+          <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{r.ok?'✅':'⚠️'}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:'bold',color:G900}}>{r.word} <span style={{fontWeight:'normal',color:G400}}>= {r.clue}</span></div>
+            {!r.ok&&r.note&&<div style={{fontSize:11,color:'#92400e',marginTop:2}}>{r.note}</div>}
+          </div>
+        </div>;
+      })}
+    </div>}
   </div>;
 }
 
@@ -3132,7 +3245,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🎯 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -3343,6 +3456,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
 
       {tab==='grammar'&&(<div>
         <GrammarAdmin player={player} chapters={chapters}/>
+      </div>)}
+
+      {tab==='vocabcheck'&&(<div>
+        <VocabCheckAdmin chapters={chapters}/>
       </div>)}
     </div>
   );
@@ -3652,7 +3769,7 @@ function GrammarProgress({ ruleStats, sessions }) {
   );
 }
 
-function GrammarGame({ player, onDone }) {
+function GrammarGame({ player, setPlayer, onDone }) {
   var [topic, setTopic] = useState(null);
   var [pool, setPool] = useState([]);
   var [questions, setQuestions] = useState([]);
@@ -3666,8 +3783,15 @@ function GrammarGame({ player, onDone }) {
   var [phase, setPhase] = useState('menu');
   var [aiExplain, setAiExplain] = useState('');
   var [aiLoading, setAiLoading] = useState(false);
+  var [grammarPts, setGrammarPts] = useState(10);
   var inputRef = useRef();
   var PROG_KEY = 'grammar_prog_'+(player&&player.id||'anon');
+
+  React.useEffect(function(){
+    sbGet('settings','key=eq.quiz_scoring&select=value').then(function(d){
+      if(Array.isArray(d)&&d.length>0){try{var s=JSON.parse(d[0].value);if(s&&s.grammar_correct)setGrammarPts(s.grammar_correct);}catch(e){}}
+    }).catch(function(){});
+  },[]);
 
   useEffect(function(){
     try{ var s=localStorage.getItem(PROG_KEY); if(s){var p=JSON.parse(s);setRuleStats(p.ruleStats||{});setSessions(p.sessions||{});} }catch(e){}
@@ -3728,6 +3852,15 @@ function GrammarGame({ player, onDone }) {
     var corr=results.filter(function(r){return r.correct;}).length;
     var newSess=(Array.isArray(sessions)?sessions:[]).concat([{date:new Date().toISOString(),correct:corr,total:results.length,topic:topic}]);
     setSessions(newSess); saveProg(ruleStats,newSess); setPhase('result');
+    if(corr>0&&player&&player.id){
+      var pts=corr*grammarPts;
+      var newScore=Math.max(0,(player.total_score||0)+pts);
+      var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if(UUID.test(player.id)){
+        sbPatch('players',{total_score:newScore},'id=eq.'+player.id).catch(function(){});
+      }
+      if(setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:newScore});});
+    }
   }
 
   if(phase==='menu') return(
@@ -4002,7 +4135,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
-    if(screen==='grammar') return <GrammarGame player={player} onDone={function(){go('games');}}/>;
+    if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
     if(screen==='stats') return <Stats player={player} chapters={childChapters}/>;
     if(screen==='leaderboard') return <Leaderboard allUsers={allUsers} player={player}/>;
@@ -4017,9 +4150,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var screenTitles = {
     home:'🏠 Start',learn:'📚 Lernen',games:'🎮 Spiele',progress:'📊 Fortschritt',admin:'⚙️ Admin',
     vocab_trainer:'📝 Vokabeltrainer',workout:'🏋️ Workout',workout_setup:'🏋️ Workout',sentence_learner:'💬 Sätze',
-    quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🔤 Kreuzworträtsel',browse:'📖 Vokabeln',
-    leiterspiel_menu:'🎯 Leiterspiel',leiterspiel_play:'🎯 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
-    grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Rangliste',word_select_trainer:'📝 Trainer'
+    quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
+    leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
+    grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer'
   };
 
   var mainScreens = isAdmin
@@ -4047,10 +4180,11 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             </div>
             {[
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
-              {icon:'🎯',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
+              {icon:'🪜',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
-              {icon:'🔤',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
+              {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
+              {icon:'🏆',title:'Gesamtrangliste',sub:'Punkte aus allen Spielen',action:function(){go('leaderboard');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
                 <span style={{fontSize:24,flexShrink:0}}>{item.icon}</span>
@@ -4077,8 +4211,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           {screen==='games'&&(<div>
             {[
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
-              {icon:'🔤',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
-              {icon:'🎮',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
+              {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
+              {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
               ...(player&&player.is_admin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
@@ -4121,7 +4255,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
             word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
-            grammar:'games',stats:'progress',leaderboard:'progress',browse:'learn',puzzle:'learn'};
+            grammar:'games',stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
           go(dest);
         }} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'5px 10px',borderRadius:8,cursor:'pointer',fontSize:14,touchAction:'manipulation',flexShrink:0}}>←</button>}
