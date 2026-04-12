@@ -2325,14 +2325,22 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
               {open&&<div style={{padding:'4px 8px 8px 28px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
                 {safeWords(ch.words).map(function(w,i){
                   var inRun=isInRun(w);
-                  var runW=inRun?words.find(function(rw){return normWordKey(rw.word)===normWordKey(w.word);}):null;
-                  return <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'4px 6px',borderRadius:8,border:'1.5px solid '+(inRun?ch.color:G200),background:inRun?ch.color+'12':'white',cursor:'pointer',touchAction:'manipulation'}} onClick={function(){toggle(w);}}>
-                    <div style={{display:'flex',alignItems:'center',gap:3}}>
-                      {w.important&&<span style={{fontSize:9}}>⭐</span>}
-                      <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:inRun?ch.color:G600}}>{w.word}</span>
-                    </div>
-                    {inRun&&<div style={{display:'flex',gap:2}} onClick={function(e){e.stopPropagation();}}>
-                      {[1,2,3,4,5].map(function(p){ return <button key={p} onClick={function(){setPot(w.word,p);}} style={{width:16,height:16,borderRadius:3,border:'none',background:runW&&runW.pot===p?POT_COL[p]:G200,color:runW&&runW.pot===p?'white':G400,fontSize:8,cursor:'pointer',padding:0,fontWeight:'bold'}}>{p}</button>; })}
+                  var pot=inRun?getRunPot(w.word):null;
+                  return <div key={i} style={{display:'flex',alignItems:'center',gap:6,
+                    padding:'5px 8px',background:i%2===0?G50:'white',
+                    borderBottom:'1px solid '+G100,fontSize:12}}>
+                    <input type='checkbox' checked={inRun}
+                      onChange={function(){inRun?removeWord(w.word):addWord(w);}}
+                      style={{width:14,height:14,cursor:'pointer',accentColor:T}}/>
+                    {w.important&&<span style={{color:AM,fontSize:11}}>⭐</span>}
+                    <span style={{flex:1,fontWeight:'bold',color:G900}}>{w.word}</span>
+                    <span style={{color:G400,fontSize:11,marginRight:4}}>{w.clue}</span>
+                    {inRun&&<div style={{display:'flex',gap:2}}>
+                      {[1,2,3,4,5,6].map(function(p){return <button key={p}
+                        onClick={function(){setPot(w.word,p);}}
+                        style={{width:14,height:14,borderRadius:2,border:'none',
+                          background:pot===p?POT_COL[p]:G200,
+                          color:pot===p?'white':G400,fontSize:7,cursor:'pointer',padding:0}}>{p}</button>;})}
                     </div>}
                   </div>;
                 })}
