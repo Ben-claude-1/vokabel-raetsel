@@ -3823,7 +3823,7 @@ function CrosswordGame({ chapters, onDone }) {
   var ch = chapId ? chapters.find(function(c){ return c.id===chapId; }) : null;
 
   function startPuzzle(chapter) {
-    var words = (chapter.words||[]).filter(function(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; });
+    var words = safeWords(chapter.words).filter(function(w){ return w.word && w.clue && w.word.replace(/[^A-Za-z]/g,'').length>=3; });
     words = words.map(function(w){ return Object.assign({},w,{word:w.word.replace(/[^A-Za-z]/g,'').toUpperCase()}); });
     if(words.length < 4) { alert('Dieses Kapitel hat zu wenig Vokabeln für ein Kreuzworträtsel (mind. 4 benötigt).'); return; }
     var sol = SOLS[Math.floor(Math.random()*SOLS.length)];
@@ -3845,16 +3845,16 @@ function CrosswordGame({ chapters, onDone }) {
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:15,marginBottom:4}}>Kapitel wählen</div>
       <div style={{fontSize:12,color:G400,marginBottom:14}}>Wähle ein Kapitel für dein Kreuzworträtsel</div>
-      {chapters.filter(function(c){return (c.words||[]).length>=4;}).map(function(c){
+      {chapters.filter(function(c){return safeWords(c.words).length>=4;}).map(function(c){
         return (
           <button key={c.id} onClick={function(){startPuzzle(c);}} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
             <span style={{fontSize:22,flexShrink:0}}>🔤</span>
-            <div><div style={{fontWeight:'bold',fontSize:13}}>{c.title}</div><div style={{fontSize:11,color:G400}}>{(c.words||[]).length} Vokabeln</div></div>
+            <div><div style={{fontWeight:'bold',fontSize:13}}>{c.title}</div><div style={{fontSize:11,color:G400}}>{safeWords(c.words).length} Vokabeln</div></div>
             <span style={{marginLeft:'auto',color:G400,fontSize:14}}>›</span>
           </button>
         );
       })}
-      {chapters.filter(function(c){return (c.words||[]).length>=4;}).length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit genug Vokabeln gefunden.</div>}
+      {chapters.filter(function(c){return safeWords(c.words).length>=4;}).length===0&&<div style={{color:G400,fontSize:13,textAlign:'center',marginTop:30}}>Keine Kapitel mit genug Vokabeln gefunden.</div>}
       <button onClick={onDone} style={{marginTop:16,width:'100%',padding:'10px',borderRadius:10,border:'1px solid '+G200,background:'none',cursor:'pointer',fontSize:13,color:G400}}>Zurück</button>
     </div>
   );
@@ -3889,7 +3889,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       }).catch(function(){});
     }
     function loadPresence(){
-      sbGet('settings','key=like.presence_%&select=key,value').then(function(d){
+      sbGet('settings','key=like.presence_%25&select=key,value').then(function(d){
         if(!Array.isArray(d)) return;
         var cutoff = Date.now()-90000;
         var ids = [];
