@@ -54,6 +54,13 @@ function sbDel(t, q) {
   return fetch(SB_URL + "/rest/v1/" + t + "?" + q, { method: "DELETE", headers: HG, mode: "cors", credentials: "omit" })
     .then(function() { return true; }).catch(function() { return false; });
 }
+function updatePresence(pid) {
+  var now = new Date().toISOString();
+  sbGet('settings','key=eq.presence_'+pid+'&select=id').then(function(d){
+    if(d&&d.length>0) sbPatch('settings',{value:now},'key=eq.presence_'+pid);
+    else sbPost('settings',{key:'presence_'+pid,value:now});
+  }).catch(function(){});
+}
 function sbSingle(t, q) {
   return sbGet(t, q).then(function(d) { return Array.isArray(d) && d.length > 0 ? d[0] : null; });
 }
@@ -266,26 +273,33 @@ function wordDisplay(w) {
   if(getWordType(w)==='verb' && !word.toLowerCase().startsWith('to ')) return 'to '+word;
   return word;
 }
-function makeQuizRound(allWords, usedWords) {
+function makeQuizRound(allWords, usedWords, globalWords) {
   var pool = allWords.filter(function(w){ return !usedWords.has(w.word); });
   if (pool.length < 3) pool = allWords;
   var picked = shuffleArr(pool).slice(0, 3);
+  var distSrc = (globalWords && globalWords.length >= 4) ? globalWords : allWords;
   return picked.map(function(correct) {
     var cType = getWordType(correct);
-    var sameType = allWords.filter(function(w){ return w.word !== correct.word && getWordType(w)===cType; });
-    var anyOther = allWords.filter(function(w){ return w.word !== correct.word; });
+    var sameType = distSrc.filter(function(w){ return normWordKey(w.word)!==normWordKey(correct.word) && getWordType(w)===cType; });
+    var anyOther = distSrc.filter(function(w){ return normWordKey(w.word)!==normWordKey(correct.word); });
     var pool2 = sameType.length >= 3 ? sameType : anyOther;
     var distractors = shuffleArr(pool2).slice(0,3);
     return { correct: correct, answers: shuffleArr([correct].concat(distractors)), type: 'de2en' };
   });
 }
-function makeAllRounds(chapters) {
+function makeAllRounds(chapters, allChapters) {
   var allWords = [];
   chapters.forEach(function(ch){ safeWords(ch.words).forEach(function(w){ allWords.push(Object.assign({},w,{chapId:ch.id,chapTitle:ch.title,chapColor:ch.color,chapIcon:ch.icon})); }); });
   if (allWords.length < 4) return [];
+  var globalWords = null;
+  if(allChapters && allChapters !== chapters) {
+    globalWords = [];
+    allChapters.forEach(function(ch){ safeWords(ch.words).forEach(function(w){ globalWords.push(Object.assign({},w)); }); });
+    if(globalWords.length < 4) globalWords = null;
+  }
   var rounds = [], used = new Set();
   for (var i = 0; i < 6; i++) {
-    var round = makeQuizRound(allWords, used);
+    var round = makeQuizRound(allWords, used, globalWords);
     round.forEach(function(q){ used.add(q.correct.word); });
     rounds.push(round);
   }
@@ -826,8 +840,8 @@ function ProgressStats({ chapters, player, allCategories }) {
 }
 
 
-function QuizSolo({ chapters, onDone }) {
-  var allRounds = useMemo(function(){ return makeAllRounds(chapters); }, []);
+function QuizSolo({ chapters, globalWords, onDone }) {
+  var allRounds = useMemo(function(){ return makeAllRounds(chapters, globalWords); }, []);
   var [roundIdx, setRoundIdx] = useState(0);
   var [qIdx, setQIdx] = useState(0);
   var [chosen, setChosen] = useState(null);
@@ -965,7 +979,125 @@ function QuizSolo({ chapters, onDone }) {
   );
 }
 
-function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
+function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, onlineIds, onDone }) {
+  var [view, setView] = useState('menu');
+  var [selectedChapIds, setSelectedChapIds] = useState([]);
+  var [pendingGames, setPendingGames] = useState([]);
+  var [myGames, setMyGames] = useState([]);
+  var [lbLoaded, setLbLoaded] = useState(false);
+  var [lbData, setLbData] = useState([]);
+  var [joinGameId, setJoinGameId] = useState(null);
+
+  var topChapters = (allChapters||chapters).filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+  var leafChapters = (allChapters||chapters).filter(function(c){return c.parent_id;});
+  var filteredLeaf = selectedChapIds.length>0
+    ? leafChapters.filter(function(c){return selectedChapIds.indexOf(c.parent_id)>=0||selectedChapIds.indexOf(c.id)>=0;})
+    : leafChapters;
+  var chaptersForGame = filteredLeaf.length>=1 ? filteredLeaf : leafChapters;
+  var globalWords = [];
+  leafChapters.forEach(function(ch){ (ch.words||[]).forEach(function(w){ globalWords.push(Object.assign({},w,{chapId:ch.id})); }); });
+
+  function loadContinue(){
+    setPendingGames([]); setMyGames([]);
+    sbGet('quiz_duels','player2_id=eq.'+player.id+'&status=eq.waiting&select=id,code,player1_name,created_at&order=created_at.desc&limit=10').then(function(d){ if(Array.isArray(d)) setPendingGames(d); }).catch(function(){});
+    sbGet('quiz_duels','player1_id=eq.'+player.id+'&status=neq.finished&select=id,code,player2_name,status,created_at&order=created_at.desc&limit=10').then(function(d){ if(Array.isArray(d)) setMyGames(d.filter(function(g){return g.status!=='waiting'||!g.player2_name;})); }).catch(function(){});
+  }
+
+  function loadLeaderboard(){
+    if(lbLoaded) return;
+    sbGet('quiz_duels','status=eq.finished&select=player1_id,player1_name,player2_id,player2_name,round_wins_p1,round_wins_p2').then(function(d){
+      if(!Array.isArray(d)){setLbLoaded(true);return;}
+      var scores={};
+      d.forEach(function(g){
+        var w1=(JSON.parse(g.round_wins_p1||'[]')).filter(function(s){return s>=2;}).length;
+        var w2=(JSON.parse(g.round_wins_p2||'[]')).filter(function(s){return s>=2;}).length;
+        var win1=w1>w2; var win2=w2>w1;
+        if(g.player1_id){if(!scores[g.player1_id])scores[g.player1_id]={name:g.player1_name,wins:0,games:0};scores[g.player1_id].games++;if(win1)scores[g.player1_id].wins++;}
+        if(g.player2_id){if(!scores[g.player2_id])scores[g.player2_id]={name:g.player2_name,wins:0,games:0};scores[g.player2_id].games++;if(win2)scores[g.player2_id].wins++;}
+      });
+      var arr=Object.keys(scores).map(function(id){return Object.assign({id:id},scores[id]);});
+      arr.sort(function(a,b){return b.wins-a.wins||(b.games-a.games);});
+      setLbData(arr); setLbLoaded(true);
+    }).catch(function(){setLbLoaded(true);});
+  }
+
+  function ChapPicker(){
+    return <div style={{marginBottom:12,padding:'10px 12px',background:G50,borderRadius:10,border:'1px solid '+G200}}>
+      <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Kapitel-Auswahl <span style={{fontWeight:'normal',color:G400,fontSize:10}}>({selectedChapIds.length===0?'Alle':selectedChapIds.length+' ausgewählt'})</span></div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+        <button onClick={function(){setSelectedChapIds([]);}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(selectedChapIds.length===0?T:G200),background:selectedChapIds.length===0?TL:'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:selectedChapIds.length===0?T:G600}}>Alle</button>
+        {topChapters.map(function(kap){ var sel=selectedChapIds.indexOf(kap.id)>=0;
+          return <button key={kap.id} onClick={function(){setSelectedChapIds(function(prev){return sel?prev.filter(function(id){return id!==kap.id;}):prev.concat([kap.id]);});}} style={{padding:'4px 10px',borderRadius:7,border:'2px solid '+(sel?kap.color||T:G200),background:sel?(kap.color||T)+'18':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:sel?kap.color||T:G600}}>{kap.icon} {kap.title}</button>;
+        })}
+      </div>
+    </div>;
+  }
+
+  if(view==='playing_duel') return <QuizDuel chapters={chaptersForGame} allChapters={leafChapters} globalWords={globalWords} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} initialGameId={joinGameId} onDone={function(){setJoinGameId(null);setView('menu');}}/>;
+  if(view==='playing_solo') return <QuizSolo chapters={chaptersForGame} globalWords={globalWords} onDone={function(){setView('menu');}}/>;
+
+  if(view==='new') return <div style={{padding:8}}>
+    <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
+    <ChapPicker/>
+    <div style={{fontSize:12,color:G600,marginBottom:8}}>{chaptersForGame.length} Kapitel gewaehlt - {chaptersForGame.reduce(function(s,c){return s+(c.words||[]).length;},0)} Vokabeln</div>
+    <button onClick={function(){setView('playing_duel');}} style={Object.assign({},BtnStyle(T,'white'),{width:'100%',padding:'13px',fontSize:14,marginBottom:8})}>Gegen Spieler: Duell starten</button>
+    <button onClick={function(){setView('playing_solo');}} style={Object.assign({},BtnStyle(G100,G600),{width:'100%',padding:'13px',fontSize:14})}>Alleine spielen (Solo)</button>
+  </div>;
+
+  if(view==='continue') return <div style={{padding:8}}>
+    <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
+    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Offene Herausforderungen</div>
+    {pendingGames.length===0&&myGames.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Keine laufenden Spiele gefunden.</div>}
+    {pendingGames.map(function(g){
+      return <div key={g.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+AM,background:'#fffbeb',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:20}}>⚔️</span>
+        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13}}>{g.player1_name} fordert dich heraus</div><div style={{fontSize:10,color:G400}}>Code: {g.code}</div></div>
+        <button onClick={function(){
+          sbPatch('quiz_duels',{status:'active'},'id=eq.'+g.id).then(function(){
+            setJoinGameId(g.id);
+            setView('playing_duel');
+          });
+        }} style={{padding:'6px 14px',borderRadius:8,border:'none',background:T,color:'white',cursor:'pointer',fontSize:12,fontWeight:'bold'}}>Annehmen</button>
+      </div>;
+    })}
+    {myGames.map(function(g){
+      return <div key={g.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white',display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:20}}>🎮</span>
+        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13}}>vs. {g.player2_name||'Warte auf Gegner'}</div><div style={{fontSize:10,color:G400}}>Status: {g.status}</div></div>
+      </div>;
+    })}
+  </div>;
+
+  if(view==='leaderboard') return <div style={{padding:8}}>
+    <button onClick={function(){setView('menu');}} style={{border:'none',background:'none',color:G400,fontSize:13,cursor:'pointer',marginBottom:12,padding:0}}>Zurueck</button>
+    <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:10}}>Quiz-Rangliste</div>
+    {lbData.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>Keine Daten vorhanden.</div>}
+    {lbData.map(function(u,i){
+      var isMe=u.id===String(player.id);
+      return <div key={u.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:5,borderRadius:10,background:isMe?TL:'white',border:'2px solid '+(isMe?T:G200)}}>
+        <div style={{width:28,height:28,borderRadius:'50%',background:i===0?AM:i===1?G400:i===2?'#b45309':G100,color:i<3?'white':G600,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',fontSize:12}}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+        <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:isMe?T:G900}}>{u.name}{isMe?' (du)':''}</div><div style={{fontSize:10,color:G400}}>{u.games} Spiele</div></div>
+        <div style={{textAlign:'right'}}><div style={{fontSize:16,fontWeight:'bold',color:isMe?T:G600}}>{u.wins}</div><div style={{fontSize:9,color:G400}}>Siege</div></div>
+      </div>;
+    })}
+  </div>;
+
+  return <div style={{padding:8}}>
+    {[
+      {icon:'➕',title:'Neues Spiel starten',sub:'Kapitel auswaehlen und losspielen',action:function(){setView('new');}},
+      {icon:'▶️',title:'Spiel fortsetzen',sub:'Offene Duelle und Herausforderungen',action:function(){loadContinue();setView('continue');}},
+      {icon:'🏆',title:'Rangliste',sub:'Wer hat die meisten Duelle gewonnen?',action:function(){loadLeaderboard();setView('leaderboard');}},
+    ].map(function(item,i){
+      return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'14px',marginBottom:8,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+        <span style={{fontSize:26,flexShrink:0}}>{item.icon}</span>
+        <div><div style={{fontWeight:'bold',fontSize:14,color:G900}}>{item.title}</div><div style={{fontSize:11,color:G400}}>{item.sub}</div></div>
+        <span style={{marginLeft:'auto',color:G400,fontSize:16}}>›</span>
+      </button>;
+    })}
+  </div>;
+}
+
+function QuizDuel({ chapters, allChapters, globalWords, player, onDone, allUsers, allCategories, onlineIds, initialGameId }) {
   var [phase, setPhase] = useState("setup");
   var [selectedKapitel, setSelectedKapitel] = useState([]);
   var [tab, setTab] = useState("users");
@@ -985,6 +1117,16 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   var timerRef = useRef(null);
   var pollRef = useRef(null);
   var [userSearch,setUserSearch]=useState('');
+
+  useEffect(function(){
+    if(!initialGameId) return;
+    sbSingle('quiz_duels','id=eq.'+initialGameId).then(function(d){
+      if(!d) return;
+      var parsedRounds=JSON.parse(d.rounds||'[]');
+      setRounds(parsedRounds); setGameId(d.id); setGameData(d);
+      setCurrentRoundIdx(0); setPhase('readyToPlay');
+    });
+  },[]);
 
   useEffect(function(){
     if(!player) return;
@@ -1011,7 +1153,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
 
   function challengeUser(targetUser){
     var chapSrc = selectedKapitel.length>0 ? chapters.filter(function(c){ return selectedKapitel.indexOf(c.id)>=0 || selectedKapitel.indexOf(c.parent_id)>=0; }) : chapters;
-    var generated = makeAllRounds(chapSrc);
+    var generated = makeAllRounds(chapSrc, effectiveGlobal);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
     sbPost('quiz_duels',{code:code, player1_id:player.id, player1_name:player.name,
       player2_id:targetUser.id, player2_name:targetUser.name,
@@ -1029,7 +1171,7 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
 
   function createOpenGame(){
     var chapSrc = selectedKapitel.length>0 ? chapters.filter(function(c){ return selectedKapitel.indexOf(c.id)>=0 || selectedKapitel.indexOf(c.parent_id)>=0; }) : chapters;
-    var generated = makeAllRounds(chapSrc);
+    var generated = makeAllRounds(chapSrc, effectiveGlobal);
     var code = Math.random().toString(36).slice(2,8).toUpperCase();
     sbPost('quiz_duels',{code:code, player1_id:player.id, player1_name:player.name,
       rounds:JSON.stringify(generated),
@@ -1123,6 +1265,8 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
   var allWordsFlat = (function(){
     var ws=[]; (chapters||[]).forEach(function(ch){ if(!ch.parent_id) return; (ch.words||[]).forEach(function(w){ ws.push(Object.assign({},w,{chapterId:ch.id})); }); }); return ws;
   })();
+  // effectiveGlobal: use passed globalWords prop for distractors, or fall back to local words
+  var effectiveGlobal = (globalWords && globalWords.length>=4) ? globalWords : allWordsFlat;
   var currentRound = currentRoundArr[qIdx];
   var isP1 = gameData&&gameData.player1_id===player.id;
   var myWins = JSON.parse((gameData&&(isP1?gameData.round_wins_p1:gameData.round_wins_p2))||'[]');
@@ -1208,17 +1352,17 @@ function QuizDuel({ chapters, player, onDone, allUsers, allCategories }) {
           {userSearch&&<button onClick={function(){setUserSearch('');}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',border:'none',background:'none',cursor:'pointer',color:G400,fontSize:16}}>✕</button>}
         </div>
         {filteredUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:24,fontSize:13}}>{userSearch?'Kein Spieler gefunden.':'Keine anderen Spieler vorhanden.'}</div>}
-        {filteredUsers.map(function(u){ var isInactive=u.is_active===false; var ac=avatarColor(u.name);
-          return <div key={u.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px',marginBottom:6,borderRadius:12,border:'1.5px solid '+(isInactive?G200:G100),background:isInactive?G50:'white',boxShadow:isInactive?'none':'0 1px 4px rgba(0,0,0,0.06)'}}>
+        {filteredUsers.map(function(u){ var isOnline=(onlineIds||[]).indexOf(String(u.id))>=0; var ac=avatarColor(u.name);
+          return <div key={u.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px',marginBottom:6,borderRadius:12,border:'1.5px solid '+(isOnline?G100:G200),background:isOnline?'white':G50,boxShadow:isOnline?'0 1px 4px rgba(0,0,0,0.06)':'none'}}>
             <div style={{position:'relative',flexShrink:0}}>
-              <div style={{width:44,height:44,borderRadius:'50%',background:isInactive?G400:ac,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',color:'white',fontSize:19,border:'2px solid '+(isInactive?G200:'white'),boxShadow:'0 2px 6px rgba(0,0,0,0.15)'}}>{u.name[0].toUpperCase()}</div>
-              <div style={{position:'absolute',bottom:1,right:1,width:12,height:12,borderRadius:'50%',background:isInactive?G400:GR,border:'2.5px solid white'}}/>
+              <div style={{width:44,height:44,borderRadius:'50%',background:isOnline?ac:G400,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:'bold',color:'white',fontSize:19,border:'2px solid '+(isOnline?'white':G200),boxShadow:'0 2px 6px rgba(0,0,0,0.15)'}}>{u.name[0].toUpperCase()}</div>
+              <div style={{position:'absolute',bottom:1,right:1,width:12,height:12,borderRadius:'50%',background:isOnline?GR:G400,border:'2.5px solid white'}}/>
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:'bold',fontSize:14,color:isInactive?G400:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</div>
-              <div style={{fontSize:11,color:isInactive?G400:'#22c55e',fontWeight:'500'}}>{isInactive?'⏸ Inaktiv':'● Aktiv'}</div>
+              <div style={{fontWeight:'bold',fontSize:14,color:isOnline?G900:G400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.name}</div>
+              <div style={{fontSize:11,color:isOnline?'#22c55e':G400,fontWeight:'500'}}>{isOnline?'● Online':'○ Offline'}</div>
             </div>
-            <button onClick={function(){challengeUser(u);}} style={{flexShrink:0,padding:'9px 16px',borderRadius:9,border:'none',background:isInactive?G200:T,color:isInactive?G600:'white',cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation',boxShadow:isInactive?'none':'0 2px 5px rgba(15,118,110,0.3)'}}>{isInactive?'✉️ Einladen':'⚔️ Herausfordern'}</button>
+            <button onClick={function(){challengeUser(u);}} style={{flexShrink:0,padding:'9px 16px',borderRadius:9,border:'none',background:isOnline?T:G200,color:isOnline?'white':G600,cursor:'pointer',fontSize:12,fontWeight:'bold',touchAction:'manipulation',boxShadow:isOnline?'0 2px 5px rgba(15,118,110,0.3)':'none'}}>{isOnline?'⚔️ Herausfordern':'✉️ Einladen'}</button>
           </div>; })}
         <button onClick={createOpenGame} style={{display:'block',width:'100%',padding:'11px',marginTop:10,borderRadius:10,border:'1.5px dashed '+G200,background:G50,cursor:'pointer',fontSize:12,color:G600,fontWeight:'bold',touchAction:'manipulation'}}>+ Offenes Spiel per Code erstellen</button>
       </div>}
@@ -3539,6 +3683,36 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [screenData, setScreenData] = useState(null);
   var [lsRun, setLsRun] = useState(null);
   var [lsStreak, setLsStreak] = useState(null);
+  var [onlineIds, setOnlineIds] = useState([]);
+
+  useEffect(function(){
+    if(!player) return;
+    var pid = String(player.id);
+    function sendHeartbeat(){
+      sbGet('settings','key=eq.presence_'+pid+'&select=key').then(function(d){
+        if(Array.isArray(d)&&d.length>0){
+          sbPatch('settings',{value:new Date().toISOString()},'key=eq.presence_'+pid).catch(function(){});
+        } else {
+          sbPost('settings',{key:'presence_'+pid,value:new Date().toISOString()}).catch(function(){});
+        }
+      }).catch(function(){});
+    }
+    function loadPresence(){
+      sbGet('settings','key=like.presence_%&select=key,value').then(function(d){
+        if(!Array.isArray(d)) return;
+        var cutoff = Date.now()-90000;
+        var ids = [];
+        d.forEach(function(r){
+          try{ if(new Date(r.value).getTime()>cutoff) ids.push(r.key.replace('presence_','')); }catch(e){}
+        });
+        setOnlineIds(ids);
+      }).catch(function(){});
+    }
+    sendHeartbeat();
+    loadPresence();
+    var hb = setInterval(function(){ sendHeartbeat(); loadPresence(); }, 30000);
+    return function(){ clearInterval(hb); };
+  },[player&&player.id]);
 
   function go(s, data) { setScreen(s); setScreenData(data||null); }
 
@@ -3571,7 +3745,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}}/>;
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
     if(screen==='quiz_solo') return <QuizSolo chapters={childChapters} onDone={function(){go('games');}}/>;
-    if(screen==='quiz_duel') return <QuizDuel chapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onDone={function(){go('games');}}/>;
+    if(screen==='quiz_duel') return <QuizDuel chapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('games');}}/>;
+    if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('games');}}/>;
+
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
     if(screen==='crossword'&&screenData) return <div style={{padding:8}}><Puzzle data={screenData.cw} solPhrase={screenData.sol.phrase} solMsg={screenData.sol.msg} chapId={screenData.chapId}/></div>;
     if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} allUsers={allUsers}
@@ -3594,7 +3770,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var screenTitles = {
     home:'🏠 Start',learn:'📚 Lernen',games:'🎮 Spiele',progress:'📊 Fortschritt',admin:'⚙️ Admin',
     vocab_trainer:'📝 Vokabeltrainer',workout:'🏋️ Workout',workout_setup:'🏋️ Workout',sentence_learner:'💬 Sätze',
-    quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',crossword:'🔤 Kreuzworträtsel',browse:'📖 Vokabeln',
+    quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🔤 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🎯 Leiterspiel',leiterspiel_play:'🎯 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Rangliste',word_select_trainer:'📝 Trainer'
   };
@@ -3625,7 +3801,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             {[
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🎯',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
-              {icon:'⚔️',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
+              {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
@@ -3652,8 +3828,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
           {screen==='games'&&(<div>
             {[
-              {icon:'🎯',title:'Quiz Solo',sub:'6 Runden alleine spielen',action:function(){go('quiz_solo');}},
-              {icon:'⚔️',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
+              {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🔤',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🎮',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
@@ -3696,7 +3871,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
         {showBack&&<button onClick={function(){
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
-            word_select_trainer:'learn',quiz_solo:'games',quiz_duel:'games',crossword:'games',
+            word_select_trainer:'learn',quiz_solo:'games',quiz_duel:'games',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
             grammar:'games',stats:'progress',leaderboard:'progress',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
