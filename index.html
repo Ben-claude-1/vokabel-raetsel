@@ -3654,6 +3654,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             {[
               {icon:'🎯',title:'Quiz Solo',sub:'6 Runden alleine spielen',action:function(){go('quiz_solo');}},
               {icon:'⚔️',title:'Quiz Duell',sub:'Gegen andere spielen',action:function(){go('quiz_duel');}},
+              {icon:'🔤',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🎮',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
               ...(player&&player.is_admin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
