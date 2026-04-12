@@ -3744,8 +3744,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='vocab_trainer'&&screenData) return <VokabelTrainer words={screenData} player={player} onDone={function(){go('learn');}} title="Vokabeln"/>;
     if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}}/>;
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
-    if(screen==='quiz_solo') return <QuizSolo chapters={childChapters} onDone={function(){go('games');}}/>;
-    if(screen==='quiz_duel') return <QuizDuel chapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('games');}}/>;
+    if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} onDone={function(){go('quiz_duel_menu');}}/>;}
+    if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('quiz_duel_menu');}}/>;}
     if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} onDone={function(){go('games');}}/>;
 
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
@@ -3871,7 +3871,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',padding:'12px 16px',display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
         {showBack&&<button onClick={function(){
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
-            word_select_trainer:'learn',quiz_solo:'games',quiz_duel:'games',quiz_duel_menu:'games',crossword:'games',
+            word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
             grammar:'games',stats:'progress',leaderboard:'progress',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
