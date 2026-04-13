@@ -3815,32 +3815,46 @@ function GrammarAdmin({ player, chapters }) {
     for(var ci=0;ci<batchN;ci+=CHUNK) chunks.push(Math.min(CHUNK,batchN-ci));
     var allNew=[];
     var currentPool=pool.slice();
-    function runChunk(idx){
+    function runChunk(idx, retries){
       if(idx>=chunks.length){
         setPool(currentPool);
         setMsg('✓ '+allNew.length+' Sätze generiert und gespeichert');
         setGenerating(false);
         return;
       }
-      setMsg('Generiere… ('+(allNew.length)+'/'+batchN+')');
+      var attempt=retries||0;
+      setMsg('Generiere… ('+allNew.length+'/'+batchN+')'+(attempt>0?' — Versuch '+(attempt+1):''));
       fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:promptTemplate(chunks[idx])}]})
-      }).then(function(r){return r.json();})
+      }).then(function(r){
+        if(r.status===529||r.status===503||r.status===429){
+          if(attempt<5){
+            var wait=(attempt+1)*8000;
+            setMsg('API überlastet — warte '+(wait/1000)+'s… ('+allNew.length+'/'+batchN+')');
+            setTimeout(function(){ runChunk(idx,attempt+1); }, wait);
+          } else {
+            setMsg('Fehler: API dauerhaft überlastet. Bitte später erneut versuchen.');
+            setGenerating(false);
+          }
+          return null;
+        }
+        return r.json();
+      })
       .then(function(d){
+        if(!d) return;
         if(d.error){ throw new Error(d.error.message||'API Fehler'); }
         var text=d.content&&d.content[0]&&d.content[0].text||'';
         var clean=text.replace(/```json|```/g,'').trim();
         var arr=JSON.parse(clean).map(function(q){ return Object.assign({id:Date.now()+'_'+Math.random().toString(36).slice(2)},q); });
         allNew=allNew.concat(arr);
         currentPool=currentPool.concat(arr);
-        return saveGrammarPool(topic, currentPool);
+        return saveGrammarPool(topic, currentPool).then(function(){ setTimeout(function(){ runChunk(idx+1,0); }, 500); });
       })
-      .then(function(){ setTimeout(function(){ runChunk(idx+1); }, 500); })
       .catch(function(e){ setMsg('Fehler bei Batch '+(idx+1)+': '+e.message); setGenerating(false); });
     }
-    runChunk(0);
+    runChunk(0,0);
   }
 
   function deleteQ(id){
