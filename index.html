@@ -4067,7 +4067,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
     var newSess=(Array.isArray(sessions)?sessions:[]).concat([{date:new Date().toISOString(),correct:corr,total:results.length,topic:topic}]);
     setSessions(newSess); saveProg(ruleStats,newSess,qStats); setPhase('result');
     if(corr>0&&player&&player.id){
-      var pts=corr*1;
+      var pts=corr*10;
       var newScore=Math.max(0,(player.total_score||0)+pts);
       var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if(UUID.test(player.id)){
