@@ -3725,7 +3725,7 @@ function RegisterScreen({ onRegister, onBack }) {
 }
 
 // ── Grammar Trainer ────────────────────────────────────────────
-var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp' };
+var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp', sa:'grammar_exercises_sa' };
 var GRAMMAR_VERBS = [
   {word:'to play',clue:'spielen'},{word:'to work',clue:'arbeiten'},
   {word:'to go',clue:'gehen'},{word:'to eat',clue:'essen'},
@@ -3802,11 +3802,14 @@ function GrammarAdmin({ player, chapters }) {
     var key = savedKey || localStorage.getItem('claude_api_key') || '';
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
-    var topicLabel = topic==='sp'?'Simple Present':'Present Progressive';
+    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':'some/any';
     var promptDetail = topic==='sp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball."}'
-      : 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball."}';
-    var prompt = 'Erstelle '+batchN+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter). Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als einziger Lücke, Infinitiv am Ende in Klammern), answer, distractors, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
+      : topic==='pp'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball."}'
+      : 'Die Lücke ist "some" oder "any". Verwende alltägliche Sätze (Fragen, Verneinungen, Angebote, Bitten). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"Can I have ___ of these kiwis?","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Kann ich einige dieser Kiwis haben?"}';
+    var distNote = topic==='sa' ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).' : 'Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter).';
+    var prompt = 'Erstelle '+batchN+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als einziger Lücke'+(topic!=='sa'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
     fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -3850,7 +3853,7 @@ function GrammarAdmin({ player, chapters }) {
         }
       </div>
       <div style={{display:'flex',gap:4,marginBottom:10,background:G100,padding:3,borderRadius:8}}>
-        {[['sp','Simple Present'],['pp','Present Progressive']].map(function(t){
+        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any']].map(function(t){
           return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
@@ -4053,7 +4056,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
-      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.']].map(function(t){
+      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?']].map(function(t){
         var sel=selTopics.indexOf(t[0])>=0;
         return <div key={t[0]} onClick={function(){
             setSelTopics(function(prev){
