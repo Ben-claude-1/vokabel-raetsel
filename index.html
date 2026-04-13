@@ -3929,6 +3929,7 @@ function buildOptions(q, pool) {
 
 function GrammarGame({ player, setPlayer, onDone }) {
   var [topic, setTopic] = useState(null);
+  var [selTopics, setSelTopics] = useState(['sp']);
   var [pool, setPool] = useState([]);
   var [questions, setQuestions] = useState([]);
   var [qIdx, setQIdx] = useState(0);
@@ -3958,14 +3959,11 @@ function GrammarGame({ player, setPlayer, onDone }) {
     try{ localStorage.setItem(PROG_KEY,JSON.stringify({ruleStats:rs,sessions:sess})); }catch(e){}
   }
 
-  function startTopic(t){
-    setLoading(true); setTopic(t);
-    loadGrammarPool(t).then(function(p){
-      if(!p||p.length===0){
-        setLoading(false); setPhase('empty'); return;
-      }
-      // normalize legacy format: {text} → {sentence, answer}
-      var normalized=p.map(function(q,i){
+  function startTopics(topics){
+    setLoading(true); setTopic(topics.join('+'));
+    Promise.all(topics.map(function(t){ return loadGrammarPool(t); })).then(function(pools){
+      var combined=[].concat.apply([],pools);
+      var normalized=combined.map(function(q,i){
         var s=q.sentence||q.text||'';
         var a=q.answer||q.text||'';
         return Object.assign({id:q.id||('q'+i)},q,{sentence:s,answer:a});
@@ -3973,8 +3971,6 @@ function GrammarGame({ player, setPlayer, onDone }) {
       if(!normalized||normalized.length===0){ setLoading(false); setPhase('empty'); return; }
       setPool(normalized);
       var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length));
-      var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length));
-      // attach shuffled answer options to each question
       qs=qs.map(function(q){ return Object.assign({},q,{_opts:buildOptions(q,normalized)}); });
       setQuestions(qs); setQIdx(0); setResults([]); setChosen(null); setResult(null); setPhase('game');
       setLoading(false);
@@ -4037,13 +4033,30 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📊 Fortschritt</div>
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]}/>
       </div>
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Thema wählen:</div>
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
       {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.']].map(function(t){
-        return <button key={t[0]} onClick={function(){startTopic(t[0]);}} style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+T+'44',background:'white',cursor:'pointer',touchAction:'manipulation'}}>
-          <div style={{fontWeight:'bold',fontSize:14,color:T}}>{t[1]}</div>
-          <div style={{fontSize:11,color:G400}}>{t[2]}</div>
-        </button>;
+        var sel=selTopics.indexOf(t[0])>=0;
+        return <div key={t[0]} onClick={function(){
+            setSelTopics(function(prev){
+              return sel?(prev.length>1?prev.filter(function(x){return x!==t[0];}):prev):prev.concat([t[0]]);
+            });
+          }}
+          style={{display:'flex',alignItems:'center',gap:12,padding:'13px 14px',marginBottom:7,borderRadius:12,
+            border:'2px solid '+(sel?T:G200),background:sel?T+'08':'white',cursor:'pointer',touchAction:'manipulation'}}>
+          <div style={{width:20,height:20,borderRadius:5,border:'2px solid '+(sel?T:G300),background:sel?T:'white',
+            display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            {sel&&<span style={{color:'white',fontSize:13,fontWeight:'bold'}}>✓</span>}
+          </div>
+          <div>
+            <div style={{fontWeight:'bold',fontSize:14,color:sel?T:G900}}>{t[1]}</div>
+            <div style={{fontSize:11,color:G400}}>{t[2]}</div>
+          </div>
+        </div>;
       })}
+      <button onClick={function(){startTopics(selTopics);}} disabled={selTopics.length===0}
+        style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:14,marginTop:4,opacity:selTopics.length===0?0.4:1})}>
+        {selTopics.length===2?'🔀 Gemischt starten':'▶ Starten'}
+      </button>
     </div>
   );
 
@@ -4076,7 +4089,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         })}
         <div style={{display:'flex',gap:6,marginTop:12}}>
           <button onClick={function(){setPhase('menu');setTopic(null);setResults([]);setQIdx(0);}} style={BtnStyle(G100,G600,{flex:1,padding:'11px',fontSize:13})}>← Menü</button>
-          <button onClick={function(){startTopic(topic);}} style={BtnStyle(T,'white',{flex:1,padding:'11px',fontSize:13})}>🔄 Nochmal</button>
+          <button onClick={function(){startTopics(selTopics);}} style={BtnStyle(T,'white',{flex:1,padding:'11px',fontSize:13})}>🔄 Nochmal</button>
         </div>
       </div>
     );
