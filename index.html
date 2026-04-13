@@ -3957,6 +3957,9 @@ function GrammarProgress({ ruleStats, sessions, qStats }) {
 }
 
 function buildOptions(q, pool) {
+  // some/any: always exactly 2 options
+  if(q.rule==='some/any') return Math.random()<0.5?['some','any']:['any','some'];
+  // sp/pp: 4 options = correct + 3 distractors
   var opts = [q.answer];
   var dist = (q.distractors||[]).filter(function(d){ return d&&d.toLowerCase()!==q.answer.toLowerCase(); });
   if(dist.length<3) {
@@ -3978,6 +3981,8 @@ function GrammarGame({ player, setPlayer, onDone }) {
   var [questions, setQuestions] = useState([]);
   var [qIdx, setQIdx] = useState(0);
   var [chosen, setChosen] = useState(null);
+  var [input, setInput] = useState('');
+  var inputRef = useRef();
   var [result, setResult] = useState(null);
   var [results, setResults] = useState([]);
   var [loading, setLoading] = useState(false);
@@ -4059,7 +4064,8 @@ function GrammarGame({ player, setPlayer, onDone }) {
 
   function next(){
     if(qIdx+1>=questions.length){ finishSession(); return; }
-    setQIdx(function(i){return i+1;}); setChosen(null); setResult(null); setAiExplain('');
+    setQIdx(function(i){return i+1;}); setChosen(null); setInput(''); setResult(null); setAiExplain('');
+    setTimeout(function(){ if(inputRef.current) inputRef.current.focus(); }, 50);
   }
 
   function finishSession(){
@@ -4147,6 +4153,9 @@ function GrammarGame({ player, setPlayer, onDone }) {
 
   var q=questions[qIdx];
   if(!q) return null;
+  var isSomeAny=q.rule==='some/any';
+  var prevCorrect=(qStats[q.id]||{}).correct||0;
+  var stage2=!isSomeAny&&prevCorrect>=2; // Stufe 2: Freitext
   var opts=q._opts||[q.answer];
   return(
     <div style={{padding:8}}>
@@ -4154,6 +4163,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <div style={{flex:1,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
           <div style={{height:'100%',width:((qIdx/questions.length)*100)+'%',background:T}}/>
         </div>
+        {!isSomeAny&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:8,background:stage2?'#fef3c7':'#e0f2fe',color:stage2?'#92400e':'#0369a1',fontWeight:'bold'}}>Stufe {stage2?2:1}</span>}
         <span style={{fontSize:11,color:G400}}>{qIdx+1}/{questions.length}</span>
       </div>
       <div style={{padding:'18px 16px',background:G50,borderRadius:14,marginBottom:14,border:'2px solid '+G200,textAlign:'center'}}>
@@ -4161,26 +4171,46 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <div style={{fontSize:19,fontWeight:'bold',color:G900,lineHeight:1.4}}>{q.sentence}</div>
         {q.translation&&result&&<div style={{fontSize:11,color:G400,marginTop:6,fontStyle:'italic'}}>{q.translation}</div>}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
-        {opts.map(function(opt,i){
-          var isChosen=chosen===opt;
-          var isCorrect=opt.toLowerCase()===q.answer.toLowerCase();
-          var bg='white', border='2px solid '+G200, color=G900;
-          if(result){
+      {stage2&&!result&&(
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter'&&input.trim())choose(input.trim());}}
+            placeholder="Antwort eintippen…" autoCapitalize="none" autoCorrect="off" autoComplete="off"
+            style={{flex:1,padding:'13px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
+          <button onClick={function(){if(input.trim())choose(input.trim());}} style={BtnStyle(T,'white',{padding:'13px 16px',fontSize:16})}>✓</button>
+        </div>
+      )}
+      {!stage2&&!result&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          {opts.map(function(opt,i){
+            var isChosen=chosen===opt;
+            var bg='white', border='2px solid '+G200, color=G900;
+            if(isChosen){ bg=T+'18'; border='2px solid '+T; }
+            return <button key={i} onClick={function(){choose(opt);}}
+              style={{padding:'13px 10px',borderRadius:12,border:border,background:bg,color:color,
+                fontSize:15,fontWeight:'bold',cursor:'pointer',touchAction:'manipulation'}}>
+              {opt}
+            </button>;
+          })}
+        </div>
+      )}
+      {result&&!stage2&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+          {opts.map(function(opt,i){
+            var isChosen=chosen===opt;
+            var isCorrect=opt.toLowerCase()===q.answer.toLowerCase();
+            var bg='white', border='2px solid '+G200, color=G900;
             if(isCorrect){ bg='#d1fae5'; border='2px solid '+GR; color=T; }
             else if(isChosen&&!isCorrect){ bg='#fee2e2'; border='2px solid '+RE; color=RE; }
-          } else if(isChosen){ bg=T+'18'; border='2px solid '+T; }
-          return <button key={i} onClick={function(){choose(opt);}} disabled={!!result}
-            style={{padding:'13px 10px',borderRadius:12,border:border,background:bg,color:color,
-              fontSize:15,fontWeight:'bold',cursor:result?'default':'pointer',touchAction:'manipulation',
-              transition:'all 0.15s'}}>
-            {opt}
-          </button>;
-        })}
-      </div>
+            return <button key={i} disabled style={{padding:'13px 10px',borderRadius:12,border:border,background:bg,color:color,fontSize:15,fontWeight:'bold',cursor:'default'}}>{opt}</button>;
+          })}
+        </div>
+      )}
       {result&&(
         <div style={{padding:'10px 12px',borderRadius:10,background:result.correct?'#d1fae5':'#fee2e2',border:'1px solid '+(result.correct?GR:RE),marginBottom:8}}>
-          <div style={{fontWeight:'bold',color:result.correct?T:RE,marginBottom:result.correct?0:4}}>{result.correct?'✓ Richtig!':'✗ Falsch — richtig: '+q.answer}</div>
+          <div style={{fontWeight:'bold',color:result.correct?T:RE,marginBottom:result.correct?0:4}}>
+            {result.correct?'✓ Richtig!'+(prevCorrect+1>=2&&!isSomeAny?' — Ab jetzt Stufe 2! ✏️':''):'✗ Falsch — richtig: '+q.answer}
+          </div>
           {aiLoading&&<div style={{fontSize:11,color:G400,marginTop:4}}>KI erklärt…</div>}
           {aiExplain&&<div style={{fontSize:11,color:G600,marginTop:4}}>{aiExplain}</div>}
         </div>
