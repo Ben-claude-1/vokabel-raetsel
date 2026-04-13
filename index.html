@@ -3809,24 +3809,38 @@ function GrammarAdmin({ player, chapters }) {
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball."}'
       : 'Die Lücke ist "some" oder "any". Verwende alltägliche Sätze (Fragen, Verneinungen, Angebote, Bitten). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"Can I have ___ of these kiwis?","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Kann ich einige dieser Kiwis haben?"}';
     var distNote = topic==='sa' ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).' : 'Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter).';
-    var prompt = 'Erstelle '+batchN+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als einziger Lücke'+(topic!=='sa'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
-    fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:prompt}]})
-    }).then(function(r){return r.json();})
-    .then(function(d){
-      var text = d.content&&d.content[0]&&d.content[0].text||'';
-      var clean = text.replace(/```json|```/g,'').trim();
-      var arr = JSON.parse(clean).map(function(q){ return Object.assign({id:Date.now()+'_'+Math.random().toString(36).slice(2)}, q); });
-      return saveGrammarPool(topic, pool.concat(arr)).then(function(){ return arr; });
-    })
-    .then(function(arr){
-      setPool(function(prev){return prev.concat(arr);});
-      setMsg('✓ '+arr.length+' Sätze generiert und gespeichert');
-      setGenerating(false);
-    })
-    .catch(function(e){ setMsg('Fehler: '+e.message); setGenerating(false); });
+    var promptTemplate = function(n){ return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als einziger Lücke'+(topic!=='sa'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.'; };
+    var CHUNK=10;
+    var chunks=[];
+    for(var ci=0;ci<batchN;ci+=CHUNK) chunks.push(Math.min(CHUNK,batchN-ci));
+    var allNew=[];
+    var currentPool=pool.slice();
+    function runChunk(idx){
+      if(idx>=chunks.length){
+        setPool(currentPool);
+        setMsg('✓ '+allNew.length+' Sätze generiert und gespeichert');
+        setGenerating(false);
+        return;
+      }
+      setMsg('Generiere… ('+(allNew.length)+'/'+batchN+')');
+      fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:promptTemplate(chunks[idx])}]})
+      }).then(function(r){return r.json();})
+      .then(function(d){
+        if(d.error){ throw new Error(d.error.message||'API Fehler'); }
+        var text=d.content&&d.content[0]&&d.content[0].text||'';
+        var clean=text.replace(/```json|```/g,'').trim();
+        var arr=JSON.parse(clean).map(function(q){ return Object.assign({id:Date.now()+'_'+Math.random().toString(36).slice(2)},q); });
+        allNew=allNew.concat(arr);
+        currentPool=currentPool.concat(arr);
+        return saveGrammarPool(topic, currentPool);
+      })
+      .then(function(){ setTimeout(function(){ runChunk(idx+1); }, 500); })
+      .catch(function(e){ setMsg('Fehler bei Batch '+(idx+1)+': '+e.message); setGenerating(false); });
+    }
+    runChunk(0);
   }
 
   function deleteQ(id){
