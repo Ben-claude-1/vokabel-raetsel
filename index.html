@@ -3880,18 +3880,38 @@ function GrammarAdmin({ player, chapters }) {
     </div>
   );
 }
-function GrammarProgress({ ruleStats, sessions }) {
+function GrammarProgress({ ruleStats, sessions, qStats }) {
+  var qs=qStats||{};
+  var mastered=Object.keys(qs).filter(function(id){return qs[id].correct>=2;}).length;
+  var practiced=Object.keys(qs).length;
   var rules=Object.keys(ruleStats||{});
-  if(rules.length===0&&(!sessions||sessions.length===0)) return <div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Übungen absolviert.</div>;
+  var noData=rules.length===0&&(!sessions||sessions.length===0);
   return(
     <div>
+      {practiced>0&&(
+        <div style={{display:'flex',gap:8,marginBottom:10}}>
+          <div style={{flex:1,padding:'10px',background:'#d1fae5',borderRadius:10,textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:'bold',color:T}}>{mastered}</div>
+            <div style={{fontSize:10,color:T}}>gemeistert</div>
+            <div style={{fontSize:9,color:G400}}>2× korrekt</div>
+          </div>
+          <div style={{flex:1,padding:'10px',background:G50,borderRadius:10,textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:'bold',color:G600}}>{practiced}</div>
+            <div style={{fontSize:10,color:G600}}>geübt</div>
+          </div>
+          <div style={{flex:1,padding:'10px',background:'#fef3c7',borderRadius:10,textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:'bold',color:'#92400e'}}>{practiced-mastered}</div>
+            <div style={{fontSize:10,color:'#92400e'}}>offen</div>
+          </div>
+        </div>
+      )}
       {rules.map(function(rule){
         var st=ruleStats[rule];
         var pct=st.total>0?Math.round(st.correct/st.total*100):0;
         var col=pct>=80?GR:pct>=50?AM:RE;
         return <div key={rule} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',marginBottom:5,background:'white',borderRadius:8,border:'1px solid '+G200}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:'bold',fontSize:12,color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rule}</div>
+            <div style={{fontWeight:'bold',fontSize:12,color:G900}}>{rule}</div>
             <div style={{fontSize:10,color:G400}}>{st.correct}/{st.total} richtig</div>
           </div>
           <div style={{width:60,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
@@ -3900,14 +3920,7 @@ function GrammarProgress({ ruleStats, sessions }) {
           <span style={{fontSize:12,fontWeight:'bold',color:col,minWidth:32,textAlign:'right'}}>{pct}%</span>
         </div>;
       })}
-      {sessions&&sessions.length>0&&<div style={{marginTop:10}}>
-        <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Letzte Sessions:</div>
-        {sessions.slice(-5).reverse().map(function(s,i){
-          return <div key={i} style={{fontSize:11,color:G400,padding:'4px 0',borderBottom:'1px solid '+G100}}>
-            {new Date(s.date).toLocaleDateString('de')}: {s.correct}/{s.total} ({Math.round(s.correct/s.total*100)}%)
-          </div>;
-        })}
-      </div>}
+      {noData&&<div style={{textAlign:'center',color:G400,padding:12,fontSize:13}}>Noch keine Übungen absolviert.</div>}
     </div>
   );
 }
@@ -3938,6 +3951,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
   var [results, setResults] = useState([]);
   var [loading, setLoading] = useState(false);
   var [ruleStats, setRuleStats] = useState({});
+  var [qStats, setQStats] = useState({});
   var [sessions, setSessions] = useState([]);
   var [phase, setPhase] = useState('menu');
   var [aiExplain, setAiExplain] = useState('');
@@ -3952,11 +3966,11 @@ function GrammarGame({ player, setPlayer, onDone }) {
   },[]);
 
   useEffect(function(){
-    try{ var s=localStorage.getItem(PROG_KEY); if(s){var p=JSON.parse(s);setRuleStats(p.ruleStats||{});setSessions(p.sessions||{});} }catch(e){}
+    try{ var s=localStorage.getItem(PROG_KEY); if(s){var p=JSON.parse(s);setRuleStats(p.ruleStats||{});setSessions(p.sessions||[]);setQStats(p.qStats||{});} }catch(e){}
   },[]);
 
-  function saveProg(rs,sess){
-    try{ localStorage.setItem(PROG_KEY,JSON.stringify({ruleStats:rs,sessions:sess})); }catch(e){}
+  function saveProg(rs,sess,qs){
+    try{ localStorage.setItem(PROG_KEY,JSON.stringify({ruleStats:rs,sessions:sess,qStats:qs})); }catch(e){}
   }
 
   function startTopics(topics){
@@ -3989,6 +4003,11 @@ function GrammarGame({ player, setPlayer, onDone }) {
     newStats[q.rule].total++;
     if(correct) newStats[q.rule].correct++;
     setRuleStats(newStats);
+    var newQStats=Object.assign({},qStats);
+    if(!newQStats[q.id]) newQStats[q.id]={correct:0,total:0};
+    newQStats[q.id].total++;
+    if(correct) newQStats[q.id].correct++;
+    setQStats(newQStats);
     setResult(newRes);
     if(!correct){
       setAiLoading(true);
@@ -4015,9 +4034,9 @@ function GrammarGame({ player, setPlayer, onDone }) {
   function finishSession(){
     var corr=results.filter(function(r){return r.correct;}).length;
     var newSess=(Array.isArray(sessions)?sessions:[]).concat([{date:new Date().toISOString(),correct:corr,total:results.length,topic:topic}]);
-    setSessions(newSess); saveProg(ruleStats,newSess); setPhase('result');
+    setSessions(newSess); saveProg(ruleStats,newSess,qStats); setPhase('result');
     if(corr>0&&player&&player.id){
-      var pts=corr*grammarPts;
+      var pts=corr*1;
       var newScore=Math.max(0,(player.total_score||0)+pts);
       var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if(UUID.test(player.id)){
@@ -4031,7 +4050,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
     <div style={{padding:8}}>
       <div style={{marginBottom:12,padding:12,background:G50,borderRadius:10,border:'1px solid '+G200}}>
         <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📊 Fortschritt</div>
-        <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]}/>
+        <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
       {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.']].map(function(t){
