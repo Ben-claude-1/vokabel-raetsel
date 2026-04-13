@@ -3961,7 +3961,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         var s=q.sentence||q.text||'';
         var a=q.answer||q.text||'';
         return Object.assign({id:q.id||('q'+i)},q,{sentence:s,answer:a});
-      }).filter(function(q){return q.sentence&&q.answer;});
+      }).filter(function(q){return q.sentence&&q.answer&&q.sentence.includes('___');});
       if(!normalized||normalized.length===0){ setLoading(false); setPhase('empty'); return; }
       setPool(normalized);
       var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length));
