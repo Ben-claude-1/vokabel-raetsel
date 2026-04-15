@@ -382,6 +382,8 @@ function checkAnswer(typed, correct) {
   var allVariants = [];
   corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
   for (var i=0;i<allVariants.length;i++) { if (allVariants[i] === t) return 'correct'; }
+  var tNS=t.replace(/\s+/g,'');
+  for (var j=0;j<allVariants.length;j++) { if (allVariants[j].replace(/\s+/g,'')===tNS) return 'correct'; }
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) { if (stripTo(corrects[k]) === t) return 'partial'; }
   }
@@ -2168,7 +2170,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var pct = lsPercent(data);
     var grade = lsGrade(data);
     var totalWords = Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
-    var learned = (data.pots[6]||[]).length;
+    var learned = (data.pots[5]||[]).length + (data.pots[6]||[]).length;
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:20,color:'white',textAlign:'center',marginBottom:12}}>
@@ -2184,11 +2186,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         </div>
         <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',justifyContent:'center'}}>
           {[1,2,3,4,5].map(function(p){
-            var cnt=(data.pots[p]||[]).length;
-            return <div key={p} style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:POT_COL[p]+'18',border:'2px solid '+POT_COL[p]+'44',minWidth:52}}>
-              <div style={{fontSize:18}}>{POT_ICON[p]}</div>
-              <div style={{fontSize:17,fontWeight:'bold',color:POT_COL[p]}}>{cnt}</div>
-              <div style={{fontSize:9,color:G400}}>{POT_LABEL[p]}</div>
+            var isLearned = p===5;
+            var cnt = isLearned ? learned : (data.pots[p]||[]).length;
+            var col = isLearned ? GR : POT_COL[p];
+            var icon = isLearned ? POT_ICON[6] : POT_ICON[p];
+            var label = isLearned ? 'Gelernt' : POT_LABEL[p];
+            return <div key={p} style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:col+'18',border:'2px solid '+col+'44',minWidth:52}}>
+              <div style={{fontSize:18}}>{icon}</div>
+              <div style={{fontSize:17,fontWeight:'bold',color:col}}>{cnt}</div>
+              <div style={{fontSize:9,color:G400}}>{label}</div>
             </div>;
           })}
         </div>
@@ -2275,7 +2281,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   if(phase==='dashes'){
-    var dashWord = wordDisplay(current).replace(/ /g,'');
+    var dashWord = wordDisplay(current);
+    var dashLetterCount = dashWord.replace(/ /g,'').length;
     return(
       <div style={{padding:8}}>
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
@@ -2283,21 +2290,25 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
           <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
-            {dashWord.split('').map(function(_,i){
-              var letter = input[i]||'';
-              return <div key={i} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-                <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
-                <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
-              </div>;
-            })}
+            {(function(){
+              var ai=0; var typedNS=input.replace(/\s+/g,'');
+              return dashWord.split('').map(function(ch,ci){
+                if(ch===' ') return <span key={'sp'+ci} style={{width:12,display:'inline-block'}}/>;
+                var letter=typedNS[ai]||''; ai++;
+                return <div key={ci} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                  <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
+                  <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
+                </div>;
+              });
+            })()}
           </div>
-          <div style={{fontSize:11,color:G400,marginTop:6}}>{dashWord.length} Buchstaben</div>
+          <div style={{fontSize:11,color:G400,marginTop:6}}>{dashLetterCount} Buchstaben</div>
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitAnswer();}}
             autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
-            placeholder={'Englisch ('+dashWord.length+' Buchstaben)…'}
+            placeholder={'Englisch ('+dashLetterCount+' Buchstaben)…'}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
           <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
@@ -2644,6 +2655,7 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   },[chapters]);
   var [openCh, setOpenCh] = useState(null);
   function isInRun(word){ return words.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
+  function getRunPot(wordStr){ var found=words.find(function(w){return normWordKey(w.word)===normWordKey(wordStr);}); return found?found.pot:1; }
   function toggle(wObj){
     setWords(function(prev){
       if(isInRun(wObj)) return prev.filter(function(w){return normWordKey(w.word)!==normWordKey(wObj.word);});
