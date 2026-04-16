@@ -2815,9 +2815,9 @@ function LeitersSpielAdminOverview({ chapters, player }) {
               {runs.map(function(run){
                 var prog = getProgData(u.id, run.id);
                 var pct = prog ? lsPercent(prog) : null;
-                var wc = getWordCount(run);
                 var pots = prog ? (prog.pots||{}) : {};
                 var p1=(pots[1]||[]).length,p2=(pots[2]||[]).length,p3=(pots[3]||[]).length,p4=(pots[4]||[]).length,p5=(pots[5]||[]).length,p6=(pots[6]||[]).length;
+                var wc = prog ? (p1+p2+p3+p4+p5+p6) : getWordCount(run);
                 var expandKey = u.id+'__'+run.id;
                 var isExpanded = expanded[expandKey];
                 var allRunWords = [];
