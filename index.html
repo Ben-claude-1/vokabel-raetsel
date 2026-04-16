@@ -2187,17 +2187,18 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         </div>
         <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',justifyContent:'center'}}>
           {[1,2,3,4,5].map(function(p){
-            var isLearned = p===5;
-            var cnt = isLearned ? learned : (data.pots[p]||[]).length;
-            var col = isLearned ? GR : POT_COL[p];
-            var icon = isLearned ? POT_ICON[6] : POT_ICON[p];
-            var label = isLearned ? 'Gelernt' : POT_LABEL[p];
-            return <div key={p} style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:col+'18',border:'2px solid '+col+'44',minWidth:52}}>
-              <div style={{fontSize:18}}>{icon}</div>
-              <div style={{fontSize:17,fontWeight:'bold',color:col}}>{cnt}</div>
-              <div style={{fontSize:9,color:G400}}>{label}</div>
+            var cnt = (data.pots[p]||[]).length;
+            return <div key={p} style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:POT_COL[p]+'18',border:'2px solid '+POT_COL[p]+'44',minWidth:52}}>
+              <div style={{fontSize:18}}>{POT_ICON[p]}</div>
+              <div style={{fontSize:17,fontWeight:'bold',color:POT_COL[p]}}>{cnt}</div>
+              <div style={{fontSize:9,color:G400}}>{POT_LABEL[p]}</div>
             </div>;
           })}
+          {learned>0&&<div style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:GR+'18',border:'2px solid '+GR+'44',minWidth:52}}>
+            <div style={{fontSize:18}}>{POT_ICON[6]}</div>
+            <div style={{fontSize:17,fontWeight:'bold',color:GR}}>{learned}</div>
+            <div style={{fontSize:9,color:G400}}>Gelernt</div>
+          </div>}
         </div>
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
         <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
@@ -2816,7 +2817,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                 var pct = prog ? lsPercent(prog) : null;
                 var wc = getWordCount(run);
                 var pots = prog ? (prog.pots||{}) : {};
-                var p1=(pots[1]||[]).length,p2=(pots[2]||[]).length,p3=(pots[3]||[]).length,p4=(pots[4]||[]).length,p5=(pots[5]||[]).length;
+                var p1=(pots[1]||[]).length,p2=(pots[2]||[]).length,p3=(pots[3]||[]).length,p4=(pots[4]||[]).length,p5=(pots[5]||[]).length,p6=(pots[6]||[]).length;
                 var expandKey = u.id+'__'+run.id;
                 var isExpanded = expanded[expandKey];
                 var allRunWords = [];
@@ -2832,7 +2833,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                     <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
                     <span style={{fontWeight:'bold',fontSize:12,color:G900,flex:1}}>{run.name}</span>
                     {prog
-                      ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% · {p5}/{wc} gelernt</span>
+                      ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% · {p6}/{wc} gelernt</span>
                       : <span style={{fontSize:11,color:G400}}>noch nicht gespielt</span>
                     }
                     {prog&&<span style={{fontSize:10,color:G400,marginLeft:2}}>{isExpanded?'▲':'▼'}</span>}
@@ -2842,7 +2843,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                       <div style={{height:'100%',width:(pct||0)+'%',background:T,borderRadius:2}}/>
                     </div>
                     <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {[[1,RE,'T1',p1],[2,'#f97316','T2',p2],[3,AM,'T3',p3],[4,T,'T4',p4],[5,GR,'Gel.',p5]].map(function(pt){
+                      {[[1,RE,'T1',p1],[2,'#f97316','T2',p2],[3,AM,'T3',p3],[4,T,'T4',p4],[5,'#7c3aed','T5',p5],[6,GR,'Gel.',p6]].map(function(pt){
                         return pt[3]>0 ? <span key={pt[0]} style={{fontSize:10,padding:'1px 5px',borderRadius:10,background:pt[1]+'18',color:pt[1],fontWeight:'bold'}}>{pt[2]}: {pt[3]}</span> : null;
                       })}
                       <span style={{fontSize:10,color:GR,marginLeft:'auto',fontWeight:'bold'}}>✓ {prog.totalCorrect||0}</span>
