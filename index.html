@@ -2004,6 +2004,75 @@ function CelebrationPopup({ msg, onClose }) {
   );
 }
 
+function LernVerlaufChart({ sessions, todayExtraSec }) {
+  var today = new Date().toISOString().slice(0,10);
+  var byDate = {};
+  (sessions||[]).forEach(function(s){
+    if(!byDate[s.d]) byDate[s.d]={pct:0,dur:0,ans:0,cor:0};
+    byDate[s.d].pct=s.pct;
+    byDate[s.d].dur+=s.dur;
+    byDate[s.d].ans+=s.ans;
+    byDate[s.d].cor+=s.cor;
+  });
+  var days = [];
+  for(var i=29;i>=0;i--){
+    var dt=new Date(); dt.setDate(dt.getDate()-i);
+    var k=dt.toISOString().slice(0,10);
+    days.push({k:k,data:byDate[k]||null,isToday:i===0});
+  }
+  var GOAL=900;
+  var todayDur=(byDate[today]?byDate[today].dur:0)+(todayExtraSec||0);
+  var goalPct=Math.min(100,Math.round(todayDur/GOAL*100));
+  var W=320,H=130,pL=28,pB=22,pR=6,pT=6;
+  var cW=W-pL-pR, cH=H-pB-pT;
+  var bW=Math.max(2,Math.floor(cW/30)-1);
+  return(
+    <div style={{background:G50,borderRadius:10,padding:'8px 8px 4px 8px',marginBottom:8}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+        <span style={{fontSize:11,fontWeight:'bold',color:G900}}>Lernverlauf</span>
+        <span style={{fontSize:10,color:G400}}>letzte 30 Tage</span>
+      </div>
+      <svg width="100%" viewBox={'0 0 '+W+' '+H} style={{display:'block'}}>
+        {[0,50,100].map(function(pct){
+          var y=pT+cH-(pct/100)*cH;
+          return <g key={pct}>
+            <text x={pL-3} y={y+3} fontSize={7} fill={G400} textAnchor="end">{pct}%</text>
+            <line x1={pL} y1={y} x2={W-pR} y2={y} stroke={G200} strokeWidth={0.5}/>
+          </g>;
+        })}
+        {days.map(function(day,i){
+          var x=pL+i*(bW+1);
+          if(!day.data) return null;
+          var bH=Math.max(3,(day.data.pct/100)*cH);
+          var y=pT+cH-bH;
+          var dur=day.data.dur;
+          var col=dur>=900?GR:dur>=300?AM:G400;
+          var lbl=day.isToday?'Heute':(day.k.slice(8)==='01'?day.k.slice(5,10).replace('-','.'):null);
+          return <g key={day.k}>
+            {day.isToday&&<rect x={x-1} y={pT} width={bW+2} height={cH} fill={T+'12'} rx={1}/>}
+            <rect x={x} y={y} width={bW} height={bH} fill={col} rx={1}/>
+            {lbl&&<text x={x+bW/2} y={H-5} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl}</text>}
+          </g>;
+        })}
+      </svg>
+      <div style={{marginTop:4}}>
+        <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:G600,marginBottom:2}}>
+          <span>Tagesziel heute</span>
+          <span style={{fontWeight:'bold',color:goalPct>=100?GR:goalPct>=50?AM:G600}}>{Math.round(todayDur/60)}/{15} Min</span>
+        </div>
+        <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
+          <div style={{height:'100%',width:goalPct+'%',background:goalPct>=100?GR:goalPct>=50?AM:T,borderRadius:3,transition:'width 0.3s'}}/>
+        </div>
+      </div>
+      <div style={{display:'flex',gap:10,fontSize:9,color:G400,marginTop:4,justifyContent:'center'}}>
+        <span><span style={{color:GR}}>&#9632;</span> Ziel erreicht (&ge;15 Min)</span>
+        <span><span style={{color:AM}}>&#9632;</span> 5-14 Min</span>
+        <span><span style={{color:G400}}>&#9632;</span> &lt;5 Min</span>
+      </div>
+    </div>
+  );
+}
+
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp, setPlayer }) {
   var streak = streakProp || DEFAULT_STREAK;
   var [data, setData] = useState(null);
@@ -2017,6 +2086,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sessionLog, setSessionLog] = useState([]);
   var [quizOptions, setQuizOptions] = useState([]);
   var [quizChosen, setQuizChosen] = useState(null);
+  var [sesStart, setSesStart] = useState(null);
+  var [sesAns, setSesAns] = useState(0);
+  var [sesCor, setSesCor] = useState(0);
   var inputRef = useRef();
 
   useEffect(function(){
@@ -2046,7 +2118,23 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setData(newData);
   }
 
+  function saveSession(currentData) {
+    if(!sesStart || sesAns===0) return currentData;
+    var dur = Math.round((Date.now()-sesStart)/1000);
+    if(dur < 10) return currentData;
+    var pct = lsPercent(currentData);
+    var today = new Date().toISOString().slice(0,10);
+    var session = {d:today, ts:sesStart, dur:dur, ans:sesAns, cor:sesCor, pct:pct};
+    var nd = JSON.parse(JSON.stringify(currentData));
+    if(!nd.sessions) nd.sessions=[];
+    nd.sessions.push(session);
+    if(nd.sessions.length>180) nd.sessions=nd.sessions.slice(-180);
+    setSesStart(null); setSesAns(0); setSesCor(0);
+    return nd;
+  }
+
   function pickWord(){
+    if(!sesStart) setSesStart(Date.now());
     var w = lsPickWord(data, current ? current.word : null);
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
@@ -2087,6 +2175,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(quizChosen) return;
     setQuizChosen(opt);
     var correct=normWordKey(opt.word)===normWordKey(current.word);
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;});
     var newData=JSON.parse(JSON.stringify(data));
     var reqStreak=((streak.upThresholds||DEFAULT_STREAK.upThresholds)[1])||2;
     var potArr=(newData.pots[1]||[]);
@@ -2123,6 +2212,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;});
     var newData = JSON.parse(JSON.stringify(data));
     var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
     var potArr = (newData.pots[fromPot]||[]);
@@ -2203,8 +2293,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{fontSize:9,color:G400}}>Gelernt</div>
           </div>}
         </div>
+        <LernVerlaufChart sessions={data.sessions||[]} todayExtraSec={sesStart?Math.round((Date.now()-sesStart)/1000):0}/>
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
-        <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
+        <button onClick={function(){var nd=saveSession(data);if(nd!==data){lsSaveProgress(player.id,run.id,nd);}onDone();}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
       </div>
     );
   }
@@ -2253,6 +2344,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var reqStreak=(streak.upThresholds&&streak.upThresholds[2])||2;
           wObj.streak=(wObj.streak||0)+1;
           wObj.correct=(wObj.correct||0)+1;
+          setSesAns(function(n){return n+1;}); setSesCor(function(n){return n+1;});
           trackPot(wObj,2,true);
           var moveTo=2;
           if(wObj.streak>=reqStreak){moveTo=3;wObj.streak=0;}
@@ -2274,6 +2366,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
           wObj.streak=0;
           wObj.wrong=(wObj.wrong||0)+1;
+          setSesAns(function(n){return n+1;});
           trackPot(wObj,2,false);
           if(!newData.pots[1])newData.pots[1]=[];
           newData.pots[1].push(wObj);
@@ -2362,7 +2455,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           </div>
         )}
         <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>→ Weiter</button>
-        <button onClick={function(){setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
+        <button onClick={function(){var nd=saveSession(data);if(nd!==data){saveAndUpdate(nd);}setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
         {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
         <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>🔇 Als unwichtig melden</button>
       </div>
@@ -2391,7 +2484,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             </div>;
           })}
         </div>}
-        <button onClick={onDone} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>← Zurück</button>
+        <button onClick={function(){var nd=saveSession(data);if(nd!==data){lsSaveProgress(player.id,run.id,nd);}onDone();}} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>← Zurück</button>
       </div>
     );
   }
