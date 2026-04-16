@@ -2089,6 +2089,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sesStart, setSesStart] = useState(null);
   var [sesAns, setSesAns] = useState(0);
   var [sesCor, setSesCor] = useState(0);
+  var sesLastActive = useRef(null);
   var inputRef = useRef();
 
   useEffect(function(){
@@ -2120,7 +2121,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function saveSession(currentData) {
     if(!sesStart || sesAns===0) return currentData;
-    var dur = Math.round((Date.now()-sesStart)/1000);
+    var endTime = sesLastActive.current || Date.now();
+    var dur = Math.round((endTime-sesStart)/1000);
     if(dur < 10) return currentData;
     var pct = lsPercent(currentData);
     var today = new Date().toISOString().slice(0,10);
@@ -2129,7 +2131,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!nd.sessions) nd.sessions=[];
     nd.sessions.push(session);
     if(nd.sessions.length>180) nd.sessions=nd.sessions.slice(-180);
-    setSesStart(null); setSesAns(0); setSesCor(0);
+    setSesStart(null); setSesAns(0); setSesCor(0); sesLastActive.current=null;
     return nd;
   }
 
@@ -2175,7 +2177,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(quizChosen) return;
     setQuizChosen(opt);
     var correct=normWordKey(opt.word)===normWordKey(current.word);
-    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;});
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); sesLastActive.current=Date.now();
     var newData=JSON.parse(JSON.stringify(data));
     var reqStreak=((streak.upThresholds||DEFAULT_STREAK.upThresholds)[1])||2;
     var potArr=(newData.pots[1]||[]);
@@ -2212,7 +2214,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
-    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;});
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); sesLastActive.current=Date.now();
     var newData = JSON.parse(JSON.stringify(data));
     var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
     var potArr = (newData.pots[fromPot]||[]);
@@ -2344,7 +2346,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var reqStreak=(streak.upThresholds&&streak.upThresholds[2])||2;
           wObj.streak=(wObj.streak||0)+1;
           wObj.correct=(wObj.correct||0)+1;
-          setSesAns(function(n){return n+1;}); setSesCor(function(n){return n+1;});
+          setSesAns(function(n){return n+1;}); setSesCor(function(n){return n+1;}); sesLastActive.current=Date.now();
           trackPot(wObj,2,true);
           var moveTo=2;
           if(wObj.streak>=reqStreak){moveTo=3;wObj.streak=0;}
@@ -2366,7 +2368,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
           wObj.streak=0;
           wObj.wrong=(wObj.wrong||0)+1;
-          setSesAns(function(n){return n+1;});
+          setSesAns(function(n){return n+1;}); sesLastActive.current=Date.now();
           trackPot(wObj,2,false);
           if(!newData.pots[1])newData.pots[1]=[];
           newData.pots[1].push(wObj);
