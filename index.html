@@ -3201,28 +3201,38 @@ function VocabCheckAdmin({ chapters, setChapters }) {
     if(!ch){setMsg('Bitte Kapitel wählen');return;}
     var words = safeWords(ch.words);
     if(!words.length){setMsg('Keine Vokabeln in diesem Kapitel');return;}
+    var batches=[];
+    for(var i=0;i<words.length;i+=20){batches.push(words.slice(i,i+20));}
     setLoading(true); setResults(null); setMsg('Prüfe '+words.length+' Vokabeln…');
     sbGet('settings','key=eq.anthropic_key').then(function(d){
       var key=(d&&d[0]&&d[0].value)||localStorage.getItem('claude_api_key')||'';
       if(!key){setMsg('Kein API-Key hinterlegt (Admin → 🔑)');setLoading(false);return;}
-      var pairs = words.map(function(w){return w.word+' = '+w.clue;}).join('\n');
-      fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4096,messages:[{role:'user',content:
-          'Du bist ein Englisch-Lehrer. Prüfe diese englisch-deutschen Vokabelpaare auf korrekte Übersetzung.\n\nVokabeln:\n'+pairs+'\n\nAntworte NUR mit JSON-Array:\n[{"word":"...","clue":"...","ok":true,"note":""},{"word":"...","clue":"...","ok":false,"note":"Korrekt wäre: spielen"}]\n\nok:true wenn die Übersetzung stimmt (auch Synonyme oder leichte Abweichungen sind ok). ok:false nur bei klaren Fehlern. note nur bei ok:false befüllen.'
-        }]})
-      }).then(function(r){return r.json();}).then(function(data){
-        var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
-        var parsed;
-        try{ parsed=JSON.parse(txt); }catch(e){
-          setMsg('Fehler beim Lesen der KI-Antwort: '+e.message+'. Kapitel eventuell zu gross – versuche ein kleineres Kapitel.');
-          setLoading(false); return;
+      function processBatch(idx,accumulated){
+        if(idx>=batches.length){
+          setResults(accumulated); setLoading(false);
+          var bad=accumulated.filter(function(r){return !r.ok;}).length;
+          setMsg(bad===0?'✅ Alle '+accumulated.length+' Vokabeln korrekt!':'⚠️ '+bad+' mögliche Fehler gefunden');
+          return;
         }
-        setResults(parsed); setLoading(false);
-        var bad=parsed.filter(function(r){return !r.ok;}).length;
-        setMsg(bad===0?'✅ Alle '+parsed.length+' Vokabeln korrekt!':'⚠️ '+bad+' mögliche Fehler gefunden');
-      }).catch(function(e){setMsg('Fehler: '+e.message);setLoading(false);});
+        setMsg('Prüfe Batch '+(idx+1)+'/'+batches.length+'…');
+        var pairs=batches[idx].map(function(w){return w.word+' = '+w.clue;}).join('\n');
+        fetch('https://api.anthropic.com/v1/messages',{
+          method:'POST',
+          headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+          body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4096,messages:[{role:'user',content:
+            'Du bist ein Englisch-Lehrer. Prüfe diese englisch-deutschen Vokabelpaare auf korrekte Übersetzung.\n\nVokabeln:\n'+pairs+'\n\nAntworte NUR mit JSON-Array:\n[{"word":"...","clue":"...","ok":true,"note":""},{"word":"...","clue":"...","ok":false,"note":"Korrekt wäre: spielen"}]\n\nok:true wenn die Übersetzung stimmt (auch Synonyme oder leichte Abweichungen sind ok). ok:false nur bei klaren Fehlern. note nur bei ok:false befüllen.'
+          }]})
+        }).then(function(r){return r.json();}).then(function(data){
+          var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
+          var parsed;
+          try{ parsed=JSON.parse(txt); }catch(e){
+            setMsg('Fehler in Batch '+(idx+1)+': '+e.message);
+            setLoading(false); return;
+          }
+          processBatch(idx+1, accumulated.concat(parsed));
+        }).catch(function(e){setMsg('Fehler: '+e.message);setLoading(false);});
+      }
+      processBatch(0,[]);
     }).catch(function(){setMsg('Fehler beim Laden des API-Keys');setLoading(false);});
   }
 
