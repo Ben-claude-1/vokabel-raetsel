@@ -2747,7 +2747,7 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
   });
 }
 
-function safeWords(w){return Array.isArray(w)?w:(w?JSON.parse(w)||[]:[]);}
+function safeWords(w){if(Array.isArray(w))return w;if(!w)return[];try{return JSON.parse(w)||[];}catch(e){console.error('safeWords parse error',e);return [];}}
 function RunEditor({ run, chapters, onSave, onCancel }) {
   var initWords = useMemo(function(){
     var raw=run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}} return Array.isArray(raw)?raw.slice():[];
@@ -3187,11 +3187,13 @@ function QuizScoringAdmin() {
   </div>;
 }
 
-function VocabCheckAdmin({ chapters }) {
+function VocabCheckAdmin({ chapters, setChapters }) {
   var [selChId, setSelChId] = useState('');
   var [results, setResults] = useState(null);
   var [loading, setLoading] = useState(false);
   var [msg, setMsg] = useState('');
+  var [editingWord, setEditingWord] = useState(null);
+  var [saving, setSaving] = useState(false);
   var childChaps = chapters.filter(function(c){return c.parent_id;});
 
   function runCheck(){
@@ -3207,12 +3209,16 @@ function VocabCheckAdmin({ chapters }) {
       fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4096,messages:[{role:'user',content:
           'Du bist ein Englisch-Lehrer. Prüfe diese englisch-deutschen Vokabelpaare auf korrekte Übersetzung.\n\nVokabeln:\n'+pairs+'\n\nAntworte NUR mit JSON-Array:\n[{"word":"...","clue":"...","ok":true,"note":""},{"word":"...","clue":"...","ok":false,"note":"Korrekt wäre: spielen"}]\n\nok:true wenn die Übersetzung stimmt (auch Synonyme oder leichte Abweichungen sind ok). ok:false nur bei klaren Fehlern. note nur bei ok:false befüllen.'
         }]})
       }).then(function(r){return r.json();}).then(function(data){
         var txt=(data.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
-        var parsed=JSON.parse(txt);
+        var parsed;
+        try{ parsed=JSON.parse(txt); }catch(e){
+          setMsg('Fehler beim Lesen der KI-Antwort: '+e.message+'. Kapitel eventuell zu gross – versuche ein kleineres Kapitel.');
+          setLoading(false); return;
+        }
         setResults(parsed); setLoading(false);
         var bad=parsed.filter(function(r){return !r.ok;}).length;
         setMsg(bad===0?'✅ Alle '+parsed.length+' Vokabeln korrekt!':'⚠️ '+bad+' mögliche Fehler gefunden');
@@ -3238,14 +3244,42 @@ function VocabCheckAdmin({ chapters }) {
     {msg&&<div style={{fontSize:12,padding:'6px 10px',borderRadius:6,marginBottom:8,
       background:msg.startsWith('✅')?'#d1fae5':msg.startsWith('⚠️')?'#fff7ed':msg.startsWith('Fehler')||msg.startsWith('Kein')?'#fef2f2':'#eff6ff',
       color:msg.startsWith('✅')?'#065f46':msg.startsWith('⚠️')?'#92400e':msg.startsWith('Fehler')||msg.startsWith('Kein')?RE:T}}>{msg}</div>}
-    {results&&results.length>0&&<div style={{maxHeight:320,overflowY:'auto',border:'1px solid '+G200,borderRadius:8}}>
+    {results&&results.length>0&&<div style={{maxHeight:400,overflowY:'auto',border:'1px solid '+G200,borderRadius:8}}>
       {results.map(function(r,i){
-        return <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 10px',borderBottom:'1px solid '+G100,background:r.ok?'white':'#fff7ed'}}>
-          <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{r.ok?'✅':'⚠️'}</span>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:12,fontWeight:'bold',color:G900}}>{r.word} <span style={{fontWeight:'normal',color:G400}}>= {r.clue}</span></div>
-            {!r.ok&&r.note&&<div style={{fontSize:11,color:'#92400e',marginTop:2}}>{r.note}</div>}
+        var isEditing=editingWord&&editingWord.orig===r.word;
+        var ch=chapters.find(function(c){return c.id===selChId;});
+        return <div key={i} style={{borderBottom:'1px solid '+G100,background:r.ok?'white':'#fff7ed'}}>
+          <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 10px'}}>
+            <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{r.ok?'✅':'⚠️'}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:'bold',color:G900}}>{r.word} <span style={{fontWeight:'normal',color:G400}}>= {r.clue}</span></div>
+              {!r.ok&&r.note&&<div style={{fontSize:11,color:'#92400e',marginTop:2}}>{r.note}</div>}
+            </div>
+            {!r.ok&&ch&&<button onClick={function(){
+              var ws=safeWords(ch.words);
+              var idx=ws.findIndex(function(w){return w.word===r.word;});
+              if(idx<0) return;
+              setEditingWord({orig:r.word,w:Object.assign({},ws[idx]),idx:idx});
+            }} style={BtnStyle(AM,'white',{padding:'3px 8px',fontSize:10,flexShrink:0})}>✏️ Bearbeiten</button>}
           </div>
+          {isEditing&&<div style={{padding:'8px 10px',background:'#fffbeb',borderTop:'1px solid '+AM+'44'}}>
+            <div style={{display:'flex',gap:5,marginBottom:5}}>
+              <input value={editingWord.w.word||''} onChange={function(e){setEditingWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}}
+                style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="EN"/>
+              <input value={editingWord.w.clue||''} onChange={function(e){setEditingWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{clue:e.target.value})});});}}
+                style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="DE"/>
+            </div>
+            <div style={{display:'flex',gap:5}}>
+              <button onClick={function(){
+                var ws=safeWords(ch.words).slice();
+                ws[editingWord.idx]=editingWord.w;
+                saveChapterWords(ch,ws,chapters,setChapters,setSaving,setMsg);
+                setResults(function(prev){return prev.map(function(x,j){return j===i?Object.assign({},x,{word:editingWord.w.word,clue:editingWord.w.clue,ok:true,note:''}):x;});});
+                setEditingWord(null);
+              }} disabled={saving} style={BtnStyle(T,'white',{flex:1,padding:'5px',fontSize:11})}>✓ Speichern</button>
+              <button onClick={function(){setEditingWord(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:11})}>✕</button>
+            </div>
+          </div>}
         </div>;
       })}
     </div>}
@@ -3720,7 +3754,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       </div>)}
 
       {tab==='vocabcheck'&&(<div>
-        <VocabCheckAdmin chapters={chapters}/>
+        <VocabCheckAdmin chapters={chapters} setChapters={setChapters}/>
       </div>)}
     </div>
   );
