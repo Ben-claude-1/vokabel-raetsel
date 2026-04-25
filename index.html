@@ -18,8 +18,13 @@
   <script type="text/babel" data-presets="react">
 const { useState, useMemo, useCallback, useEffect, useRef } = React;
 
-const SB_URL = "https://zdtwlxclgsrfskqqnved.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdHdseGNsZ3NyZnNrcXFudmVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4MTMzNDIsImV4cCI6MjA5MDM4OTM0Mn0.CQbzIo8a9uJnZIgZ1Ulp4okrgwl9IZH48j0HHUBRVJc";
+// --- Backend (Self-hosted Postgres + PostgREST via Tailscale Funnel) ---
+// Override mit localStorage.setItem('sb_url',…) und ('sb_key',…) für Rollback.
+const SB_URL = localStorage.getItem('sb_url') || "https://mac-studio.taild5562c.ts.net";
+const SB_KEY = localStorage.getItem('sb_key') || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NzEyMjQ2OSwiZXhwIjoxOTM0ODAyNDY5fQ.jzXBjrLedWlHB0l-TRKvrWlxkod6d5Ox8dbMbqV2LMU";
+// Old Supabase (rollback):
+//   localStorage.setItem('sb_url','https://zdtwlxclgsrfskqqnved.supabase.co')
+//   localStorage.setItem('sb_key','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdHdseGNsZ3NyZnNrcXFudmVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4MTMzNDIsImV4cCI6MjA5MDM4OTM0Mn0.CQbzIo8a9uJnZIgZ1Ulp4okrgwl9IZH48j0HHUBRVJc')
 const HG = { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
 var HW_POST = { "Content-Type": "application/json", apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
 
@@ -48,7 +53,7 @@ function sbPost(t, b) {
 }
 function sbPatch(t, b, q) {
   return fetch(SB_URL + "/rest/v1/" + t + "?" + q, { method: "PATCH", headers: HW_POST, body: JSON.stringify(b), mode: "cors", credentials: "omit" })
-    .then(function() { return true; }).catch(function() { return false; });
+    .then(function(r) { return r.ok; }).catch(function() { return false; });
 }
 function sbDel(t, q) {
   return fetch(SB_URL + "/rest/v1/" + t + "?" + q, { method: "DELETE", headers: HG, mode: "cors", credentials: "omit" })
@@ -370,9 +375,21 @@ function wordVariants(raw) {
   var seen2={};
   return variants.filter(function(v){if(!v||seen2[v])return false;seen2[v]=1;return true;});
 }
+function canonAnswer(s){
+  if(!s) return '';
+  s = String(s).toLowerCase().trim();
+  s = s.replace(/\bjdn\.?\b/g,'jemanden').replace(/\bjdm\.?\b/g,'jemandem').replace(/\bjds\.?\b/g,'jemandes');
+  s = s.replace(/\betw\.?\b/g,'etwas');
+  s = s.replace(/\bsth\.?\b/g,'something').replace(/\bsb\.?\b/g,'somebody');
+  s = s.replace(/[.,;:!?„"'»«]/g,'');
+  s = s.replace(/\s+/g,' ').trim();
+  return s;
+}
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
+  var tCan = canonAnswer(t);
+  var tCanNS = tCan.replace(/\s+/g,'');
   var corrects = correct.split(/[\/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
   if(corrects.length===1&&corrects[0].indexOf(',')>=0&&!/\([^)]*,[^)]*\)/.test(corrects[0])){
     corrects=corrects[0].split(',').map(function(s){return s.trim();}).filter(Boolean);
@@ -381,11 +398,13 @@ function checkAnswer(typed, correct) {
   function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
   var allVariants = [];
   corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
-  for (var i=0;i<allVariants.length;i++) { if (allVariants[i] === t) return 'correct'; }
-  var tNS=t.replace(/\s+/g,'');
-  for (var j=0;j<allVariants.length;j++) { if (allVariants[j].replace(/\s+/g,'')===tNS) return 'correct'; }
+  for (var i=0;i<allVariants.length;i++) {
+    var vCan = canonAnswer(allVariants[i]);
+    if (vCan === tCan) return 'correct';
+    if (vCan.replace(/\s+/g,'') === tCanNS) return 'correct';
+  }
   for (var k=0;k<corrects.length;k++) {
-    if (isToVerb(corrects[k])) { if (stripTo(corrects[k]) === t) return 'partial'; }
+    if (isToVerb(corrects[k])) { if (canonAnswer(stripTo(corrects[k])) === tCan) return 'partial'; }
   }
   return 'wrong';
 }
@@ -741,9 +760,9 @@ function ProgressStats({ chapters, player, allCategories }) {
     sbGet('ls_progress','player_id=eq.'+player.id+'&select=data').then(function(rows){
       var learned={}, pots={};
       (Array.isArray(rows)?rows:[]).forEach(function(row){
-        var data={}; try{data=JSON.parse(row.data||'{}');}catch(e){}
+        var data={}; data=parseData(row.data);
         var p=data.pots||{};
-        [1,2,3,4,5].forEach(function(pot){
+        [1,2,3,4,5,6].forEach(function(pot){
           (p[pot]||[]).forEach(function(w){
             if(!pots[w.word]||pots[w.word]<pot) pots[w.word]=pot;
             if(pot===6) learned[w.word]=true;
@@ -1863,7 +1882,8 @@ function BrowseChapter({ ch }) {
   );
 }
 
-var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1,5:1}, downThresholds:{1:0,2:1,3:1,4:1,5:1} };
+var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1,5:1}, downThresholds:{1:0,2:1,3:1,4:1,5:1},
+  testSize:20, grades:[{maxErrors:0,grade:1},{maxErrors:2,grade:2},{maxErrors:5,grade:3},{maxErrors:9,grade:4},{maxErrors:13,grade:5}] };
 function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
 function lsGetRunsForPlayer(pid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)) return lsGetRuns(); return sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&order=created_at.desc'); }
 function trackPot(wObj, pot, isCorrect) { if(!wObj.ps) wObj.ps={}; if(!wObj.ps[pot]) wObj.ps[pot]={c:0,w:0}; if(isCorrect) wObj.ps[pot].c=(wObj.ps[pot].c||0)+1; else wObj.ps[pot].w=(wObj.ps[pot].w||0)+1; }
@@ -1883,6 +1903,32 @@ function lsSaveProgress(pid,rid,data,eid) {
 function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[],6:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
 function lsPercent(progress,gs) { var p=progress.pots||{}; var t=(p[1]||[]).length+(p[2]||[]).length+(p[3]||[]).length+(p[4]||[]).length+(p[5]||[]).length+(p[6]||[]).length; if(t===0) return 0; var score=(p[2]||[]).length*17+(p[3]||[]).length*34+(p[4]||[]).length*50+(p[5]||[]).length*67+(p[6]||[]).length*100; var base=Math.round(score/t); if(progress.bonusStarted&&(progress.sentences||[]).length>0){var sl=progress.sentences.filter(function(s){return s.streak>=2;}).length;return Math.min(100,base+Math.round(sl/progress.sentences.length*10));}return base; }
 function lsGrade(pct,gs) { if(!gs||!gs.grades) return null; var correct=Math.round(pct/100*(gs.testSize||20)); var errors=(gs.testSize||20)-correct; var sorted=(gs.grades||[]).slice().sort(function(a,b){return a.maxErrors-b.maxErrors;}); for(var i=0;i<sorted.length;i++) if(errors<=sorted[i].maxErrors) return sorted[i].grade; return sorted.length?sorted[sorted.length-1].grade+1:null; }
+function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
+  if(!targetDate) return null;
+  var tgt = Math.max(1, Math.min(100, targetPct||100));
+  var gap = Math.max(0, tgt - (currentPct||0));
+  var today = new Date(); today.setHours(0,0,0,0);
+  var d = new Date(targetDate+'T00:00:00');
+  var daysLeft = Math.ceil((d - today) / 86400000);
+  var spentMin = Math.round((sessionsSecondsForRun||0)/60);
+  var status, requiredMinPerDay=null, etaMessage='';
+  if(gap===0){ status='done'; etaMessage='✅ Ziel erreicht'; }
+  else if(daysLeft<=0){ status='overdue'; etaMessage='⚠️ Stichtag verstrichen — '+gap+'% offen'; }
+  else if(currentPct<=0 || spentMin<2){
+    status='no-data';
+    etaMessage='Noch keine Lernzeit gemessen — Schätzung ab nächster Sitzung';
+    requiredMinPerDay = Math.ceil((gap * 5) / daysLeft);
+  } else {
+    var minPerPct = spentMin / currentPct;
+    var totalNeeded = gap * minPerPct;
+    requiredMinPerDay = Math.ceil(totalNeeded / daysLeft);
+    if(requiredMinPerDay<=15) status='easy';
+    else if(requiredMinPerDay<=45) status='ok';
+    else if(requiredMinPerDay<=90) status='hard';
+    else status='unrealistic';
+  }
+  return { targetPct:tgt, currentPct:currentPct||0, gap:gap, daysLeft:daysLeft, spentMin:spentMin, requiredMinPerDay:requiredMinPerDay, status:status, etaMessage:etaMessage, targetDate:targetDate };
+}
 function lsPickWord(progress,lastWord) {
   function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
   var cands=[];
@@ -2004,68 +2050,78 @@ function CelebrationPopup({ msg, onClose }) {
   );
 }
 
-function LernVerlaufChart({ sessions, todayExtraSec }) {
+function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDate, title }) {
   var today = new Date().toISOString().slice(0,10);
   var byDate = {};
   (sessions||[]).forEach(function(s){
-    if(!byDate[s.d]) byDate[s.d]={pct:0,dur:0,ans:0,cor:0};
-    byDate[s.d].pct=s.pct;
-    byDate[s.d].dur+=s.dur;
-    byDate[s.d].ans+=s.ans;
-    byDate[s.d].cor+=s.cor;
+    if(!byDate[s.d]) byDate[s.d]={dur:0};
+    byDate[s.d].dur+=(s.dur||0);
   });
   var days = [];
   for(var i=29;i>=0;i--){
     var dt=new Date(); dt.setDate(dt.getDate()-i);
     var k=dt.toISOString().slice(0,10);
-    days.push({k:k,data:byDate[k]||null,isToday:i===0});
+    days.push({k:k, dur:byDate[k]?byDate[k].dur:0, isToday:i===0});
   }
-  var GOAL=900;
   var todayDur=(byDate[today]?byDate[today].dur:0)+(todayExtraSec||0);
-  var goalPct=Math.min(100,Math.round(todayDur/GOAL*100));
-  var W=320,H=130,pL=28,pB=22,pR=6,pT=6;
+  days[days.length-1].dur = todayDur;
+  var todayMin = Math.round(todayDur/60);
+  var maxMin = days.reduce(function(m,d){return Math.max(m, Math.round(d.dur/60));},0);
+  var soll = requiredMinPerDay||0;
+  var yMax = Math.max(maxMin, soll, 30);
+  var totalMin = days.reduce(function(s,d){return s+Math.round(d.dur/60);},0);
+  var avgMin = Math.round(totalMin/30);
+  var W=320,H=140,pL=28,pB=22,pR=6,pT=10;
   var cW=W-pL-pR, cH=H-pB-pT;
   var bW=Math.max(2,Math.floor(cW/30)-1);
+  var yFor = function(v){ return pT+cH-(v/yMax)*cH; };
   return(
     <div style={{background:G50,borderRadius:10,padding:'8px 8px 4px 8px',marginBottom:8}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-        <span style={{fontSize:11,fontWeight:'bold',color:G900}}>Lernverlauf</span>
-        <span style={{fontSize:10,color:G400}}>letzte 30 Tage</span>
+        <span style={{fontSize:11,fontWeight:'bold',color:G900}}>{title||'Lernverlauf'}</span>
+        <span style={{fontSize:10,color:G400}}>letzte 30 Tage · ⌀ {avgMin} Min/Tag</span>
       </div>
       <svg width="100%" viewBox={'0 0 '+W+' '+H} style={{display:'block'}}>
-        {[0,50,100].map(function(pct){
-          var y=pT+cH-(pct/100)*cH;
-          return <g key={pct}>
-            <text x={pL-3} y={y+3} fontSize={7} fill={G400} textAnchor="end">{pct}%</text>
+        {[0,0.5,1].map(function(f,i){
+          var v=Math.round(yMax*f);
+          var y=yFor(v);
+          return <g key={i}>
+            <text x={pL-3} y={y+3} fontSize={7} fill={G400} textAnchor="end">{v}m</text>
             <line x1={pL} y1={y} x2={W-pR} y2={y} stroke={G200} strokeWidth={0.5}/>
           </g>;
         })}
         {days.map(function(day,i){
           var x=pL+i*(bW+1);
-          if(!day.data) return null;
-          var bH=Math.max(3,(day.data.pct/100)*cH);
-          var y=pT+cH-bH;
-          var dur=day.data.dur;
-          var col=dur>=900?GR:dur>=300?AM:G400;
+          var dMin=Math.round(day.dur/60);
+          if(dMin<=0) {
+            var lbl0=day.isToday?'Heute':(day.k.slice(8)==='01'?day.k.slice(5,10).replace('-','.'):null);
+            return <g key={day.k}>
+              {day.isToday&&<rect x={x-1} y={pT} width={bW+2} height={cH} fill={T+'12'} rx={1}/>}
+              {lbl0&&<text x={x+bW/2} y={H-5} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl0}</text>}
+            </g>;
+          }
+          var y=yFor(dMin);
+          var bH=cH-(y-pT);
+          var col=day.dur>=900?GR:day.dur>=300?AM:G400;
           var lbl=day.isToday?'Heute':(day.k.slice(8)==='01'?day.k.slice(5,10).replace('-','.'):null);
           return <g key={day.k}>
             {day.isToday&&<rect x={x-1} y={pT} width={bW+2} height={cH} fill={T+'12'} rx={1}/>}
-            <rect x={x} y={y} width={bW} height={bH} fill={col} rx={1}/>
+            <rect x={x} y={y} width={bW} height={Math.max(2,bH)} fill={col} rx={1}/>
             {lbl&&<text x={x+bW/2} y={H-5} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl}</text>}
           </g>;
         })}
+        {soll>0 && <g>
+          <line x1={pL} x2={W-pR} y1={yFor(soll)} y2={yFor(soll)} stroke="#dc2626" strokeWidth={1.5} strokeDasharray="4 3"/>
+          <text x={W-pR-2} y={yFor(soll)-2} fontSize={8} fill="#dc2626" textAnchor="end" fontWeight="bold">Soll {soll}m{targetDate?' bis '+targetDate.slice(5):''}</text>
+        </g>}
       </svg>
-      <div style={{marginTop:4}}>
-        <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:G600,marginBottom:2}}>
-          <span>Tagesziel heute</span>
-          <span style={{fontWeight:'bold',color:goalPct>=100?GR:goalPct>=50?AM:G600}}>{Math.round(todayDur/60)}/{15} Min</span>
-        </div>
-        <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
-          <div style={{height:'100%',width:goalPct+'%',background:goalPct>=100?GR:goalPct>=50?AM:T,borderRadius:3,transition:'width 0.3s'}}/>
-        </div>
+      <div style={{marginTop:4,display:'flex',justifyContent:'space-between',fontSize:10,color:G600}}>
+        <span>Heute: <span style={{fontWeight:'bold',color:todayMin>=15?GR:todayMin>=5?AM:G600}}>{todayMin} Min</span></span>
+        {soll>0 ? <span>Soll/Tag: <span style={{fontWeight:'bold',color:'#dc2626'}}>{soll} Min</span></span> : null}
+        <span>Σ 30T: <span style={{fontWeight:'bold'}}>{totalMin} Min</span></span>
       </div>
       <div style={{display:'flex',gap:10,fontSize:9,color:G400,marginTop:4,justifyContent:'center'}}>
-        <span><span style={{color:GR}}>&#9632;</span> Ziel erreicht (&ge;15 Min)</span>
+        <span><span style={{color:GR}}>&#9632;</span> ≥15 Min</span>
         <span><span style={{color:AM}}>&#9632;</span> 5-14 Min</span>
         <span><span style={{color:G400}}>&#9632;</span> &lt;5 Min</span>
       </div>
@@ -2097,12 +2153,37 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!player||!run) return;
     var runWords=[]; try{runWords=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
     var runSents=[]; try{runSents=typeof run.sentences==='string'?JSON.parse(run.sentences||'[]'):(run.sentences||[]);}catch(e){}
+    function reconcile(d){
+      if(!d || !d.pots) return lsInitProgress(runWords, runSents);
+      var runKeys = {};
+      runWords.forEach(function(w){ runKeys[normWordKey(w.word)] = w; });
+      var seen = {};
+      var newPots = {1:[],2:[],3:[],4:[],5:[],6:[]};
+      [1,2,3,4,5,6].forEach(function(pot){
+        (d.pots[pot]||[]).forEach(function(w){
+          var k = normWordKey(w.word);
+          if(!runKeys[k] || seen[k]) return;
+          seen[k] = 1;
+          newPots[pot].push(w);
+        });
+      });
+      runWords.forEach(function(w){
+        var k = normWordKey(w.word);
+        if(!seen[k]) newPots[1].push({word:w.word, clue:w.clue, type:w.type||'noun', chapterId:w.chapterId||'', streak:0, wrongStreak:0});
+      });
+      return Object.assign({}, d, {pots:newPots});
+    }
     lsGetProgress(player.id, run.id).then(function(rows){
       if(Array.isArray(rows)&&rows.length>0){
         var row=rows[0];
-        var d={}; try{d=JSON.parse(row.data||'{}');}catch(e){}
-        if(!d.pots) d=lsInitProgress(runWords, runSents);
-        setData(d);
+        var d=parseData(row.data);
+        var reconciled = reconcile(d);
+        var beforeCount = [1,2,3,4,5,6].reduce(function(s,p){return s+((d.pots&&d.pots[p])||[]).length;},0);
+        var afterCount = [1,2,3,4,5,6].reduce(function(s,p){return s+reconciled.pots[p].length;},0);
+        setData(reconciled);
+        if(beforeCount !== afterCount){
+          lsSaveProgress(player.id, run.id, reconciled);
+        }
       } else {
         setData(lsInitProgress(runWords, runSents));
       }
@@ -2301,7 +2382,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{fontSize:9,color:G400}}>Gelernt</div>
           </div>}
         </div>
-        <LernVerlaufChart sessions={data.sessions||[]} todayExtraSec={sesStart?Math.round((Date.now()-sesStart)/1000):0}/>
+        {(function(){
+          var pct = lsPercent(data, streak);
+          var spentSec = (data.sessions||[]).reduce(function(s,sess){return s+(sess.dur||0);},0) + (sesStart?Math.round((Date.now()-sesStart)/1000):0);
+          var pacing = lsRunPacing(pct, run.target_pct, run.target_date, spentSec);
+          var soll = pacing && pacing.requiredMinPerDay;
+          return <LernVerlaufChart sessions={data.sessions||[]} todayExtraSec={sesStart?Math.round((Date.now()-sesStart)/1000):0} requiredMinPerDay={soll} targetDate={run.target_date}/>;
+        })()}
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
         <button onClick={function(){var nd=saveSession(data);if(nd!==data){lsSaveProgress(player.id,run.id,nd);}onDone();}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
       </div>
@@ -2504,6 +2591,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
   var [loading, setLoading] = useState(true);
   var [streakSettings, setStreakSettings] = useState(null);
   var [progressMap, setProgressMap] = useState({});
+  var [secondsByRun, setSecondsByRun] = useState({});
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   useEffect(function(){
     if(!player||!UUID.test(player.id)){setLoading(false);return;}
@@ -2515,8 +2603,15 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     }).catch(function(){});
     if(UUID.test(player.id)){
       sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data').then(function(rows){
-        var pm={}; (Array.isArray(rows)?rows:[]).forEach(function(row){try{pm[row.run_id]=JSON.parse(row.data||'{}');}catch(e){}});
+        var pm={}; (Array.isArray(rows)?rows:[]).forEach(function(row){pm[row.run_id]=parseData(row.data);});
         setProgressMap(pm);
+      }).catch(function(){});
+      sbGet('learn_sessions','player_id=eq.'+player.id+'&select=run_id,active_seconds').then(function(rows){
+        var sm={}; (Array.isArray(rows)?rows:[]).forEach(function(row){
+          if(!row.run_id) return;
+          sm[row.run_id]=(sm[row.run_id]||0)+(row.active_seconds||0);
+        });
+        setSecondsByRun(sm);
       }).catch(function(){});
     }
   },[]);
@@ -2527,10 +2622,13 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
       {runs.map(function(run){
-        var wordCount = run.word_count || (run.words ? (typeof run.words==='string' ? JSON.parse(run.words||'[]').length : (run.words||[]).length) : 0);
+        var wordCount = safeWords(run.words).length || run.word_count || 0;
         var prog = progressMap[run.id];
         var pct = prog ? lsPercent(prog,gs) : 0;
         var grade = prog ? lsGrade(pct,gs) : null;
+        var pacing = lsRunPacing(pct, run.target_pct, run.target_date, secondsByRun[run.id]||0);
+        var pacingBg = !pacing ? null : (pacing.status==='done'?'#d1fae5':pacing.status==='easy'?'#d1fae5':pacing.status==='ok'?'#fef3c7':pacing.status==='hard'?'#fed7aa':pacing.status==='unrealistic'||pacing.status==='overdue'?'#fee2e2':'#eff6ff');
+        var pacingFg = !pacing ? null : (pacing.status==='done'||pacing.status==='easy'?'#065f46':pacing.status==='ok'?'#92400e':pacing.status==='hard'?'#9a3412':pacing.status==='unrealistic'||pacing.status==='overdue'?'#991b1b':T);
         return(
           <button key={run.id} onClick={function(){onStart(run,gs);}}
             style={{display:'block',width:'100%',textAlign:'left',padding:'13px 14px',marginBottom:7,borderRadius:12,border:'2px solid '+(T+'44'),background:'white',cursor:'pointer',touchAction:'manipulation'}}>
@@ -2543,6 +2641,10 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
               {grade ? <div style={{textAlign:'right'}}><div style={{fontWeight:'bold',fontSize:16,color:T}}>{grade}</div><div style={{fontSize:10,color:G400}}>{pct}%</div></div> : <span style={{fontSize:12,color:G400,padding:'4px 10px',background:G100,borderRadius:20}}>Neu</span>}
             </div>
             {pct>0&&<div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginTop:8}}><div style={{height:'100%',width:pct+'%',background:T,borderRadius:2}}/></div>}
+            {pacing && <div style={{marginTop:7,padding:'6px 9px',borderRadius:7,background:pacingBg,color:pacingFg,fontSize:11,fontWeight:'bold',display:'flex',justifyContent:'space-between',gap:8}}>
+              <span>🎯 bis {pacing.targetDate}{pacing.targetPct<100?' ('+pacing.targetPct+'%)':''}</span>
+              <span>{pacing.status==='done'?'✅ erreicht':(pacing.status==='overdue'?pacing.etaMessage:(pacing.requiredMinPerDay+' Min/Tag · '+pacing.daysLeft+' T'))}</span>
+            </div>}
           </button>
         );
       })}
@@ -2556,6 +2658,9 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
   var [openCh, setOpenCh] = useState(null);
+  var [seqChId, setSeqChId] = useState('');
+  var [seqFrom, setSeqFrom] = useState('');
+  var [seqTo, setSeqTo] = useState('');
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var allWords = useMemo(function(){
     var w=[];
@@ -2564,6 +2669,31 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     });
     return w;
   },[chapters]);
+  var seqChapters = useMemo(function(){
+    return chapters.filter(function(c){
+      if(!c.parent_id) return false;
+      return safeWords(c.words).some(function(w){return typeof w.seq==='number';});
+    });
+  },[chapters]);
+  var seqRange = useMemo(function(){
+    if(!seqChId) return null;
+    var ch = chapters.find(function(c){return c.id===seqChId;});
+    if(!ch) return null;
+    var ws = safeWords(ch.words).filter(function(w){return typeof w.seq==='number';});
+    if(!ws.length) return null;
+    var seqs = ws.map(function(w){return w.seq;}).sort(function(a,b){return a-b;});
+    return {min:seqs[0], max:seqs[seqs.length-1], words:ws};
+  },[seqChId, chapters]);
+  function applySeqRange(){
+    if(!seqRange) return;
+    var lo = parseInt(seqFrom,10) || seqRange.min;
+    var hi = parseInt(seqTo,10) || seqRange.max;
+    if(lo>hi){ var x=lo; lo=hi; hi=x; }
+    var picked = seqRange.words.filter(function(w){return w.seq>=lo && w.seq<=hi;});
+    setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false};}));
+    setMsg('✓ '+picked.length+' Vokabeln aus Bereich '+lo+'–'+hi+' gewählt');
+    setTimeout(function(){setMsg('');},2500);
+  }
   function isSelected(word){ return selectedWords.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
   function toggleWord(wObj){
     setSelectedWords(function(prev){
@@ -2606,6 +2736,26 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
         <button onClick={selectAll} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>Alle ({allWords.length})</button>
         <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'7px 10px',fontSize:11})}>✕</button>
       </div>
+      {seqChapters.length>0 && <div style={{marginBottom:10,padding:10,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:8}}>
+        <div style={{fontSize:11,fontWeight:'bold',color:'#0369a1',marginBottom:5}}>📖 Buchreihenfolge: Bereich auswählen</div>
+        <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+          <select value={seqChId} onChange={function(e){setSeqChId(e.target.value);setSeqFrom('');setSeqTo('');}}
+            style={{flex:'1 1 140px',padding:'5px 7px',fontSize:11,border:'1px solid '+G200,borderRadius:6}}>
+            <option value="">-- Themenbereich --</option>
+            {seqChapters.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.title}</option>;})}
+          </select>
+          {seqRange && <span style={{display:'contents'}}>
+            <span style={{fontSize:10,color:G600}}>von</span>
+            <input type='number' value={seqFrom} onChange={function(e){setSeqFrom(e.target.value);}} placeholder={String(seqRange.min)} min={seqRange.min} max={seqRange.max}
+              style={{width:60,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
+            <span style={{fontSize:10,color:G600}}>bis</span>
+            <input type='number' value={seqTo} onChange={function(e){setSeqTo(e.target.value);}} placeholder={String(seqRange.max)} min={seqRange.min} max={seqRange.max}
+              style={{width:60,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
+            <button onClick={applySeqRange} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>↳ Wählen</button>
+          </span>}
+        </div>
+        {seqRange && <div style={{fontSize:9,color:G400,marginTop:3}}>{seqRange.words.length} Vokabeln mit Reihenfolge in diesem Bereich (seq {seqRange.min}–{seqRange.max})</div>}
+      </div>}
       <div style={{marginBottom:12,padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold'}}>{selectedWords.length} Vokabeln ausgewählt</div>
       {topLevel.map(function(kap){
         var children=chapters.filter(function(c){return c.parent_id===kap.id;});
@@ -2738,8 +2888,7 @@ function LeitersSpielGradeSettings({ onDone }) {
 function sortWords(words){ return words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}); }
 function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving, setMsg) {
   setSaving(true);
-  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if(!UUID.test(chapter.id)){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
+  if(!chapter.id){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
   sbPatch('chapters',{words:newWords},'id=eq.'+chapter.id).then(function(ok){
     if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('✓ Gespeichert'); }
     else setMsg('Fehler!');
@@ -2748,12 +2897,15 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
 }
 
 function safeWords(w){if(Array.isArray(w))return w;if(!w)return[];try{return JSON.parse(w)||[];}catch(e){console.error('safeWords parse error',e);return [];}}
+function parseData(d){if(d==null)return{};if(typeof d==='object')return d;try{return JSON.parse(d||'{}');}catch(e){return{};}}
 function RunEditor({ run, chapters, onSave, onCancel }) {
   var initWords = useMemo(function(){
     var raw=run.words; if(typeof raw==='string'){try{raw=JSON.parse(raw);}catch(e){raw=[];}} return Array.isArray(raw)?raw.slice():[];
   },[]);
   var [words, setWords] = useState(initWords);
   var [saving, setSaving] = useState(false);
+  var [targetDate, setTargetDate] = useState(run.target_date || '');
+  var [targetPct, setTargetPct] = useState(run.target_pct != null ? run.target_pct : 100);
   var allChapWords = useMemo(function(){
     var w=[];
     chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
@@ -2785,10 +2937,12 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   function save(){
     setSaving(true);
     var wordsJson = JSON.stringify(words);
-    sbPatch('ls_runs',{words:wordsJson,word_count:words.length,name:run.name},'id=eq.'+run.id)
+    var body = {words:wordsJson, word_count:words.length, name:run.name,
+      target_date: targetDate||null, target_pct: targetPct||100};
+    sbPatch('ls_runs',body,'id=eq.'+run.id)
       .then(function(){
         setSaving(false);
-        onSave(Object.assign({},run,{words:words,word_count:words.length}));
+        onSave(Object.assign({},run,{words:words,word_count:words.length,target_date:targetDate||null,target_pct:targetPct||100}));
       })
       .catch(function(){setSaving(false);});
   }
@@ -2797,6 +2951,20 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:4}}>{run.icon} {run.name} bearbeiten</div>
       <div style={{padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold',marginBottom:10}}>{words.length} Vokabeln im Run</div>
+      <div style={{padding:10,background:'white',border:'1px solid '+G200,borderRadius:8,marginBottom:10}}>
+        <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6}}>🎯 Lernziel</div>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <label style={{fontSize:11,color:G400,flex:'0 0 auto'}}>Bis:</label>
+          <input type='date' value={targetDate||''} onChange={function(e){setTargetDate(e.target.value);}}
+            style={{flex:1,padding:'5px 7px',fontSize:12,border:'1px solid '+G200,borderRadius:6}}/>
+          <label style={{fontSize:11,color:G400,flex:'0 0 auto'}}>Ziel:</label>
+          <input type='number' min='1' max='100' value={targetPct} onChange={function(e){setTargetPct(parseInt(e.target.value,10)||100);}}
+            style={{width:54,padding:'5px 7px',fontSize:12,border:'1px solid '+G200,borderRadius:6}}/>
+          <span style={{fontSize:11,color:G400}}>%</span>
+          {targetDate&&<button onClick={function(){setTargetDate('');}} title='Ziel löschen'
+            style={{padding:'4px 8px',fontSize:10,border:'1px solid '+G200,background:'white',color:G400,cursor:'pointer',borderRadius:5}}>✕</button>}
+        </div>
+      </div>
       {topLevel.map(function(kap){
         var children=chapters.filter(function(c){return c.parent_id===kap.id;});
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
@@ -2846,11 +3014,106 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   );
 }
 
+function DailyLearnChart({ sessions, run, pacing }) {
+  var [range, setRange] = useState('14');
+  var byDay = {};
+  var earliestSec = null;
+  (sessions||[]).forEach(function(s){
+    if(!s.started_at) return;
+    var k = String(s.started_at).slice(0,10);
+    byDay[k] = (byDay[k]||0) + (s.active_seconds||0);
+    var t = new Date(s.started_at).getTime();
+    if(earliestSec===null || t<earliestSec) earliestSec=t;
+  });
+  var today = new Date(); today.setHours(0,0,0,0);
+  var nDays;
+  var endDate = today;
+  if(range==='all'){
+    nDays = earliestSec ? Math.max(7, Math.ceil((today-earliestSec)/86400000)+1) : 14;
+  } else if(range==='target' && run && run.target_date){
+    var td = new Date(run.target_date+'T00:00:00');
+    var startMs = earliestSec || (td-86400000*30);
+    var startDate = new Date(startMs); startDate.setHours(0,0,0,0);
+    nDays = Math.max(7, Math.ceil((td-startDate)/86400000)+1);
+    endDate = td;
+  } else {
+    nDays = parseInt(range,10) || 14;
+  }
+  var maxBars = 90;
+  if(nDays>maxBars) nDays = maxBars;
+  var rows = [];
+  for(var i=nDays-1; i>=0; i--){
+    var d = new Date(endDate); d.setDate(d.getDate()-i);
+    var key = d.toISOString().slice(0,10);
+    var dayMs = d.getTime();
+    rows.push({ key:key, label:d.getDate()+'.'+(d.getMonth()+1), min:Math.round((byDay[key]||0)/60), isToday:dayMs===today.getTime(), isFuture:dayMs>today.getTime() });
+  }
+  var required = pacing && pacing.requiredMinPerDay || 0;
+  var dataMax = rows.reduce(function(m,r){return Math.max(m,r.min);},0);
+  var maxMin = Math.max(dataMax, required, 20);
+  var W=320, H=140, PAD_L=28, PAD_B=22, PAD_T=10, PAD_R=8;
+  var chartW = W-PAD_L-PAD_R, chartH = H-PAD_T-PAD_B;
+  var barW = chartW/rows.length;
+  var yFor = function(v){ return PAD_T + chartH - (v/maxMin)*chartH; };
+  var totalMin = rows.reduce(function(s,r){return s+r.min;},0);
+  var pastDays = rows.filter(function(r){return !r.isFuture;}).length || 1;
+  var avgMin = Math.round(totalMin/pastDays);
+  var targetX = null;
+  if(run && run.target_date){
+    var ti = rows.findIndex(function(r){return r.key===run.target_date;});
+    if(ti>=0) targetX = PAD_L + ti*barW + barW/2;
+  }
+  var labelEvery = Math.max(1, Math.ceil(nDays/8));
+  var rangeBtns = [['7','7T'],['14','14T'],['30','30T'],['60','60T'],['90','90T'],['all','Alle'],['target','→Ziel']];
+  return <div style={{padding:'8px 4px',background:'white',borderRadius:8,border:'1px solid '+G200,marginTop:6}}>
+    <div style={{display:'flex',gap:3,padding:'0 6px 6px',flexWrap:'wrap'}}>
+      {rangeBtns.map(function(b){
+        var disabled = b[0]==='target' && !(run&&run.target_date);
+        return <button key={b[0]} disabled={disabled} onClick={function(){setRange(b[0]);}}
+          style={{padding:'3px 7px',fontSize:9,border:'1px solid '+(range===b[0]?T:G200),background:range===b[0]?T:'white',color:range===b[0]?'white':disabled?G200:G600,borderRadius:5,cursor:disabled?'not-allowed':'pointer',fontWeight:'bold'}}>{b[1]}</button>;
+      })}
+    </div>
+    <div style={{fontSize:10,color:G600,padding:'0 8px 4px',display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+      <span><span style={{fontWeight:'bold'}}>📊 {nDays} Tage</span> · ⌀ {avgMin} Min/Tag · Σ {totalMin} Min</span>
+      {required>0&&<span style={{color:'#9a3412'}}>Soll: {required} Min/Tag</span>}
+    </div>
+    <svg width={W} height={H} viewBox={'0 0 '+W+' '+H} style={{maxWidth:'100%',display:'block'}}>
+      {[0.25,0.5,0.75,1].map(function(f,i){
+        var v=Math.round(maxMin*f);
+        return <g key={i}>
+          <line x1={PAD_L} x2={W-PAD_R} y1={yFor(v)} y2={yFor(v)} stroke={G100} strokeDasharray='2 2'/>
+          <text x={PAD_L-3} y={yFor(v)+3} fontSize='8' fill={G400} textAnchor='end'>{v}</text>
+        </g>;
+      })}
+      {rows.map(function(r,i){
+        var x = PAD_L + i*barW;
+        var y = yFor(r.min);
+        var h = chartH - (y-PAD_T);
+        var fill = r.isToday?T:r.isFuture?G100:'#5eead4';
+        return <g key={r.key}>
+          {r.min>0 && <rect x={x+1} y={y} width={Math.max(1,barW-2)} height={Math.max(0,h)} fill={fill} rx='1'/>}
+          {(i%labelEvery===0||r.isToday) && <text x={x+barW/2} y={H-PAD_B+10} fontSize='8' fill={r.isToday?T:G400} textAnchor='middle' fontWeight={r.isToday?'bold':'normal'}>{r.label}</text>}
+          {r.min>0 && barW>16 && <text x={x+barW/2} y={y-2} fontSize='8' fill={G600} textAnchor='middle'>{r.min}</text>}
+        </g>;
+      })}
+      {required>0 && yFor(required)>=PAD_T && <g>
+        <line x1={PAD_L} x2={W-PAD_R} y1={yFor(required)} y2={yFor(required)} stroke='#dc2626' strokeWidth='1.5' strokeDasharray='4 3'/>
+        <text x={W-PAD_R-2} y={yFor(required)-2} fontSize='8' fill='#dc2626' textAnchor='end' fontWeight='bold'>Soll {required}</text>
+      </g>}
+      {targetX!==null && <g>
+        <line x1={targetX} x2={targetX} y1={PAD_T} y2={H-PAD_B} stroke='#7c3aed' strokeWidth='1.5' strokeDasharray='3 2'/>
+        <text x={targetX} y={PAD_T+8} fontSize='8' fill='#7c3aed' textAnchor='middle' fontWeight='bold'>🎯 Ziel</text>
+      </g>}
+    </svg>
+  </div>;
+}
+
 function LeitersSpielAdminOverview({ chapters, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
   var [allProgress, setAllProgress] = useState([]);
   var [allDisputes, setAllDisputes] = useState([]);
+  var [allSessions, setAllSessions] = useState([]);
   var [loading, setLoading] = useState(true);
   var [editRun, setEditRun] = useState(null);
   var [tab, setTab] = useState('runs');
@@ -2861,15 +3124,26 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       lsGetRuns(),
       sbGet('players','select=id,name,total_score,is_active,is_admin').then(function(d){return Array.isArray(d)?d:[];}),
       sbGet('ls_progress','select=player_id,run_id,data').then(function(d){return Array.isArray(d)?d:[];}),
-      sbGet('word_disputes','status=eq.open&order=created_at.desc').then(function(d){return Array.isArray(d)?d:[];})
+      sbGet('word_disputes','status=eq.open&order=created_at.desc').then(function(d){return Array.isArray(d)?d:[];}),
+      sbGet('learn_sessions','select=player_id,run_id,active_seconds,started_at').then(function(d){return Array.isArray(d)?d:[];})
     ]).then(function(res){
       setRuns(Array.isArray(res[0])?res[0]:[]);
       setAllUsers((res[1]||[]).filter(function(u){return !u.is_admin;}));
       setAllProgress(res[2]||[]);
       setAllDisputes(res[3]||[]);
+      setAllSessions(res[4]||[]);
       setLoading(false);
     }).catch(function(){ setLoading(false); });
   },[]);
+  function secondsForPlayerRun(playerId, runId){
+    var s=0; allSessions.forEach(function(r){ if(r.player_id===playerId && r.run_id===runId) s+=(r.active_seconds||0); });
+    return s;
+  }
+  function secondsForPlayerTotal(playerId){
+    var s=0; allSessions.forEach(function(r){ if(r.player_id===playerId) s+=(r.active_seconds||0); });
+    return s;
+  }
+  function fmtMin(sec){ var m=Math.round(sec/60); if(m<60) return m+' Min'; var h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
   function deleteRun(runId){
     if(!confirm('Run löschen?')) return;
     sbDel('ls_runs','id=eq.'+runId).then(function(){
@@ -2879,7 +3153,10 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   function getProgData(playerId, runId){
     var row = allProgress.find(function(p){return p.player_id===playerId&&p.run_id===runId;});
     if(!row) return null;
-    try{ return JSON.parse(row.data||'{}'); }catch(e){ return null; }
+    var d = row.data;
+    if(d == null) return null;
+    if(typeof d === 'object') return d;
+    try{ return JSON.parse(d||'{}'); }catch(e){ return null; }
   }
   function getWordCount(run){
     var wc = run.word_count; if(wc) return wc;
@@ -2891,7 +3168,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
-        {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;})}
+        {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['time','⏱️ Zeit'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:11,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
         {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
@@ -2989,6 +3266,42 @@ function LeitersSpielAdminOverview({ chapters, player }) {
           </div>;
         })}
       </div>)}
+      {tab==='time'&&(<div>
+        {allUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine Spieler gefunden.</div>}
+        {allUsers.map(function(u){
+          var totalSec = secondsForPlayerTotal(u.id);
+          return <div key={u.id} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+G200,background:'white'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+              <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{u.name}</span>
+              <span style={{fontSize:11,color:T,marginLeft:'auto',fontWeight:'bold'}}>⏱ {fmtMin(totalSec)} insg.</span>
+            </div>
+            {runs.filter(function(r){return secondsForPlayerRun(u.id,r.id)>0 || allProgress.some(function(p){return p.player_id===u.id&&p.run_id===r.id;});}).length===0
+              ? <div style={{fontSize:11,color:G400,fontStyle:'italic',textAlign:'center',padding:8}}>Noch keine Aktivität</div>
+              : runs.map(function(run){
+                var sec = secondsForPlayerRun(u.id, run.id);
+                var prog = getProgData(u.id, run.id);
+                if(sec===0 && !prog) return null;
+                var pct = prog ? lsPercent(prog) : 0;
+                var pacing = lsRunPacing(pct, run.target_pct, run.target_date, sec);
+                var chartKey = 'tch__'+u.id+'__'+run.id;
+                var chartOpen = expanded[chartKey];
+                var runSessions = allSessions.filter(function(s){return s.player_id===u.id && s.run_id===run.id;});
+                return <div key={run.id} style={{borderRadius:7,background:G50,marginBottom:4}}>
+                  <div onClick={function(){toggle(chartKey);}} style={{padding:'6px 9px',fontSize:11,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',cursor:'pointer'}}>
+                    <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
+                    <span style={{flex:'1 1 120px',fontWeight:'bold',color:G900}}>{run.name}</span>
+                    <span style={{color:G600}}>⏱ {fmtMin(sec)}</span>
+                    <span style={{color:T,fontWeight:'bold'}}>{pct}%</span>
+                    {pacing && pacing.requiredMinPerDay!=null && <span style={{padding:'2px 6px',borderRadius:5,background:pacing.status==='unrealistic'||pacing.status==='overdue'?'#fee2e2':pacing.status==='hard'?'#fed7aa':pacing.status==='ok'?'#fef3c7':'#d1fae5',color:pacing.status==='unrealistic'||pacing.status==='overdue'?'#991b1b':pacing.status==='hard'?'#9a3412':pacing.status==='ok'?'#92400e':'#065f46',fontWeight:'bold'}}>→ {pacing.requiredMinPerDay}m/T · {pacing.daysLeft}T</span>}
+                    {pacing && pacing.status==='done' && <span style={{padding:'2px 6px',borderRadius:5,background:'#d1fae5',color:'#065f46',fontWeight:'bold'}}>✅ Ziel</span>}
+                    <span style={{fontSize:10,color:G400}}>{chartOpen?'▲':'📊▼'}</span>
+                  </div>
+                  {chartOpen && <div style={{padding:'4px 9px 9px'}}><DailyLearnChart sessions={runSessions} run={run} pacing={pacing}/></div>}
+                </div>;
+              })}
+          </div>;
+        })}
+      </div>)}
       {tab==='disputes'&&(<div>
         {allDisputes.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine offenen Anfragen.</div>}
         {allDisputes.map(function(d){
@@ -3045,21 +3358,64 @@ function CategoryPicker({ allCategories, selected, onChange }) {
 function ApiKeyManager({ onClose }) {
   var [key, setKey] = useState('');
   var [saved, setSaved] = useState('');
+  var [provider, setProvider] = useState(localStorage.getItem('vision_provider')||'anthropic');
+  var [ollamaUrl, setOllamaUrl] = useState(localStorage.getItem('ollama_url')||'http://localhost:11434');
+  var [ollamaModel, setOllamaModel] = useState(localStorage.getItem('ollama_model')||'qwen2.5vl:72b');
+  var [testStatus, setTestStatus] = useState('');
   useEffect(function(){ var k=localStorage.getItem('claude_api_key'); if(k) setSaved(k); },[]);
   function save(){ if(key.trim()){localStorage.setItem('claude_api_key',key.trim());setSaved(key.trim());setKey('');} }
   function remove(){ localStorage.removeItem('claude_api_key'); setSaved(''); setKey(''); }
+  function selectProvider(p){ setProvider(p); localStorage.setItem('vision_provider',p); }
+  function saveOllama(){ localStorage.setItem('ollama_url',ollamaUrl.replace(/\/$/,'')); localStorage.setItem('ollama_model',ollamaModel); setTestStatus('💾 Gespeichert'); setTimeout(function(){setTestStatus('');},1500); }
+  function testOllama(){
+    setTestStatus('⏳ Teste…');
+    fetch(ollamaUrl.replace(/\/$/,'')+'/api/tags').then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    }).then(function(d){
+      var models=(d.models||[]).map(function(m){return m.name;});
+      var has=models.some(function(m){return m===ollamaModel||m.split(':')[0]===ollamaModel.split(':')[0];});
+      setTestStatus(has?('✅ Verbunden — '+models.length+' Modelle, '+ollamaModel+' verfügbar'):('⚠️ Verbunden, aber Modell `'+ollamaModel+'` nicht gepullt. Verfügbar: '+(models.join(', ')||'keine')));
+    }).catch(function(e){ setTestStatus('❌ Nicht erreichbar: '+e.message+' — läuft `ollama serve`? CORS via `OLLAMA_ORIGINS=*` setzen.'); });
+  }
   return(
     <div style={{padding:8}}>
-      <p style={{fontSize:12,color:G600,marginBottom:10}}>API-Key für Claude (Grammar Trainer Batch-Generierung):</p>
-      {saved&&<div style={{padding:'8px 12px',background:'#d1fae5',borderRadius:8,marginBottom:8,fontSize:11,color:T,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span>✓ Key gespeichert: {saved.slice(0,8)}…</span>
-        <button onClick={remove} style={{border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Entfernen</button>
-      </div>}
-      <div style={{display:'flex',gap:6}}>
-        <input value={key} onChange={function(e){setKey(e.target.value);}} placeholder="sk-ant-…" type="password"
-          style={{flex:1,padding:'10px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
-        <button onClick={save} style={BtnStyle(T,'white',{padding:'10px 14px'})}>💾</button>
+      <p style={{fontSize:12,color:G600,marginBottom:10,fontWeight:'bold'}}>🖼 Bildanalyse-Anbieter</p>
+      <div style={{display:'flex',gap:6,marginBottom:10}}>
+        <button onClick={function(){selectProvider('anthropic');}} style={Object.assign({},BtnStyle(provider==='anthropic'?T:G100, provider==='anthropic'?'white':G600,{flex:1,padding:'8px',fontSize:11}))}>☁️ Claude (Anthropic)</button>
+        <button onClick={function(){selectProvider('ollama');}} style={Object.assign({},BtnStyle(provider==='ollama'?T:G100, provider==='ollama'?'white':G600,{flex:1,padding:'8px',fontSize:11}))}>🖥 Ollama (lokal)</button>
       </div>
+      {provider==='anthropic'&&<div>
+        <p style={{fontSize:11,color:G600,marginBottom:8}}>Anthropic API-Key (auch für Grammar Trainer + Auto-Kategorisierung):</p>
+        {saved&&<div style={{padding:'8px 12px',background:'#d1fae5',borderRadius:8,marginBottom:8,fontSize:11,color:T,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span>✓ Key gespeichert: {saved.slice(0,8)}…</span>
+          <button onClick={remove} style={{border:'none',background:'none',color:RE,cursor:'pointer',fontSize:11}}>Entfernen</button>
+        </div>}
+        <div style={{display:'flex',gap:6}}>
+          <input value={key} onChange={function(e){setKey(e.target.value);}} placeholder="sk-ant-…" type="password"
+            style={{flex:1,padding:'10px',fontSize:14,border:'2px solid '+T,borderRadius:8,outline:'none'}}/>
+          <button onClick={save} style={BtnStyle(T,'white',{padding:'10px 14px'})}>💾</button>
+        </div>
+      </div>}
+      {provider==='ollama'&&<div>
+        <p style={{fontSize:11,color:G600,marginBottom:8}}>Lokales Vision-Modell via <a href='https://ollama.com' target='_blank' rel='noopener' style={{color:T}}>Ollama</a>. Setup: <code style={{background:G100,padding:'1px 4px',borderRadius:3}}>brew install ollama</code> · <code style={{background:G100,padding:'1px 4px',borderRadius:3}}>ollama pull llama3.2-vision</code> · <code style={{background:G100,padding:'1px 4px',borderRadius:3}}>OLLAMA_ORIGINS=* ollama serve</code></p>
+        <div style={{marginBottom:6}}>
+          <label style={{fontSize:10,color:G400,fontWeight:'bold'}}>Endpoint:</label>
+          <input value={ollamaUrl} onChange={function(e){setOllamaUrl(e.target.value);}}
+            style={{width:'100%',padding:'7px',fontSize:12,border:'1px solid '+G200,borderRadius:6,marginTop:2,boxSizing:'border-box'}}/>
+        </div>
+        <div style={{marginBottom:6}}>
+          <label style={{fontSize:10,color:G400,fontWeight:'bold'}}>Modell:</label>
+          <input value={ollamaModel} onChange={function(e){setOllamaModel(e.target.value);}} placeholder='llama3.2-vision oder qwen2-vl'
+            style={{width:'100%',padding:'7px',fontSize:12,border:'1px solid '+G200,borderRadius:6,marginTop:2,boxSizing:'border-box'}}/>
+        </div>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={testOllama} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>🔌 Verbindung testen</button>
+          <button onClick={saveOllama} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>💾 Speichern</button>
+        </div>
+        {testStatus&&<div style={{marginTop:8,padding:'6px 9px',borderRadius:6,fontSize:10,background:testStatus.indexOf('❌')>=0?'#fee2e2':testStatus.indexOf('⚠')>=0?'#fef3c7':'#d1fae5',color:testStatus.indexOf('❌')>=0?'#991b1b':testStatus.indexOf('⚠')>=0?'#92400e':'#065f46'}}>{testStatus}</div>}
+        <div style={{marginTop:10,padding:'7px 10px',background:'#fef3c7',color:'#92400e',fontSize:10,borderRadius:6}}>⚠️ Lokale Vision-Modelle erkennen Bold-Stil weniger zuverlässig als Claude. ⭐-Markierungen ggf. nachpflegen.</div>
+      </div>}
     </div>
   );
 }
@@ -3317,6 +3673,20 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [newUserName, setNewUserName] = useState('');
   var [newUserPw, setNewUserPw] = useState('');
   var [newUserErr, setNewUserErr] = useState('');
+  var [expandedUserId, setExpandedUserId] = useState(null);
+  var [userProgress, setUserProgress] = useState({});
+  var [userRuns, setUserRuns] = useState({});
+  function loadUserData(userId){
+    var UUID2=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!UUID2.test(userId)) return;
+    if(userProgress[userId]) return;
+    sbGet('ls_progress','player_id=eq.'+userId+'&select=run_id,data').then(function(rows){
+      setUserProgress(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
+    }).catch(function(){});
+    sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+userId+')&select=*').then(function(rows){
+      setUserRuns(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
+    }).catch(function(){});
+  }
   var [showDup, setShowDup] = useState(false);
   var fileRef = useRef();
   var imgRef = useRef();
@@ -3348,18 +3718,30 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
 
   function saveChapter(form) {
     setSaving(true);
-    var isNew = !form.id || !UUID.test(form.id);
+    var isNew = !form.id;
     if(isNew){
-      var body={title:form.title,color:form.color,icon:form.icon,parent_id:form.parent_id||null,words:form.words||[],sentences:form.sentences||[]};
+      var newId='ch_'+Date.now();
+      var body={id:newId,title:form.title,color:form.color,icon:form.icon,parent_id:form.parent_id||null,words:form.words||[],sentences:form.sentences||[]};
       sbPost('chapters',body).then(function(res){
-        if(res&&res.id){ setChapters(function(prev){return prev.concat([Object.assign({},body,{id:res.id})]);}) }
-        setSaving(false); setMsg('✓ Gespeichert'); setShowNewCh(false); setEditCh(null);
+        if(res && !res._err){
+          var finalId=(res&&res.id)||newId;
+          setChapters(function(prev){return prev.concat([Object.assign({},body,{id:finalId})]);});
+          setMsg('✓ Gespeichert'); setShowNewCh(false); setEditCh(null);
+        } else {
+          setMsg('Fehler: '+((res&&res.msg)||'unbekannt'));
+        }
+        setSaving(false);
       });
     } else {
       var upd={title:form.title,color:form.color,icon:form.icon};
-      sbPatch('chapters',upd,'id=eq.'+form.id).then(function(){
-        setChapters(function(prev){return prev.map(function(c){return c.id===form.id?Object.assign({},c,upd):c;});});
-        setSaving(false); setMsg('✓ Gespeichert'); setEditCh(null);
+      sbPatch('chapters',upd,'id=eq.'+form.id).then(function(ok){
+        if(ok){
+          setChapters(function(prev){return prev.map(function(c){return c.id===form.id?Object.assign({},c,upd):c;});});
+          setMsg('✓ Gespeichert'); setEditCh(null);
+        } else {
+          setMsg('Fehler beim Speichern');
+        }
+        setSaving(false);
       });
     }
   }
@@ -3434,23 +3816,48 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     var reader=new FileReader();
     reader.onload=function(){
       var b64=reader.result.split(',')[1];
+      var prompt='You are extracting vocabulary entries from a German/English school-book page (Camden Town / Notting Hill Gate or similar).\n\nEACH ENTRY is one English word/phrase with its German translation. Entries are usually separated by horizontal lines and contain a phonetic transcription /.../ between English and German.\n\nFor EACH entry, decide if the English headword is printed in BOLD type — meaning visually heavier/thicker stroke than the surrounding entries on the SAME page. Compare against the lighter (regular) entries on the page; bold entries usually mark the words students must learn for the unit.\n\nIMPORTANT RULES:\n- Verbs MUST be prefixed with "to ": e.g. "to play", "to sing", never just "play".\n- If unsure about bold vs. regular: prefer bold=true when the stroke is even slightly heavier than the page baseline.\n- Look at the WHOLE page first to establish what "regular weight" looks like, then mark each word relative to that.\n- type values: "verb" | "noun" | "adjective" | "phrase" | "other"\n\nReturn ONLY JSON, no markdown fences, no commentary:\n{"words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"}]}\n\nIf you cannot read a part of the page, omit those entries — do not guess words you cannot see.';
+      var provider=localStorage.getItem('vision_provider')||'anthropic';
+      var ollamaUrl=(localStorage.getItem('ollama_url')||'http://localhost:11434').replace(/\/$/,'');
+      var ollamaModel=localStorage.getItem('ollama_model')||'qwen2.5vl:72b';
+      var done=function(words){ setImgDraft(words||[]); setImgMsg('✅ '+(words||[]).length+' Vokabeln erkannt'); setImgLoading(false); };
+      var fail=function(msg){ setImgMsg('Fehler: '+msg); setImgLoading(false); };
+      function extractJson(text){
+        var t=String(text||'').trim().replace(/```json|```/g,'').trim();
+        try{ return JSON.parse(t); }catch(e){
+          var m=t.match(/\{[\s\S]*\}/);
+          if(m){ try{ return JSON.parse(m[0]); }catch(e2){} }
+          throw new Error('Modell-Antwort ist kein gültiges JSON: '+t.slice(0,150));
+        }
+      }
+      if(provider==='ollama'){
+        fetch(ollamaUrl+'/api/chat',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({model:ollamaModel, stream:false, format:'json',
+            messages:[{role:'user', content:prompt, images:[b64]}]
+          })
+        }).then(function(r){ if(!r.ok) throw new Error('Ollama HTTP '+r.status); return r.json(); })
+        .then(function(d){
+          var content=(d&&d.message&&d.message.content)||'';
+          var parsed=extractJson(content);
+          done(parsed.words||[]);
+        }).catch(function(e){ fail('Ollama: '+e.message+' — läuft `ollama serve`? Modell `'+ollamaModel+'` gepullt? CORS via OLLAMA_ORIGINS=*'); });
+        return;
+      }
       sbGet('settings','key=eq.anthropic_key').then(function(d){
         var key=(d&&d[0]&&d[0].value)||localStorage.getItem('claude_api_key')||'';
-        if(!key){setImgMsg('Kein API-Key hinterlegt. Bitte unter 🔑 API-Key eintragen.');setImgLoading(false);return;}
+        if(!key){setImgMsg('Kein API-Key hinterlegt. Wechsle unter 🔑 API-Key auf "Ollama" oder hinterlege einen Anthropic-Key.');setImgLoading(false);return;}
         fetch('https://api.anthropic.com/v1/messages',{
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-          body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:[
+          body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:8000,messages:[{role:'user',content:[
             {type:'image',source:{type:'base64',media_type:file.type,data:b64}},
-            {type:'text',text:'Analysiere diese Schulbuch-Seite fuer einen Englisch-Vokabeltrainer.\n\nVokabeln sind zwischen horizontalen Trennlinien angeordnet. Ein Block ist eine Vokabel wenn er eine Lautschrift /.../ enthaelt.\n\nimportant:true wenn die englische Vokabel FETT gedruckt ist, sonst false.\n\nVerben immer mit "to": "to play", "to sing".\n\nAntworte NUR mit JSON, kein Markdown:\n{"words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"}]}\n\nErlaubte Typen: "verb","noun","adjective","phrase","other"'}
+            {type:'text',text:prompt}
           ]}]})
         }).then(function(r){return r.json();}).then(function(d){
-          var txt=(d.content||[]).map(function(b){return b.text||'';}).join('').trim().replace(/```json|```/g,'').trim();
-          var parsed=JSON.parse(txt);
-          setImgDraft(parsed.words||[]);
-          setImgMsg('✅ '+(parsed.words||[]).length+' Vokabeln erkannt');
-          setImgLoading(false);
-        }).catch(function(e){setImgMsg('Fehler: '+e.message);setImgLoading(false);});
+          var txt=(d.content||[]).map(function(b){return b.text||'';}).join('');
+          done(extractJson(txt).words||[]);
+        }).catch(function(e){ fail(e.message); });
       });
     };
     reader.readAsDataURL(file);
@@ -3571,7 +3978,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             <div onClick={function(){toggleCh(kap.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:open?(kap.color||T)+'15':'white',cursor:'pointer'}}>
               <span style={{fontSize:20}}>{kap.icon}</span>
               <span style={{flex:1,fontWeight:'bold',fontSize:13,color:kap.color||T}}>{kap.title}</span>
-              {UUID.test(kap.id)&&<button onClick={function(e){e.stopPropagation();if(confirm('Kapitel löschen?'))deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
+              {kap.id&&!kap.is_builtin&&<button onClick={function(e){e.stopPropagation();if(confirm('Kapitel löschen?'))deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
               <span style={{color:G400,fontSize:11}}>{open?'▲':'▼'}</span>
             </div>
             {open&&<div style={{borderTop:'1px solid '+G100}}>
@@ -3591,7 +3998,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                       return null;
                     })()}
                     <button onClick={function(e){e.stopPropagation();setEditCh(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:5,marginLeft:2}}>✏️</button>
-                    {UUID.test(ch.id)&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
+                    {ch.id&&!ch.is_builtin&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
                     <span style={{color:G400,fontSize:10,marginLeft:2}}>{chOpen?'▲':'▼'}</span>
                   </div>
                   {chOpen&&<div style={{padding:'6px 18px 10px',background:'#f9fafb'}}>
@@ -3654,6 +4061,18 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                 </div>;
               })}
               <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📖',parent_id:kap.id,words:[],sentences:[]});}} style={{width:'100%',margin:'8px 0',padding:'7px',borderRadius:8,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Themenbereich zu {kap.title}</button>
+              {showNewCh&&newChForm.parent_id===kap.id&&(<div style={{margin:'8px 12px',padding:12,background:'white',borderRadius:10,border:'2px solid '+T}}>
+                <div style={{fontWeight:'bold',fontSize:12,marginBottom:8}}>Neuer Themenbereich in {kap.title}</div>
+                <div style={{display:'flex',gap:6,marginBottom:6}}>
+                  <input value={newChForm.icon} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{icon:e.target.value});});}} style={{width:40,padding:'6px',fontSize:14,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}} placeholder="Icon"/>
+                  <input value={newChForm.title} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{title:e.target.value});});}} style={{flex:1,padding:'6px',fontSize:13,border:'1px solid '+G200,borderRadius:6}} placeholder="Titel"/>
+                  <input value={newChForm.color} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{color:e.target.value});});}} type="color" style={{width:36,height:30,padding:2,border:'1px solid '+G200,borderRadius:6,cursor:'pointer'}}/>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={function(){saveChapter(newChForm);}} disabled={saving||!newChForm.title} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>{saving?'…':'✓ Erstellen'}</button>
+                  <button onClick={function(){setShowNewCh(false);}} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>Abbrechen</button>
+                </div>
+              </div>)}
             </div>}
           </div>;
         })}
@@ -3665,7 +4084,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
           setMsg('🤖 Kategorisiere '+missing.length+' Themenbereiche…');
         }} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'9px',marginTop:4,fontSize:12})}>🤖 Alle Vokabeln auto-kategorisieren</button>
         <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📗',parent_id:'',words:[],sentences:[]});}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',marginTop:4})}>+ Neues Kapitel</button>
-        {showNewCh&&(<div style={{padding:12,background:'white',borderRadius:10,border:'2px solid '+T,marginTop:8}}>
+        {showNewCh&&!newChForm.parent_id&&(<div style={{padding:12,background:'white',borderRadius:10,border:'2px solid '+T,marginTop:8}}>
           <div style={{fontWeight:'bold',fontSize:12,marginBottom:8}}>{newChForm.parent_id?'Neuer Themenbereich':'Neues Kapitel'}</div>
           <div style={{display:'flex',gap:6,marginBottom:6}}>
             <input value={newChForm.icon} onChange={function(e){setNewChForm(function(f){return Object.assign({},f,{icon:e.target.value});});}} style={{width:40,padding:'6px',fontSize:14,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}} placeholder="Icon"/>
@@ -3735,14 +4154,16 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
           }} style={{width:'100%',padding:'8px',borderRadius:7,border:'none',background:T,color:'white',fontWeight:'bold',fontSize:12,cursor:'pointer'}}>Anlegen</button>
         </div>)}
         {(allUsers||[]).filter(function(u){return !u.is_admin;}).map(function(u){
-          return <div key={u.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
+          var isOpen = expandedUserId===u.id;
+          return <div key={u.id} style={{marginBottom:6,borderRadius:10,border:'1px solid '+(isOpen?T:G200),background:'white',overflow:'hidden'}}>
+            <div onClick={function(){var open=!isOpen; setExpandedUserId(open?u.id:null); if(open) loadUserData(u.id);}} style={{padding:'10px 12px',display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
               <span style={{fontSize:18}}>👤</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13}}>{u.name}</div>
-                <div style={{fontSize:10,color:G400}}>Punkte: {u.total_score||0} · Richtig: {u.total_correct||0}</div>
+                <div style={{fontSize:10,color:G400}}>Punkte: {u.total_score||0} · Richtig: {u.total_correct||0} · Falsch: {u.total_wrong||0}</div>
               </div>
-              <button onClick={function(){
+              <button onClick={function(e){
+                e.stopPropagation();
                 var active=u.is_active!==false;
                 sbPatch('players',{is_active:!active},'id=eq.'+u.id).then(function(){
                   setAllUsers(function(prev){return prev.map(function(x){return x.id===u.id?Object.assign({},x,{is_active:!active}):x;});});
@@ -3750,7 +4171,31 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
               }} style={{padding:'4px 10px',borderRadius:6,border:'1px solid '+G200,background:u.is_active!==false?GR:RE,color:'white',cursor:'pointer',fontSize:10,fontWeight:'bold'}}>
                 {u.is_active!==false?'Aktiv':'Inaktiv'}
               </button>
+              <span style={{fontSize:11,color:G400}}>{isOpen?'▲':'📊▼'}</span>
             </div>
+            {isOpen && (function(){
+              var rows = userProgress[u.id];
+              var runs = userRuns[u.id]||[];
+              if(!rows) return <div style={{padding:'8px 12px',fontSize:11,color:G400}}>Lade…</div>;
+              var allSessions = [];
+              var totalSollMin = 0;
+              rows.forEach(function(r){
+                var d = parseData(r.data);
+                (d.sessions||[]).forEach(function(s){ allSessions.push(s); });
+                var run = runs.find(function(rn){return rn.id===r.run_id;});
+                if(run && run.target_date){
+                  var pct = lsPercent(d, DEFAULT_STREAK);
+                  var spentSec = (d.sessions||[]).reduce(function(s,sess){return s+(sess.dur||0);},0);
+                  var pacing = lsRunPacing(pct, run.target_pct, run.target_date, spentSec);
+                  if(pacing && pacing.requiredMinPerDay) totalSollMin += pacing.requiredMinPerDay;
+                }
+              });
+              if(allSessions.length===0 && totalSollMin===0) return <div style={{padding:'8px 12px',fontSize:11,color:G400,fontStyle:'italic'}}>Noch keine Lernzeit gemessen.</div>;
+              var nearestTarget = runs.filter(function(r){return r.target_date;}).map(function(r){return r.target_date;}).sort()[0];
+              return <div style={{padding:'8px 12px',background:G50,borderTop:'1px solid '+G200}}>
+                <LernVerlaufChart sessions={allSessions} requiredMinPerDay={totalSollMin||null} targetDate={nearestTarget} title={'Lernverlauf von '+u.name}/>
+              </div>;
+            })()}
           </div>;
         })}
       </div>)}
@@ -4542,6 +4987,47 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       if(Array.isArray(d)&&d.length>0){try{var s=JSON.parse(d[0].value);if(s)setQuizScoring(s);}catch(e){}}
     }).catch(function(){});
   },[player&&player.id]);
+
+  useEffect(function(){
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!player||!UUID.test(player.id)) return;
+    if(!(window.crypto && window.crypto.randomUUID)) return;
+    var runId = (lsRun&&lsRun.id&&UUID.test(lsRun.id))?lsRun.id:null;
+    var sessionId = window.crypto.randomUUID();
+    var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now();
+    var IDLE_MS=60000, TICK_MS=1000, FLUSH_MS=60000;
+    function isActive(){ return document.visibilityState==='visible' && (Date.now()-lastActivity)<IDLE_MS; }
+    fetch(SB_URL+'/rest/v1/learn_sessions',{method:'POST',
+      headers:HW_POST,
+      body:JSON.stringify({id:sessionId, player_id:player.id, run_id:runId, started_at:new Date().toISOString(), active_seconds:0}),
+      mode:'cors',credentials:'omit'
+    }).catch(function(){});
+    function flush(closing){
+      var body={};
+      if(localSeconds!==lastSavedSeconds){ body.active_seconds=localSeconds; lastSavedSeconds=localSeconds; }
+      if(closing) body.ended_at=new Date().toISOString();
+      if(Object.keys(body).length===0) return;
+      sbPatch('learn_sessions',body,'id=eq.'+sessionId);
+    }
+    function bump(){ lastActivity=Date.now(); }
+    var evs=['click','keydown','touchstart','mousemove','scroll'];
+    evs.forEach(function(ev){ document.addEventListener(ev,bump,{passive:true}); });
+    var tickIv=setInterval(function(){ if(isActive()) localSeconds++; },TICK_MS);
+    var flushIv=setInterval(function(){ flush(false); },FLUSH_MS);
+    function onVis(){ if(document.visibilityState==='hidden') flush(false); }
+    document.addEventListener('visibilitychange',onVis);
+    function onUnload(){ flush(true); }
+    window.addEventListener('beforeunload',onUnload);
+    window.addEventListener('pagehide',onUnload);
+    return function(){
+      clearInterval(tickIv); clearInterval(flushIv);
+      evs.forEach(function(ev){ document.removeEventListener(ev,bump); });
+      document.removeEventListener('visibilitychange',onVis);
+      window.removeEventListener('beforeunload',onUnload);
+      window.removeEventListener('pagehide',onUnload);
+      flush(true);
+    };
+  },[player&&player.id, lsRun&&lsRun.id]);
 
   useEffect(function(){
     if(!player) return;
