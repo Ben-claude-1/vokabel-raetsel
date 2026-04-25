@@ -3998,12 +3998,14 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             {open&&<div style={{borderTop:'1px solid '+G100}}>
               {kids.map(function(ch){
                 var chOpen=expandedCh[ch.id];
+                var grandkids=childChapters.filter(function(c){return c.parent_id===ch.id;}).slice().sort(naturalSort);
+                var hasGrandkids=grandkids.length>0;
                 return <div key={ch.id} style={{borderBottom:'1px solid '+G100}}>
                   <div onClick={function(){toggleCh(ch.id);}} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 12px 7px 18px',cursor:'pointer',background:chOpen?ch.color+'10':'#fafafa'}}>
                     <span style={{fontSize:15}}>{ch.icon}</span>
                     <span style={{flex:1,fontWeight:'bold',fontSize:12,color:ch.color}}>{ch.title}</span>
-                    <span style={{fontSize:10,color:G400}}>{(ch.words||[]).length} V</span>
-                    {(function(){
+                    {hasGrandkids?<span style={{fontSize:10,color:G400}}>{grandkids.length} Bereiche</span>:<span style={{fontSize:10,color:G400}}>{(ch.words||[]).length} V</span>}
+                    {!hasGrandkids&&(function(){
                       var noType=safeWords(ch.words).filter(function(w){return !w.type;}).length;
                       var st=autoTyping[ch.id];
                       if(st==='done') return <span style={{fontSize:9,color:GR,fontWeight:'bold',flexShrink:0}}>✓ Typen</span>;
@@ -4015,7 +4017,52 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                     {ch.id&&!ch.is_builtin&&<button onClick={function(e){e.stopPropagation();deleteChapter(ch);}} style={{padding:'2px 7px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
                     <span style={{color:G400,fontSize:10,marginLeft:2}}>{chOpen?'▲':'▼'}</span>
                   </div>
-                  {chOpen&&<div style={{padding:'6px 18px 10px',background:'#f9fafb'}}>
+                  {chOpen&&hasGrandkids&&<div style={{padding:'4px 0',background:'#f9fafb'}}>
+                    {grandkids.map(function(gk){
+                      var gkOpen=expandedCh[gk.id];
+                      return <div key={gk.id} style={{marginLeft:18,borderTop:'1px solid '+G100}}>
+                        <div onClick={function(){toggleCh(gk.id);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px 6px 14px',cursor:'pointer',background:gkOpen?gk.color+'10':'white'}}>
+                          <span style={{fontSize:13}}>{gk.icon}</span>
+                          <span style={{flex:1,fontWeight:'bold',fontSize:11,color:gk.color}}>{gk.title}</span>
+                          <span style={{fontSize:9,color:G400}}>{(gk.words||[]).length} V</span>
+                          <button onClick={function(e){e.stopPropagation();setEditCh(gk);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4}}>✏️</button>
+                          {gk.id&&!gk.is_builtin&&<button onClick={function(e){e.stopPropagation();deleteChapter(gk);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4}}>🗑</button>}
+                          <span style={{color:G400,fontSize:9}}>{gkOpen?'▲':'▼'}</span>
+                        </div>
+                        {gkOpen&&<div style={{padding:'4px 14px 8px',background:'#fafafa'}}>
+                          {safeWords(gk.words).slice().sort(function(a,b){return (a.seq||9999)-(b.seq||9999)||(a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
+                            var ws=safeWords(gk.words); var realIdx=ws.indexOf(w);
+                            var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
+                            var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
+                            var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
+                            return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10}}>
+                              {w.important&&<span style={{fontSize:9,flexShrink:0}}>⭐</span>}
+                              <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+                              <span style={{color:G400,fontSize:9,flexShrink:0}}>{w.clue}</span>
+                              {w.book_page&&<span style={{fontSize:8,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
+                              {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:8,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
+                              <button onClick={function(){setEditWord({w:Object.assign({},w),chId:gk.id,idx:realIdx});}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
+                              <button onClick={function(){deleteWord(gk.id,realIdx);}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
+                            </div>;
+                          })}
+                          {editWord&&editWord.chId===gk.id&&(<div style={{padding:6,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:4}}>
+                            <div style={{display:'flex',gap:5,marginBottom:4}}>
+                              <input value={editWord.w.word||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}} style={{flex:1,padding:'4px',fontSize:11,border:'1px solid '+G200,borderRadius:4}} placeholder="EN"/>
+                              <input value={editWord.w.clue||''} onChange={function(e){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{clue:e.target.value})});});}} style={{flex:1,padding:'4px',fontSize:11,border:'1px solid '+G200,borderRadius:4}} placeholder="DE"/>
+                              <div onClick={function(){setEditWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{important:!ew.w.important})});});}} style={{width:24,height:24,borderRadius:5,border:'2px solid '+(editWord.w.important?AM:G200),background:editWord.w.important?AM:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}><span style={{fontSize:11}}>{editWord.w.important?'⭐':'☆'}</span></div>
+                            </div>
+                            <div style={{display:'flex',gap:5}}>
+                              <button onClick={function(){doSaveWord(editWord.chId,editWord.w,editWord.idx);}} style={BtnStyle(T,'white',{flex:1,padding:'4px',fontSize:9})}>✓ Speichern</button>
+                              <button onClick={function(){setEditWord(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'4px',fontSize:9})}>✕</button>
+                            </div>
+                          </div>)}
+                          <button onClick={function(){setEditWord({w:{word:'',clue:'',important:false},chId:gk.id,idx:null});}} style={{width:'100%',padding:'4px',marginTop:4,borderRadius:5,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:10,fontWeight:'bold'}}>+ Vokabel</button>
+                        </div>}
+                      </div>;
+                    })}
+                    <button onClick={function(){setShowNewCh(true);setNewChForm({title:'',color:T,icon:'📖',parent_id:ch.id,words:[],sentences:[]});}} style={{width:'100%',margin:'4px 18px',padding:'5px',borderRadius:6,border:'1px dashed '+T,background:TL,color:T,cursor:'pointer',fontSize:10,fontWeight:'bold'}}>+ Themenbereich zu {ch.title}</button>
+                  </div>}
+                  {chOpen&&!hasGrandkids&&<div style={{padding:'6px 18px 10px',background:'#f9fafb'}}>
                     {editCh&&editCh.id===ch.id&&(<div style={{padding:10,background:'white',borderRadius:8,border:'1px solid '+T,marginBottom:8}}>
                       <div style={{display:'flex',gap:6,marginBottom:6}}>
                         <input value={editCh.icon||''} onChange={function(e){setEditCh(function(c){return Object.assign({},c,{icon:e.target.value});});}} style={{width:40,padding:'6px',fontSize:14,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}} placeholder="Icon"/>
