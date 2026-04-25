@@ -3690,6 +3690,24 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [expandedUserId, setExpandedUserId] = useState(null);
   var [userProgress, setUserProgress] = useState({});
   var [userRuns, setUserRuns] = useState({});
+  var [vocabSort, setVocabSort] = useState('seq');
+  function sortVocab(words){
+    var arr = safeWords(words).slice();
+    if(vocabSort==='abc'){
+      arr.sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());});
+    } else {
+      arr.sort(function(a,b){
+        var pa = a.book_page!=null ? a.book_page : 99999;
+        var pb = b.book_page!=null ? b.book_page : 99999;
+        if(pa!==pb) return pa-pb;
+        var sa = a.seq!=null ? a.seq : 99999;
+        var sb = b.seq!=null ? b.seq : 99999;
+        if(sa!==sb) return sa-sb;
+        return (a.word||'').localeCompare(b.word||'');
+      });
+    }
+    return arr;
+  }
   function loadUserData(userId){
     var UUID2=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!UUID2.test(userId)) return;
@@ -3969,6 +3987,11 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
 
       {tab==='chapters'&&(<div>
+        <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:8,padding:'6px 10px',background:G50,borderRadius:8}}>
+          <span style={{fontSize:11,color:G600,fontWeight:'bold'}}>Vokabel-Sortierung:</span>
+          <button onClick={function(){setVocabSort('seq');}} style={Object.assign({},BtnStyle(vocabSort==='seq'?T:G100, vocabSort==='seq'?'white':G600,{padding:'4px 10px',fontSize:11}))}>📖 Buchreihenfolge</button>
+          <button onClick={function(){setVocabSort('abc');}} style={Object.assign({},BtnStyle(vocabSort==='abc'?T:G100, vocabSort==='abc'?'white':G600,{padding:'4px 10px',fontSize:11}))}>🔤 A-Z</button>
+        </div>
         <div style={{marginBottom:14,padding:12,background:G50,borderRadius:12,border:'2px dashed '+G200}}>
           <div style={{fontWeight:'bold',fontSize:13,color:T,marginBottom:8}}>📷 Schulbuch-Seite per Bild importieren</div>
           <div style={{display:'flex',gap:6,marginBottom:8,flexWrap:'wrap'}}>
@@ -4048,7 +4071,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                           <span style={{color:G400,fontSize:9}}>{gkOpen?'▲':'▼'}</span>
                         </div>
                         {gkOpen&&<div style={{padding:'4px 14px 8px',background:'#fafafa'}}>
-                          {safeWords(gk.words).slice().sort(function(a,b){return (a.seq||9999)-(b.seq||9999)||(a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
+                          {sortVocab(gk.words).map(function(w,wi){
                             var ws=safeWords(gk.words); var realIdx=ws.indexOf(w);
                             var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
                             var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
@@ -4092,7 +4115,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         <button onClick={function(){setEditCh(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'6px',fontSize:11})}>Abbrechen</button>
                       </div>
                     </div>)}
-                    {safeWords(ch.words).slice().sort(function(a,b){return (a.word||'').localeCompare(b.word||'');}).map(function(w,wi){
+                    {sortVocab(ch.words).map(function(w,wi){
                       var ws=safeWords(ch.words); var realIdx=ws.indexOf(w);
                       var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
                       var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
