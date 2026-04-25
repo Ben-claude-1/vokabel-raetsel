@@ -2349,6 +2349,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   if(dataLoading||!data) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
 
+  var livePct = lsPercent(data, streak);
+  var liveLearned = (data.pots[6]||[]).length;
+  var liveTotal = Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
+  var liveChip = (phase!=='pick' && phase!=='done') ? <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(15,118,110,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:6,backdropFilter:'blur(4px)'}}>
+    <span>{livePct}%</span>
+    <span style={{opacity:0.7,fontWeight:'normal'}}>·</span>
+    <span style={{opacity:0.85}}>✅ {liveLearned}/{liveTotal}</span>
+  </div> : null;
+
   if(phase==='pick'){
     var pct = lsPercent(data);
     var grade = lsGrade(data);
@@ -2398,6 +2407,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   if(phase==='quiz'){
     return(
       <div style={{padding:8}}>
+        {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
@@ -2425,6 +2435,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   if(phase==='t2'){
     return(
       <div style={{padding:8}}>
+        {liveChip}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
           <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Topf 2 — Buchstaben sortieren</div>
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
@@ -2480,6 +2491,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var dashLetterCount = dashWord.replace(/ /g,'').length;
     return(
       <div style={{padding:8}}>
+        {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
@@ -2515,6 +2527,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   if(phase==='showResult'||phase==='answer'){
     if(phase==='answer') return(
       <div style={{padding:8}}>
+        {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
@@ -2533,6 +2546,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     );
     return(
       <div style={{padding:8}}>
+        {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);}}/>}
         {result&&(
           <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.correct?GR:RE)}}>
