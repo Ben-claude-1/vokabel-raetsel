@@ -3723,11 +3723,29 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   }
 
   function deleteWord(chapterId, wordIdx) {
-    if(!confirm('Wort löschen?')) return;
+    if(!confirm('Wort löschen? Es wird auch aus allen Leiterspiel-Runs entfernt.')) return;
     var ch = chapters.find(function(c){return c.id===chapterId;});
     if(!ch) return;
-    var newWords = safeWords(ch.words).filter(function(_,i){return i!==wordIdx;});
+    var ws = safeWords(ch.words);
+    var deletedWord = ws[wordIdx];
+    var newWords = ws.filter(function(_,i){return i!==wordIdx;});
     saveChapterWords(ch, newWords, chapters, setChapters, setSaving, setMsg);
+    if(!deletedWord||!deletedWord.word) return;
+    var delKey = normWordKey(deletedWord.word);
+    sbGet('ls_runs','select=id,name,words').then(function(runs){
+      if(!Array.isArray(runs)) return;
+      var affected = 0;
+      runs.forEach(function(run){
+        var rw = run.words; if(typeof rw==='string'){try{rw=JSON.parse(rw||'[]');}catch(e){rw=[];}}
+        if(!Array.isArray(rw)) return;
+        var filtered = rw.filter(function(rwx){return normWordKey(rwx.word)!==delKey;});
+        if(filtered.length !== rw.length){
+          sbPatch('ls_runs',{words:JSON.stringify(filtered),word_count:filtered.length},'id=eq.'+run.id);
+          affected++;
+        }
+      });
+      if(affected>0) setMsg('✓ Aus '+affected+' Run'+(affected===1?'':'s')+' entfernt');
+    }).catch(function(){});
   }
 
   function saveChapter(form) {
