@@ -3165,10 +3165,22 @@ function LeitersSpielAdminOverview({ chapters, player }) {
   }
   function fmtMin(sec){ var m=Math.round(sec/60); if(m<60) return m+' Min'; var h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
   function deleteRun(runId){
-    if(!confirm('Run löschen?')) return;
-    sbDel('ls_runs','id=eq.'+runId).then(function(){
+    var run = runs.find(function(r){return r.id===runId;});
+    if(!run) return;
+    var progRows = (allProgress||[]).filter(function(p){return p.run_id===runId;});
+    var msg = 'Run "'+run.name+'" löschen?';
+    if(progRows.length>0){
+      msg += '\n\n⚠️ '+progRows.length+' Spieler-Fortschritt'+(progRows.length===1?'':'s')+' wird mit gelöscht (Pots, Streaks, Sessions).';
+    }
+    msg += '\n\nDas kann NICHT rückgängig gemacht werden.';
+    if(!confirm(msg)) return;
+    Promise.all([
+      sbDel('ls_progress','run_id=eq.'+runId),
+      sbDel('ls_runs','id=eq.'+runId)
+    ]).then(function(){
       setRuns(function(prev){ return prev.filter(function(r){return r.id!==runId;}); });
-    });
+      setAllProgress(function(prev){ return prev.filter(function(p){return p.run_id!==runId;}); });
+    }).catch(function(e){ alert('Fehler beim Löschen: '+e.message); });
   }
   function getProgData(playerId, runId){
     var row = allProgress.find(function(p){return p.player_id===playerId&&p.run_id===runId;});
