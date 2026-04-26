@@ -4129,8 +4129,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                               style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
                               {canDrag&&<span style={{color:G400,fontSize:9,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
                               <button onClick={function(){toggleImportant(gk.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 4px',fontSize:11,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
-                              <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
-                              <span style={{color:G400,fontSize:9,flexShrink:0}}>{w.clue}</span>
+                              <div style={{flex:1,minWidth:0,display:'flex',gap:5,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
+                                <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
+                                <span style={{color:G400,fontSize:9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                              </div>
                               {w.book_page&&<span style={{fontSize:8,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
                               {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:8,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
                               <button onClick={function(){setEditWord({w:Object.assign({},w),chId:gk.id,idx:realIdx});}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
@@ -4188,8 +4190,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
                         {canDrag&&<span style={{color:G400,fontSize:11,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
                         <button onClick={function(){toggleImportant(ch.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 5px',fontSize:13,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
-                        <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
-                        <span style={{color:G400,fontSize:10,flexShrink:0}}>{w.clue}</span>
+                        <div style={{flex:1,minWidth:0,display:'flex',gap:6,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
+                          <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
+                          <span style={{color:G400,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                        </div>
                         {w.book_page&&<span style={{fontSize:9,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
                         {w.type&&<span style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
                         <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
