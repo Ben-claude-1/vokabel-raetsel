@@ -3196,7 +3196,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
     return Array.isArray(raw)?raw.length:0;
   }
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade…</div>;
-  if(editRun) return <RunEditor run={editRun} chapters={chapters} onSave={function(updated){ setRuns(function(prev){return prev.map(function(r){return r.id===updated.id?updated:r;});}); setEditRun(null); }} onCancel={function(){setEditRun(null);}}/> ;
+  if(editRun) return <RunEditor key={editRun.id} run={editRun} chapters={chapters} onSave={function(updated){ setRuns(function(prev){return prev.map(function(r){return r.id===updated.id?updated:r;});}); setEditRun(null); }} onCancel={function(){setEditRun(null);}}/> ;
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
@@ -3205,6 +3205,12 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       {tab==='runs'&&(<div>
         {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
         {runs.map(function(run){
+          function updateGoal(field, value){
+            var body={}; body[field] = value;
+            sbPatch('ls_runs', body, 'id=eq.'+run.id).then(function(ok){
+              if(ok) setRuns(function(prev){return prev.map(function(r){return r.id===run.id?Object.assign({},r,body):r;});});
+            });
+          }
           return <div key={run.id} style={{padding:'10px 12px',marginBottom:6,borderRadius:10,border:'1px solid '+G200,background:'white'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{fontSize:20}}>{run.icon||'🎯'}</span>
@@ -3214,6 +3220,19 @@ function LeitersSpielAdminOverview({ chapters, player }) {
               </div>
               <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>✏️</button>
               <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>🗑</button>
+            </div>
+            <div style={{marginTop:8,padding:'6px 8px',background:'#f0f9ff',borderRadius:6,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',fontSize:11}}>
+              <span style={{color:'#0369a1',fontWeight:'bold'}}>🎯 Ziel:</span>
+              <span style={{color:G600}}>bis</span>
+              <input type='date' value={run.target_date||''}
+                onChange={function(e){updateGoal('target_date', e.target.value||null);}}
+                style={{padding:'3px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5,background:'white'}}/>
+              <input type='number' min='1' max='100' value={run.target_pct!=null?run.target_pct:100}
+                onChange={function(e){updateGoal('target_pct', parseInt(e.target.value,10)||100);}}
+                style={{width:54,padding:'3px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5,background:'white'}}/>
+              <span style={{color:G600}}>%</span>
+              {run.target_date&&<button onClick={function(){updateGoal('target_date',null);}} title='Zieldatum löschen'
+                style={{padding:'2px 7px',fontSize:10,border:'1px solid '+G200,background:'white',color:G400,cursor:'pointer',borderRadius:4}}>✕</button>}
             </div>
           </div>;
         })}
