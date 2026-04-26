@@ -3749,6 +3749,27 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     saveChapterWords(ch, ws, chapters, setChapters, setSaving, setMsg);
   }
 
+  function reorderVocab(chapterId, sourceWord, targetWord, dropPosition){
+    var ch = chapters.find(function(c){return c.id===chapterId;});
+    if(!ch) return;
+    var sorted = sortVocab(ch.words);
+    var srcIdx = sorted.findIndex(function(w){return w===sourceWord;});
+    var tgtIdx = sorted.findIndex(function(w){return w===targetWord;});
+    if(srcIdx<0 || tgtIdx<0 || srcIdx===tgtIdx) return;
+    var insertIdx = dropPosition==='after' ? tgtIdx+1 : tgtIdx;
+    var moved = sorted[srcIdx];
+    sorted.splice(srcIdx, 1);
+    if(srcIdx < insertIdx) insertIdx--;
+    sorted.splice(insertIdx, 0, moved);
+    var neighbor = sorted[insertIdx-1] || sorted[insertIdx+1];
+    if(neighbor && neighbor.book_page!=null && (moved.book_page==null || moved.book_page!==neighbor.book_page)){
+      moved.book_page = neighbor.book_page;
+    }
+    sorted.forEach(function(w,i){ w.seq = i+1; });
+    saveChapterWords(ch, sorted, chapters, setChapters, setSaving, setMsg);
+  }
+  var [dragSrc, setDragSrc] = useState(null);
+
   function deleteWord(chapterId, wordIdx) {
     if(!confirm('Wort löschen? Es wird auch aus allen Leiterspiel-Runs entfernt.')) return;
     var ch = chapters.find(function(c){return c.id===chapterId;});
@@ -4085,7 +4106,22 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                             var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
                             var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
                             var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
-                            return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10}}>
+                            var canDrag = vocabSort==='seq';
+                            var isDragOver = dragSrc && dragSrc.chId===gk.id && dragSrc.word!==w;
+                            return <div key={wi}
+                              draggable={canDrag}
+                              onDragStart={canDrag?function(e){setDragSrc({chId:gk.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
+                              onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
+                              onDrop={isDragOver?function(e){
+                                e.preventDefault();
+                                var rect=e.currentTarget.getBoundingClientRect();
+                                var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
+                                reorderVocab(gk.id, dragSrc.word, w, pos);
+                                setDragSrc(null);
+                              }:null}
+                              onDragEnd={canDrag?function(){setDragSrc(null);}:null}
+                              style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
+                              {canDrag&&<span style={{color:G400,fontSize:9,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
                               <button onClick={function(){toggleImportant(gk.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 4px',fontSize:11,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
                               <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
                               <span style={{color:G400,fontSize:9,flexShrink:0}}>{w.clue}</span>
@@ -4129,7 +4165,22 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                       var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
                       var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
                       var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
-                      return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11}}>
+                      var canDrag = vocabSort==='seq';
+                      var isDragOver = dragSrc && dragSrc.chId===ch.id && dragSrc.word!==w;
+                      return <div key={wi}
+                        draggable={canDrag}
+                        onDragStart={canDrag?function(e){setDragSrc({chId:ch.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
+                        onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
+                        onDrop={isDragOver?function(e){
+                          e.preventDefault();
+                          var rect=e.currentTarget.getBoundingClientRect();
+                          var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
+                          reorderVocab(ch.id, dragSrc.word, w, pos);
+                          setDragSrc(null);
+                        }:null}
+                        onDragEnd={canDrag?function(){setDragSrc(null);}:null}
+                        style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
+                        {canDrag&&<span style={{color:G400,fontSize:11,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
                         <button onClick={function(){toggleImportant(ch.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 5px',fontSize:13,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
                         <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
                         <span style={{color:G400,fontSize:10,flexShrink:0}}>{w.clue}</span>
