@@ -385,6 +385,7 @@ function canonAnswer(s){
   s = s.replace(/\s+/g,' ').trim();
   return s;
 }
+function stripParens(s){ return String(s||'').replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim(); }
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
@@ -398,10 +399,15 @@ function checkAnswer(typed, correct) {
   function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
   var allVariants = [];
   corrects.forEach(function(c){ allVariants = allVariants.concat(wordVariants(c)); });
+  var tStripped = canonAnswer(stripParens(t));
+  var tStrippedNS = tStripped.replace(/\s+/g,'');
   for (var i=0;i<allVariants.length;i++) {
     var vCan = canonAnswer(allVariants[i]);
     if (vCan === tCan) return 'correct';
     if (vCan.replace(/\s+/g,'') === tCanNS) return 'correct';
+    var vStripped = canonAnswer(stripParens(allVariants[i]));
+    if (vStripped && (vStripped === tCan || vStripped === tStripped)) return 'correct';
+    if (vStripped && vStripped.replace(/\s+/g,'') === tStrippedNS) return 'correct';
   }
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) { if (canonAnswer(stripTo(corrects[k])) === tCan) return 'partial'; }
