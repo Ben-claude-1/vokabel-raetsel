@@ -3039,11 +3039,12 @@ function DailyLearnChart({ sessions, run, pacing }) {
   var byDay = {};
   var earliestSec = null;
   (sessions||[]).forEach(function(s){
-    if(!s.started_at) return;
-    var k = String(s.started_at).slice(0,10);
-    byDay[k] = (byDay[k]||0) + (s.active_seconds||0);
-    var t = new Date(s.started_at).getTime();
-    if(earliestSec===null || t<earliestSec) earliestSec=t;
+    var k, sec, t;
+    if(s.started_at){ k = String(s.started_at).slice(0,10); sec = s.active_seconds||0; t = new Date(s.started_at).getTime(); }
+    else if(s.d){ k = s.d; sec = s.dur||0; t = (s.ts && new Date(s.ts).getTime()) || new Date(k+'T00:00:00').getTime(); }
+    else return;
+    byDay[k] = (byDay[k]||0) + sec;
+    if(earliestSec===null || t<earliestSec) earliestSec = t;
   });
   var today = new Date(); today.setHours(0,0,0,0);
   var nDays;
@@ -3155,12 +3156,26 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       setLoading(false);
     }).catch(function(){ setLoading(false); });
   },[]);
+  function progressSessionsFor(playerId, runId){
+    var row = allProgress.find(function(p){return p.player_id===playerId && p.run_id===runId;});
+    if(!row) return [];
+    var d = parseData(row.data);
+    return (d && d.sessions) || [];
+  }
   function secondsForPlayerRun(playerId, runId){
-    var s=0; allSessions.forEach(function(r){ if(r.player_id===playerId && r.run_id===runId) s+=(r.active_seconds||0); });
-    return s;
+    var sessions = progressSessionsFor(playerId, runId);
+    return sessions.reduce(function(s,sess){return s+(sess.dur||0);},0);
   }
   function secondsForPlayerTotal(playerId){
-    var s=0; allSessions.forEach(function(r){ if(r.player_id===playerId) s+=(r.active_seconds||0); });
+    var s = 0;
+    (allProgress||[]).forEach(function(p){
+      if(p.player_id !== playerId) return;
+      var d = parseData(p.data);
+      ((d && d.sessions) || []).forEach(function(sess){ s += sess.dur || 0; });
+    });
+    (allSessions||[]).forEach(function(r){
+      if(r.player_id===playerId && !r.run_id) s += (r.active_seconds||0);
+    });
     return s;
   }
   function fmtMin(sec){ var m=Math.round(sec/60); if(m<60) return m+' Min'; var h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
@@ -3336,7 +3351,7 @@ function LeitersSpielAdminOverview({ chapters, player }) {
                 var pacing = lsRunPacing(pct, run.target_pct, run.target_date, sec);
                 var chartKey = 'tch__'+u.id+'__'+run.id;
                 var chartOpen = expanded[chartKey];
-                var runSessions = allSessions.filter(function(s){return s.player_id===u.id && s.run_id===run.id;});
+                var runSessions = progressSessionsFor(u.id, run.id);
                 return <div key={run.id} style={{borderRadius:7,background:G50,marginBottom:4}}>
                   <div onClick={function(){toggle(chartKey);}} style={{padding:'6px 9px',fontSize:11,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',cursor:'pointer'}}>
                     <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
