@@ -2684,6 +2684,8 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   var [seqTo, setSeqTo] = useState('');
   var [pageFrom, setPageFrom] = useState('');
   var [pageTo, setPageTo] = useState('');
+  var [aiWish, setAiWish] = useState('');
+  var [aiLoading, setAiLoading] = useState(false);
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var allWords = useMemo(function(){
     var w=[];
@@ -2733,6 +2735,70 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     setMsg('✓ '+picked.length+' wichtige Vokabeln gewählt');
     setTimeout(function(){setMsg('');},2500);
   }
+  function applyAiWish(){
+    if(!aiWish.trim()){ setMsg('Bitte einen Wunsch eintragen'); setTimeout(function(){setMsg('');},2500); return; }
+    setAiLoading(true);
+    var ollamaUrl = (localStorage.getItem('ollama_url')||'http://localhost:11434').replace(/\/$/,'');
+    var model = 'qwen2.5:32b';
+    var chapterTitleById = {};
+    chapters.forEach(function(c){ chapterTitleById[c.id]=c.title; });
+    function chapterPath(c){
+      var path=[c.title]; var cur=c;
+      for(var i=0;i<5;i++){
+        if(!cur.parent_id) break;
+        var p = chapters.find(function(x){return x.id===cur.parent_id;});
+        if(!p) break;
+        path.unshift(p.title); cur=p;
+      }
+      return path.join(' › ');
+    }
+    var vocabList = allWords.map(function(w){
+      return {
+        word: w.word, clue: w.clue,
+        important: !!w.important,
+        book_page: w.book_page!=null ? w.book_page : null,
+        chapter: chapterPath(chapters.find(function(c){return c.id===w.chapId;}) || {title:'?'}),
+      };
+    });
+    var prompt =
+      'Du wählst Vokabeln aus einer Lernapp basierend auf dem Wunsch des Nutzers.\n\n'+
+      'Vokabel-Datenbank (JSON):\n'+JSON.stringify(vocabList)+'\n\n'+
+      'Wunsch des Nutzers: "'+aiWish+'"\n\n'+
+      'Aufgabe: Wähle ALLE Vokabeln aus der Datenbank, die zum Wunsch passen. Beachte:\n'+
+      '- Wenn von "wichtig"/"important"/"bold" die Rede ist, nur Wörter mit important=true wählen\n'+
+      '- Wenn von Seitenzahlen die Rede ist (z.B. "Seite 223"), nur Wörter mit passender book_page\n'+
+      '- Wenn von einem Bereich "von X bis Y" die Rede ist (alphabetisch oder nach Seite), entsprechend filtern\n'+
+      '- Wenn von einem Kapitel/Theme/Themenbereich die Rede ist, in chapter-Pfad suchen\n'+
+      '- Wenn unklar, lieber großzügiger wählen\n\n'+
+      'Antworte AUSSCHLIESSLICH mit JSON-Array der gewählten Wort-Strings (ohne Markdown):\n'+
+      '{"words":["word1","word2",...]}';
+
+    fetch(ollamaUrl+'/api/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model:model, stream:false, format:'json',
+        options:{temperature:0.0, num_ctx:32768},
+        messages:[{role:'user', content:prompt}]
+      })
+    }).then(function(r){
+      if(!r.ok) throw new Error('Ollama HTTP '+r.status);
+      return r.json();
+    }).then(function(d){
+      var content = (d&&d.message&&d.message.content) || '';
+      var m = content.match(/\{[\s\S]*\}/);
+      if(!m) throw new Error('Keine JSON-Antwort: '+content.slice(0,150));
+      var parsed = JSON.parse(m[0]);
+      var wishedKeys = (parsed.words||[]).map(function(w){return normWordKey(w);});
+      var picked = allWords.filter(function(w){return wishedKeys.indexOf(normWordKey(w.word))>=0;});
+      setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:!!w.important,book_page:w.book_page,chapterId:w.chapId};}));
+      setMsg('✓ '+picked.length+' Vokabeln per KI gewählt: "'+aiWish+'"');
+      setAiLoading(false);
+      setTimeout(function(){setMsg('');},4000);
+    }).catch(function(e){
+      setMsg('Fehler: '+e.message+' — läuft `ollama serve` mit qwen2.5:32b? CORS via OLLAMA_ORIGINS=*');
+      setAiLoading(false);
+      setTimeout(function(){setMsg('');},6000);
+    });
+  }
   function isSelected(word){ return selectedWords.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
   function makeSel(w){ return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false,book_page:w.book_page,chapterId:w.chapId||w.chapterId||''}; }
   function toggleWord(wObj){
@@ -2776,7 +2842,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
       </div>
       <div style={{marginBottom:10,padding:10,background:G50,border:'1px solid '+G200,borderRadius:8}}>
         <div style={{display:'flex',gap:4,marginBottom:6,flexWrap:'wrap'}}>
-          {[['manual','✋ Manuell'],['important','⭐ Nur wichtige'],['pages','📖 Seitenbereich'],['range','🔤 Vokabel A–B']].map(function(m){
+          {[['manual','✋ Manuell'],['important','⭐ Nur wichtige'],['pages','📖 Seitenbereich'],['range','🔤 Vokabel A–B'],['ai','🤖 KI-Wunsch']].map(function(m){
             return <button key={m[0]} onClick={function(){setFilterMode(m[0]);}} style={BtnStyle(filterMode===m[0]?T:'white', filterMode===m[0]?'white':G600,{padding:'5px 9px',fontSize:11,border:'1px solid '+(filterMode===m[0]?T:G200)})}>{m[1]}</button>;
           })}
           <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'5px 9px',fontSize:11,marginLeft:'auto'})}>✕ Auswahl leeren</button>
@@ -2795,6 +2861,20 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
             style={{width:80,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
           <button onClick={applyPageRange} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>↳ Wählen</button>
           <span style={{fontSize:9,color:G400}}>(Buchseitenzahl)</span>
+        </div>}
+        {filterMode==='ai' && <div>
+          <div style={{fontSize:11,color:G600,marginBottom:5}}>Beschreibe in eigenen Worten welche Vokabeln du möchtest. Beispiele:</div>
+          <div style={{fontSize:10,color:G400,marginBottom:6,fontStyle:'italic'}}>„Wichtige Vokabeln von Seite 223" · „Wichtige Vokabeln von fish bis penguin" · „Wichtige Vokabeln aus Theme 5"</div>
+          <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+            <input value={aiWish} onChange={function(e){setAiWish(e.target.value);}} disabled={aiLoading}
+              onKeyDown={function(e){if(e.key==='Enter'){applyAiWish();}}}
+              placeholder="Dein Wunsch…"
+              style={{flex:'1 1 200px',padding:'6px 10px',fontSize:12,border:'1.5px solid '+T,borderRadius:6}}/>
+            <button onClick={applyAiWish} disabled={aiLoading||!aiWish.trim()} style={BtnStyle(T,'white',{padding:'6px 12px',fontSize:11})}>
+              {aiLoading?'⏳ KI denkt…':'↳ KI wählen lassen'}
+            </button>
+          </div>
+          <div style={{fontSize:9,color:G400,marginTop:4}}>Lokal via Ollama (qwen2.5:32b). Daten verlassen den Mac nicht.</div>
         </div>}
         {filterMode==='range' && seqChapters.length>0 && <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
           <select value={seqChId} onChange={function(e){setSeqChId(e.target.value);setSeqFrom('');setSeqTo('');}}
