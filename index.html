@@ -3740,6 +3740,15 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     setEditWord(null); setEditCh(null);
   }
 
+  function toggleImportant(chapterId, wordIdx){
+    var ch = chapters.find(function(c){return c.id===chapterId;});
+    if(!ch) return;
+    var ws = safeWords(ch.words).slice();
+    if(wordIdx<0 || wordIdx>=ws.length) return;
+    ws[wordIdx] = Object.assign({}, ws[wordIdx], {important: !ws[wordIdx].important});
+    saveChapterWords(ch, ws, chapters, setChapters, setSaving, setMsg);
+  }
+
   function deleteWord(chapterId, wordIdx) {
     if(!confirm('Wort löschen? Es wird auch aus allen Leiterspiel-Runs entfernt.')) return;
     var ch = chapters.find(function(c){return c.id===chapterId;});
@@ -4077,7 +4086,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                             var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
                             var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
                             return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10}}>
-                              {w.important&&<span style={{fontSize:9,flexShrink:0}}>⭐</span>}
+                              <button onClick={function(){toggleImportant(gk.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 4px',fontSize:11,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
                               <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
                               <span style={{color:G400,fontSize:9,flexShrink:0}}>{w.clue}</span>
                               {w.book_page&&<span style={{fontSize:8,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
@@ -4121,9 +4130,10 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                       var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
                       var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
                       return <div key={wi} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11}}>
-                        {w.important&&<span style={{fontSize:9,flexShrink:0}}>⭐</span>}
+                        <button onClick={function(){toggleImportant(ch.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 5px',fontSize:13,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
                         <span style={{fontWeight:'bold',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
                         <span style={{color:G400,fontSize:10,flexShrink:0}}>{w.clue}</span>
+                        {w.book_page&&<span style={{fontSize:9,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
                         {w.type&&<span style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
                         <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
                         <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
