@@ -2738,7 +2738,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   function applyAiWish(){
     if(!aiWish.trim()){ setMsg('Bitte einen Wunsch eintragen'); setTimeout(function(){setMsg('');},2500); return; }
     setAiLoading(true);
-    var defaultOllamaUrl = (location.protocol==='https:') ? (location.origin+'/ollama').replace(/\/$/,'') : 'http://localhost:11434';
+    var defaultOllamaUrl = (location.protocol==='https:') ? (SB_URL.replace(/\/$/,'')+'/ollama') : 'http://localhost:11434';
     var ollamaUrl = (localStorage.getItem('ollama_url')||defaultOllamaUrl).replace(/\/$/,'');
     var model = localStorage.getItem('ollama_model_text') || 'qwen2.5:32b';
     var chapterTitleById = {};
@@ -4112,7 +4112,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       var b64=reader.result.split(',')[1];
       var prompt='You are extracting vocabulary entries from a German/English school-book page (Camden Town / Notting Hill Gate or similar).\n\nEACH ENTRY is one English word/phrase with its German translation. Entries are usually separated by horizontal lines and contain a phonetic transcription /.../ between English and German.\n\nFor EACH entry, decide if the English headword is printed in BOLD type — meaning visually heavier/thicker stroke than the surrounding entries on the SAME page. Compare against the lighter (regular) entries on the page; bold entries usually mark the words students must learn for the unit.\n\nIMPORTANT RULES:\n- Verbs MUST be prefixed with "to ": e.g. "to play", "to sing", never just "play".\n- If unsure about bold vs. regular: prefer bold=true when the stroke is even slightly heavier than the page baseline.\n- Look at the WHOLE page first to establish what "regular weight" looks like, then mark each word relative to that.\n- type values: "verb" | "noun" | "adjective" | "phrase" | "other"\n\nReturn ONLY JSON, no markdown fences, no commentary:\n{"words":[{"word":"to play","clue":"spielen","important":true,"type":"verb"},{"word":"birthday","clue":"Geburtstag","important":false,"type":"noun"}]}\n\nIf you cannot read a part of the page, omit those entries — do not guess words you cannot see.';
       var provider=localStorage.getItem('vision_provider')||'anthropic';
-      var defaultOllamaUrl = (location.protocol==='https:') ? (location.origin+'/ollama').replace(/\/$/,'') : 'http://localhost:11434';
+      var defaultOllamaUrl = (location.protocol==='https:') ? (SB_URL.replace(/\/$/,'')+'/ollama') : 'http://localhost:11434';
       var ollamaUrl=(localStorage.getItem('ollama_url')||defaultOllamaUrl).replace(/\/$/,'');
       var ollamaModel=localStorage.getItem('ollama_model')||'qwen2.5vl:72b';
       var done=function(words){ setImgDraft(words||[]); setImgMsg('✅ '+(words||[]).length+' Vokabeln erkannt'); setImgLoading(false); };
