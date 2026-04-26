@@ -2235,7 +2235,7 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
 }
 
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp, setPlayer }) {
-  var streak = streakProp || DEFAULT_STREAK;
+  var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var [data, setData] = useState(null);
   var [dataLoading, setDataLoading] = useState(true);
   var [phase, setPhase] = useState('pick');
@@ -2931,7 +2931,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   if(runs.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>Noch keine Runs. Bitte Admin fragen.</div>;
-  var gs = streakSettings || DEFAULT_STREAK;
+  var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
