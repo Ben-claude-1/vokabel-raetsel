@@ -4266,6 +4266,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [vocabSort, setVocabSort] = useState('seq');
   var [showSentences, setShowSentences] = useState({}); // chapterId -> bool
   var [editSent, setEditSent] = useState(null); // {chId, idx, s, translating}
+  var [expandedSentWord, setExpandedSentWord] = useState(null); // 'chId|word'
   function sortVocab(words){
     var arr = safeWords(words).slice();
     if(vocabSort==='abc'){
@@ -4728,29 +4729,47 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                             var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
                             var canDrag = vocabSort==='seq';
                             var isDragOver = dragSrc && dragSrc.chId===gk.id && dragSrc.word!==w;
-                            return <div key={wi}
-                              draggable={canDrag}
-                              onDragStart={canDrag?function(e){setDragSrc({chId:gk.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
-                              onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
-                              onDrop={isDragOver?function(e){
-                                e.preventDefault();
-                                var rect=e.currentTarget.getBoundingClientRect();
-                                var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
-                                reorderVocab(gk.id, dragSrc.word, w, pos);
-                                setDragSrc(null);
-                              }:null}
-                              onDragEnd={canDrag?function(){setDragSrc(null);}:null}
-                              style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:'1px solid '+G100,fontSize:10,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
-                              {canDrag&&<span style={{color:G400,fontSize:9,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
-                              <button onClick={function(){toggleImportant(gk.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 4px',fontSize:11,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
-                              <div style={{flex:1,minWidth:0,display:'flex',gap:5,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
-                                <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
-                                <span style={{color:G400,fontSize:9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                            var sentsForWord = (gk.sentences||[]).map(function(ss,si){return {s:ss,si:si};}).filter(function(x){return x.s.wordRef===w.word;});
+                            var sentKey = gk.id+'|'+w.word;
+                            var sentOpen = expandedSentWord===sentKey;
+                            return <div key={wi}>
+                              <div
+                                draggable={canDrag}
+                                onDragStart={canDrag?function(e){setDragSrc({chId:gk.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
+                                onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
+                                onDrop={isDragOver?function(e){
+                                  e.preventDefault();
+                                  var rect=e.currentTarget.getBoundingClientRect();
+                                  var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
+                                  reorderVocab(gk.id, dragSrc.word, w, pos);
+                                  setDragSrc(null);
+                                }:null}
+                                onDragEnd={canDrag?function(){setDragSrc(null);}:null}
+                                style={{display:'flex',alignItems:'center',gap:5,padding:'4px 2px',borderBottom:sentOpen?'none':'1px solid '+G100,fontSize:10,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
+                                {canDrag&&<span style={{color:G400,fontSize:9,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
+                                <button onClick={function(){toggleImportant(gk.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 4px',fontSize:11,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
+                                <div style={{flex:1,minWidth:0,display:'flex',gap:5,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
+                                  <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
+                                  <span style={{color:G400,fontSize:9,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                                </div>
+                                {w.book_page&&<span style={{fontSize:8,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
+                                {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:8,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
+                                {sentsForWord.length>0&&<button onClick={function(e){e.stopPropagation();setExpandedSentWord(sentOpen?null:sentKey);}} title={sentsForWord.length+' verlinkte Satz/Sätze'} style={{padding:'1px 4px',fontSize:8,border:'1px solid #a855f7',background:sentOpen?'#a855f7':'white',color:sentOpen?'white':'#7c3aed',cursor:'pointer',borderRadius:4,flexShrink:0,fontWeight:'bold'}}>💬{sentsForWord.length}</button>}
+                                <button onClick={function(){setEditWord({w:Object.assign({},w),chId:gk.id,idx:realIdx});}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
+                                <button onClick={function(){deleteWord(gk.id,realIdx);}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
                               </div>
-                              {w.book_page&&<span style={{fontSize:8,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
-                              {w.type&&<span style={{fontSize:8,padding:'1px 4px',borderRadius:8,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
-                              <button onClick={function(){setEditWord({w:Object.assign({},w),chId:gk.id,idx:realIdx});}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
-                              <button onClick={function(){deleteWord(gk.id,realIdx);}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
+                              {sentOpen&&<div style={{padding:'3px 6px 6px 22px',background:'#faf5ff',borderBottom:'1px solid '+G100}}>
+                                {sentsForWord.map(function(x){
+                                  return <div key={x.si} style={{padding:'3px 5px',marginBottom:2,borderRadius:4,border:'1px solid #e9d5ff',background:'white',fontSize:9}}>
+                                    <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                                      <span style={{flex:1,fontWeight:'bold',color:G900}}>{x.s.important?'⭐ ':''}{x.s.text}</span>
+                                      <button onClick={function(){setShowSentences(function(p){var n=Object.assign({},p);n[gk.id]=true;return n;});setEditSent({chId:gk.id,idx:x.si,s:Object.assign({important:false,wordRef:''},x.s),translating:false});}} style={{padding:'0 4px',fontSize:7,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:3,flexShrink:0}}>✏</button>
+                                      <button onClick={function(){deleteSentence(gk.id,x.si);}} style={{padding:'0 4px',fontSize:7,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:3,flexShrink:0}}>✕</button>
+                                    </div>
+                                    <div style={{color:G400,marginTop:1,fontStyle:'italic'}}>{x.s.translation}</div>
+                                  </div>;
+                                })}
+                              </div>}
                             </div>;
                           })}
                           {editWord&&editWord.chId===gk.id&&(<div style={{padding:6,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:4}}>
@@ -4789,29 +4808,47 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                       var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
                       var canDrag = vocabSort==='seq';
                       var isDragOver = dragSrc && dragSrc.chId===ch.id && dragSrc.word!==w;
-                      return <div key={wi}
-                        draggable={canDrag}
-                        onDragStart={canDrag?function(e){setDragSrc({chId:ch.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
-                        onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
-                        onDrop={isDragOver?function(e){
-                          e.preventDefault();
-                          var rect=e.currentTarget.getBoundingClientRect();
-                          var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
-                          reorderVocab(ch.id, dragSrc.word, w, pos);
-                          setDragSrc(null);
-                        }:null}
-                        onDragEnd={canDrag?function(){setDragSrc(null);}:null}
-                        style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:'1px solid '+G100,fontSize:11,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
-                        {canDrag&&<span style={{color:G400,fontSize:11,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
-                        <button onClick={function(){toggleImportant(ch.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 5px',fontSize:13,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
-                        <div style={{flex:1,minWidth:0,display:'flex',gap:6,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
-                          <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
-                          <span style={{color:G400,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                      var sentsForWord = (ch.sentences||[]).map(function(ss,si){return {s:ss,si:si};}).filter(function(x){return x.s.wordRef===w.word;});
+                      var sentKey = ch.id+'|'+w.word;
+                      var sentOpen = expandedSentWord===sentKey;
+                      return <div key={wi}>
+                        <div
+                          draggable={canDrag}
+                          onDragStart={canDrag?function(e){setDragSrc({chId:ch.id,word:w}); e.dataTransfer.effectAllowed='move';}:null}
+                          onDragOver={isDragOver?function(e){e.preventDefault(); e.dataTransfer.dropEffect='move';}:null}
+                          onDrop={isDragOver?function(e){
+                            e.preventDefault();
+                            var rect=e.currentTarget.getBoundingClientRect();
+                            var pos=(e.clientY-rect.top) < rect.height/2 ? 'before' : 'after';
+                            reorderVocab(ch.id, dragSrc.word, w, pos);
+                            setDragSrc(null);
+                          }:null}
+                          onDragEnd={canDrag?function(){setDragSrc(null);}:null}
+                          style={{display:'flex',alignItems:'center',gap:5,padding:'5px 2px',borderBottom:sentOpen?'none':'1px solid '+G100,fontSize:11,cursor:canDrag?'grab':'default',background:dragSrc&&dragSrc.word===w?TL:'transparent'}}>
+                          {canDrag&&<span style={{color:G400,fontSize:11,cursor:'grab',flexShrink:0,userSelect:'none'}}>⋮⋮</span>}
+                          <button onClick={function(){toggleImportant(ch.id,realIdx);}} title={w.important?'wichtig (klicken um zu entfernen)':'unwichtig (klicken um wichtig zu markieren)'} style={{padding:'1px 5px',fontSize:13,border:'none',background:'transparent',cursor:'pointer',flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</button>
+                          <div style={{flex:1,minWidth:0,display:'flex',gap:6,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
+                            <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
+                            <span style={{color:G400,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+                          </div>
+                          {w.book_page&&<span style={{fontSize:9,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
+                          {w.type&&<span style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
+                          {sentsForWord.length>0&&<button onClick={function(e){e.stopPropagation();setExpandedSentWord(sentOpen?null:sentKey);}} title={sentsForWord.length+' verlinkte Satz/Sätze'} style={{padding:'1px 5px',fontSize:9,border:'1px solid #a855f7',background:sentOpen?'#a855f7':'white',color:sentOpen?'white':'#7c3aed',cursor:'pointer',borderRadius:4,flexShrink:0,fontWeight:'bold'}}>💬{sentsForWord.length}</button>}
+                          <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
+                          <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
                         </div>
-                        {w.book_page&&<span style={{fontSize:9,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
-                        {w.type&&<span style={{fontSize:8,padding:'1px 5px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
-                        <button onClick={function(){setEditWord({w:Object.assign({},w),chId:ch.id,idx:realIdx});}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
-                        <button onClick={function(){deleteWord(ch.id,realIdx);}} style={{padding:'2px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
+                        {sentOpen&&<div style={{padding:'4px 8px 8px 26px',background:'#faf5ff',borderBottom:'1px solid '+G100}}>
+                          {sentsForWord.map(function(x){
+                            return <div key={x.si} style={{padding:'4px 6px',marginBottom:3,borderRadius:5,border:'1px solid #e9d5ff',background:'white',fontSize:10}}>
+                              <div style={{display:'flex',alignItems:'baseline',gap:5}}>
+                                <span style={{flex:1,fontWeight:'bold',color:G900}}>{x.s.important?'⭐ ':''}{x.s.text}</span>
+                                <button onClick={function(){setShowSentences(function(p){var n=Object.assign({},p);n[ch.id]=true;return n;});setEditSent({chId:ch.id,idx:x.si,s:Object.assign({important:false,wordRef:''},x.s),translating:false});}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:3,flexShrink:0}}>✏</button>
+                                <button onClick={function(){deleteSentence(ch.id,x.si);}} style={{padding:'1px 5px',fontSize:8,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:3,flexShrink:0}}>✕</button>
+                              </div>
+                              <div style={{color:G400,marginTop:1,fontStyle:'italic'}}>{x.s.translation}</div>
+                            </div>;
+                          })}
+                        </div>}
                       </div>;
                     })}
                     {editWord&&editWord.chId===ch.id&&(<div style={{padding:8,background:'white',borderRadius:8,border:'1px solid '+T,marginTop:6}}>
