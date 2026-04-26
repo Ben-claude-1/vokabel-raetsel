@@ -2572,8 +2572,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   if(phase==='dashes'){
-    var dashWord = wordDisplay(current);
-    var dashLetterCount = dashWord.replace(/ /g,'').length;
+    var dashLayout = buildT2Layout(wordDisplay(current));
+    var dashLetterCount = dashLayout.targetNoSpaces.length;
     return(
       <div style={{padding:8}}>
         {liveChip}
@@ -2581,13 +2581,14 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
-          <div style={{display:'flex',gap:4,justifyContent:'center',flexWrap:'wrap'}}>
+          <div style={{display:'flex',gap:4,alignItems:'flex-end',justifyContent:'center',flexWrap:'wrap'}}>
             {(function(){
               var ai=0; var typedNS=input.replace(/\s+/g,'');
-              return dashWord.split('').map(function(ch,ci){
-                if(ch===' ') return <span key={'sp'+ci} style={{width:12,display:'inline-block'}}/>;
+              return dashLayout.items.map(function(it,ci){
+                if(it.type==='space') return <span key={'sp'+ci} style={{width:12,display:'inline-block'}}/>;
+                if(it.type==='static') return <span key={'st'+ci} style={{fontSize:13,color:G600,fontStyle:'italic',padding:'0 4px',whiteSpace:'nowrap',alignSelf:'center'}}>{it.text}</span>;
                 var letter=typedNS[ai]||''; ai++;
-                return <div key={ci} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                return <div key={'sl'+ci} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
                   <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
                   <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
                 </div>;
