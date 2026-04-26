@@ -1945,6 +1945,26 @@ function lsPickWord(progress,lastWord) {
 }
 function normWordKey(w) { return (w||'').toLowerCase().trim().replace(/^to\s+/,''); }
 
+// Sammelt alle Sätze aus den Kapiteln, deren wordRef einer Vokabel im aktuellen Run entspricht.
+function collectRunSentences(progressData, chapters){
+  var wordKeys = {};
+  [1,2,3,4,5,6].forEach(function(pot){
+    (((progressData||{}).pots||{})[pot]||[]).forEach(function(w){
+      wordKeys[normWordKey(w.word)] = true;
+    });
+  });
+  var sents = [];
+  (chapters||[]).forEach(function(ch){
+    (ch.sentences||[]).forEach(function(s){
+      if(!s||!s.wordRef||!s.text||!s.translation) return;
+      if(wordKeys[normWordKey(s.wordRef)]){
+        sents.push({text:s.text, translation:s.translation, wordRef:s.wordRef, chapId:ch.id});
+      }
+    });
+  });
+  return sents;
+}
+
 // For Topf 2: split a word into renderable items so parens become static labels and only
 // the actual letters become fillable slots. e.g. "open (from ... to ...)" →
 // items: [slot:o, slot:p, slot:e, slot:n, space, static:"(from ... to ...)"], target: "open".
@@ -2230,6 +2250,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sesStart, setSesStart] = useState(null);
   var [sesAns, setSesAns] = useState(0);
   var [sesCor, setSesCor] = useState(0);
+  var [testWords, setTestWords] = useState([]);
+  var [testIdx, setTestIdx] = useState(0);
+  var [testLog, setTestLog] = useState([]);
   var sesLastActive = useRef(null);
   var sesActiveSec = useRef(0);
   var inputRef = useRef();
@@ -2279,7 +2302,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     });
   },[]);
 
-  useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes')) inputRef.current.focus(); },[phase]);
+  useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes'||phase==='test_q')) inputRef.current.focus(); },[phase,testIdx]);
 
   function saveAndUpdate(newData){
     lsSaveProgress(player.id, run.id, newData);
@@ -2432,6 +2455,95 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     pickWord();
   }
 
+  // Notenschlüssel für 10 Vokabeln: 0F→1, 1F→2, 2F→3, 3-4F→4, 5-6F→5, 7+F→6
+  function testGradeFor(errors){
+    if(errors<=0) return 1;
+    if(errors<=1) return 2;
+    if(errors<=2) return 3;
+    if(errors<=4) return 4;
+    if(errors<=6) return 5;
+    return 6;
+  }
+  // Gewichtete Auswahl aus Vokabeln + zugewiesenen Sätzen. Pro Netto-Falsch-Antwort +20% Gewicht.
+  function pickTestItems(d, sentences, count){
+    var pool = [];
+    [1,2,3,4,5,6].forEach(function(pot){
+      (d.pots[pot]||[]).forEach(function(w){
+        pool.push({item:Object.assign({},w,{pot:pot,kind:'word'}), weight:1+0.2*Math.max(0,(w.wrong||0)-(w.correct||0))});
+      });
+    });
+    (sentences||[]).forEach(function(s){
+      pool.push({item:Object.assign({},s,{kind:'sentence'}), weight:1});
+    });
+    var n = Math.min(count, pool.length);
+    var picked = [];
+    for(var i=0;i<n;i++){
+      var totalW = pool.reduce(function(s,x){return s+x.weight;},0);
+      var r = Math.random()*totalW, cum = 0, selIdx = 0;
+      for(var j=0;j<pool.length;j++){
+        cum += pool[j].weight;
+        if(cum >= r){ selIdx = j; break; }
+      }
+      picked.push(pool[selIdx].item);
+      pool.splice(selIdx,1);
+    }
+    return picked;
+  }
+  function startTest(){
+    var sents = collectRunSentences(data, chapters);
+    var picked = pickTestItems(data, sents, 10);
+    if(picked.length===0){ alert('Keine Vokabeln im Run.'); return; }
+    setTestWords(picked); setTestIdx(0); setTestLog([]);
+    setInput(''); setResult(null); setCurrent(picked[0]);
+    setPhase('test_q');
+  }
+  function testItemPrompt(it){ return it.kind==='sentence' ? it.translation : it.clue; }
+  function testItemAnswer(it){ return it.kind==='sentence' ? it.text : wordDisplay(it); }
+  function testItemDisplayWord(it){ return it.kind==='sentence' ? it.text : it.word; }
+  function submitTestAnswer(){
+    var w = testWords[testIdx]; if(!w) return;
+    var typed = input.trim();
+    var correctAnswer = testItemAnswer(w);
+    var status = checkAnswer(typed, correctAnswer);
+    var correct = status==='correct'||status==='partial';
+    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null};
+    setTestLog(function(l){return l.concat([entry]);});
+    setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:entry.word,clue:entry.clue,typed:typed,skipped:false,kind:w.kind});
+    setPhase('test_show');
+  }
+  function skipTestAnswer(){
+    var w = testWords[testIdx]; if(!w) return;
+    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:'', correct:false, partial:false, skipped:true, wordRef:w.wordRef||null};
+    setTestLog(function(l){return l.concat([entry]);});
+    setResult({skipped:true,correct:false,answer:testItemAnswer(w),word:entry.word,clue:entry.clue,typed:'',kind:w.kind});
+    setPhase('test_show');
+  }
+  function finalizeTest(finalLog){
+    var tCorr = finalLog.filter(function(l){return l.correct;}).length;
+    var tErr = finalLog.length - tCorr;
+    var tGrade = testGradeFor(tErr);
+    var entry = {ts:Date.now(), date:new Date().toISOString().slice(0,10), total:finalLog.length, correct:tCorr, errors:tErr, grade:tGrade, items:finalLog};
+    var nd = JSON.parse(JSON.stringify(data));
+    if(!Array.isArray(nd.tests)) nd.tests = [];
+    nd.tests.push(entry);
+    if(nd.tests.length>30) nd.tests = nd.tests.slice(-30);
+    saveAndUpdate(nd);
+  }
+  function nextTestQuestion(){
+    setResult(null); setInput('');
+    var nextI = testIdx + 1;
+    if(nextI >= testWords.length){
+      finalizeTest(testLog);
+      setPhase('test_done');
+      return;
+    }
+    setTestIdx(nextI); setCurrent(testWords[nextI]); setPhase('test_q');
+  }
+  function exitTest(){
+    setTestWords([]); setTestIdx(0); setTestLog([]);
+    setInput(''); setResult(null); setCurrent(null); setPhase('pick');
+  }
+
   if(dataLoading||!data) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Fortschritt…</div>;
 
   var livePct = lsPercent(data, streak);
@@ -2444,8 +2556,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   </div> : null;
 
   if(phase==='pick'){
-    var pct = lsPercent(data);
-    var grade = lsGrade(data);
+    var pct = lsPercent(data, streak);
+    var grade = lsGrade(pct, streak);
     var totalWords = Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
     var learned = (data.pots[5]||[]).length + (data.pots[6]||[]).length;
     return(
@@ -2484,6 +2596,21 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           return <LernVerlaufChart sessions={data.sessions||[]} todayExtraSec={sesStart?Math.round((Date.now()-sesStart)/1000):0} requiredMinPerDay={soll} targetDate={run.target_date}/>;
         })()}
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
+        <button onClick={startTest} disabled={totalWords===0} style={BtnStyle('#a855f7','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>📝 Test starten (10 Vokabeln)</button>
+        {Array.isArray(data.tests)&&data.tests.length>0&&(function(){
+          var recent = data.tests.slice(-5).reverse();
+          return <div style={{marginBottom:8,padding:'10px 12px',background:'white',borderRadius:12,border:'2px solid #e9d5ff'}}>
+            <div style={{fontSize:11,fontWeight:'bold',color:'#7c3aed',marginBottom:6,letterSpacing:1,textTransform:'uppercase'}}>📝 Test-Historie</div>
+            {recent.map(function(t,i){
+              var gColor = t.grade<=2?'#059669':t.grade<=4?'#7c3aed':'#dc2626';
+              return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:i<recent.length-1?'1px solid '+G100:'none',fontSize:12}}>
+                <span style={{fontSize:18,fontWeight:'bold',color:gColor,minWidth:20,textAlign:'center'}}>{t.grade}</span>
+                <span style={{fontSize:11,color:G900,flex:1}}>{t.correct}/{t.total} richtig</span>
+                <span style={{fontSize:10,color:G400}}>{t.date}</span>
+              </div>;
+            })}
+          </div>;
+        })()}
         <button onClick={function(){var nd=saveSession(data);if(nd!==data){lsSaveProgress(player.id,run.id,nd);}onDone();}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
       </div>
     );
@@ -2653,6 +2780,93 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <button onClick={function(){var nd=saveSession(data);if(nd!==data){saveAndUpdate(nd);}setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
         {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
         <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>🔇 Als unwichtig melden</button>
+      </div>
+    );
+  }
+
+  if(phase==='test_q'){
+    var tw = testWords[testIdx];
+    var twIsSent = tw && tw.kind==='sentence';
+    var testChip = <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(168,85,247,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}}>📝 Test {testIdx+1}/{testWords.length}</div>;
+    return(
+      <div style={{padding:8}}>
+        {testChip}
+        <div style={{textAlign:'center',padding:'18px 16px',background:'#faf5ff',borderRadius:14,marginBottom:12,border:'2px solid #d8b4fe'}}>
+          <div style={{fontSize:10,color:'#7c3aed',marginBottom:4,textTransform:'uppercase',letterSpacing:1,fontWeight:'bold'}}>{twIsSent?'Test — Übersetze ins Englische':'Test — Wie heißt das auf Englisch?'}</div>
+          <div style={{fontSize:twIsSent?18:24,fontWeight:'bold',color:G900,lineHeight:1.3}}>{tw&&(twIsSent?tw.translation:tw.clue)}</div>
+          {twIsSent&&<div style={{fontSize:10,color:G400,marginTop:6}}>💬 Beispielsatz · Vokabel: {tw.wordRef}</div>}
+        </div>
+        <div style={{display:'flex',gap:8,marginBottom:8}}>
+          <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')submitTestAnswer();}}
+            autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
+            placeholder={twIsSent?'Englischer Satz…':'Englisch…'}
+            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #a855f7',borderRadius:10,outline:'none'}}/>
+          <button onClick={submitTestAnswer} style={BtnStyle('#a855f7','white',{padding:'12px 16px',fontSize:15})}>✓</button>
+        </div>
+        <button onClick={skipTestAnswer} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        <button onClick={function(){if(confirm('Test abbrechen? Der bisherige Fortschritt geht verloren.'))exitTest();}} style={BtnStyle(G100,G400,{width:'100%',padding:'7px',fontSize:11,marginTop:6})}>Abbrechen</button>
+      </div>
+    );
+  }
+
+  if(phase==='test_show'){
+    var testChip2 = <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(168,85,247,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}}>📝 Test {testIdx+1}/{testWords.length}</div>;
+    var isLast = testIdx+1 >= testWords.length;
+    return(
+      <div style={{padding:8}}>
+        {testChip2}
+        {result&&(
+          <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.correct?GR:RE)}}>
+            <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
+              {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
+            </div>
+            <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
+            {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+          </div>
+        )}
+        <button onClick={nextTestQuestion} style={BtnStyle('#a855f7','white',{width:'100%',padding:'12px',fontSize:15})}>{isLast?'→ Auswertung':'→ Weiter'}</button>
+      </div>
+    );
+  }
+
+  if(phase==='test_done'){
+    var tCorr = testLog.filter(function(l){return l.correct;}).length;
+    var tErr = testLog.length - tCorr;
+    var tGrade = testGradeFor(tErr);
+    var tEmoji = tGrade<=2?'🏆':tGrade<=3?'👍':tGrade<=4?'📚':'😢';
+    var tBg = tGrade<=2?'linear-gradient(135deg,#10b981,#065f46)':tGrade<=4?'linear-gradient(135deg,#a855f7,#6b21a8)':'linear-gradient(135deg,#dc2626,#7f1d1d)';
+    return(
+      <div style={{padding:8}}>
+        <div style={{background:tBg,borderRadius:16,padding:24,color:'white',textAlign:'center',marginBottom:12}}>
+          <div style={{fontSize:48,marginBottom:8}}>{tEmoji}</div>
+          <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>Test beendet</div>
+          <div style={{fontSize:13,opacity:.85,marginBottom:12}}>{tCorr} richtig · {tErr} falsch · von {testLog.length}</div>
+          <div style={{fontSize:64,fontWeight:'bold',lineHeight:1}}>{tGrade}</div>
+          <div style={{fontSize:12,opacity:.85,marginTop:4}}>Note</div>
+        </div>
+        <div style={{marginBottom:12}}>
+          {testLog.map(function(l,i){
+            var bg = l.correct?'#d1fae5':l.skipped?G50:'#fee2e2';
+            if(l.kind==='sentence'){
+              return <div key={i} style={{padding:'8px 10px',marginBottom:4,borderRadius:8,background:bg,fontSize:12}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+                  <span>{l.correct?'✓':l.skipped?'⏭':'✗'}</span>
+                  <span style={{fontSize:9,padding:'1px 6px',borderRadius:8,background:'#a855f7',color:'white',fontWeight:'bold'}}>💬 SATZ</span>
+                  <span style={{fontSize:10,color:G400,marginLeft:'auto'}}>{l.wordRef||''}</span>
+                </div>
+                <div style={{fontWeight:'bold'}}>{l.word}</div>
+                <div style={{color:G400,fontSize:11,fontStyle:'italic'}}>{l.clue}</div>
+              </div>;
+            }
+            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',marginBottom:4,borderRadius:8,background:bg,fontSize:12}}>
+              <span>{l.correct?'✓':l.skipped?'⏭':'✗'}</span>
+              <span style={{fontWeight:'bold',flex:1}}>{l.word}</span>
+              <span style={{color:G400,fontSize:11}}>{l.clue}</span>
+            </div>;
+          })}
+        </div>
+        <button onClick={exitTest} style={BtnStyle('#a855f7','white',{width:'100%',padding:'12px'})}>← Zurück</button>
       </div>
     );
   }
@@ -3157,6 +3371,33 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
     if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('✓ Gespeichert'); }
     else setMsg('Fehler!');
     setSaving(false);
+  });
+}
+function saveChapterSentences(chapter, newSentences, allChapters, setChapters, setSaving, setMsg) {
+  setSaving(true);
+  if(!chapter.id){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{sentences:newSentences}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
+  sbPatch('chapters',{sentences:newSentences},'id=eq.'+chapter.id).then(function(ok){
+    if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{sentences:newSentences}):c;}); }); setMsg('✓ Gespeichert'); }
+    else setMsg('Fehler!');
+    setSaving(false);
+  });
+}
+function translateSentenceEN2DE(en){
+  return sbGet('settings','key=eq.anthropic_key').then(function(d){
+    var key = (d&&d[0]&&d[0].value) || localStorage.getItem('claude_api_key') || '';
+    if(!key) return Promise.reject(new Error('Kein Anthropic-API-Key hinterlegt'));
+    return fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{role:'user', content:'Übersetze diesen englischen Satz präzise und natürlich ins Deutsche. Antworte NUR mit dem deutschen Satz, ohne Anführungszeichen, ohne Erklärungen.\n\n'+en}]
+      })
+    }).then(function(r){return r.json();}).then(function(j){
+      if(j && j.content && j.content[0] && j.content[0].text) return j.content[0].text.trim();
+      throw new Error('Keine Übersetzung erhalten');
+    });
   });
 }
 
@@ -3987,6 +4228,8 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [userProgress, setUserProgress] = useState({});
   var [userRuns, setUserRuns] = useState({});
   var [vocabSort, setVocabSort] = useState('seq');
+  var [showSentences, setShowSentences] = useState({}); // chapterId -> bool
+  var [editSent, setEditSent] = useState(null); // {chId, idx, s, translating}
   function sortVocab(words){
     var arr = safeWords(words).slice();
     if(vocabSort==='abc'){
@@ -4065,6 +4308,50 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     saveChapterWords(ch, sorted, chapters, setChapters, setSaving, setMsg);
   }
   var [dragSrc, setDragSrc] = useState(null);
+
+  function doSaveSentence(chapterId, sentObj, sentIdx){
+    var ch = chapters.find(function(c){return c.id===chapterId;});
+    if(!ch) return;
+    var arr = (ch.sentences||[]).slice();
+    if(sentIdx!=null) arr[sentIdx]=sentObj; else arr=arr.concat([sentObj]);
+    saveChapterSentences(ch, arr, chapters, setChapters, setSaving, setMsg);
+    setEditSent(null);
+  }
+  function deleteSentence(chapterId, sentIdx){
+    if(!confirm('Satz löschen?')) return;
+    var ch = chapters.find(function(c){return c.id===chapterId;});
+    if(!ch) return;
+    var arr = (ch.sentences||[]).filter(function(_,i){return i!==sentIdx;});
+    saveChapterSentences(ch, arr, chapters, setChapters, setSaving, setMsg);
+  }
+  function autoTranslateInEditor(){
+    if(!editSent||!editSent.s.text||!editSent.s.text.trim()){ setMsg('Bitte zuerst englischen Satz eingeben'); return; }
+    setEditSent(function(es){return Object.assign({},es,{translating:true});});
+    translateSentenceEN2DE(editSent.s.text.trim()).then(function(de){
+      setEditSent(function(es){
+        if(!es) return es;
+        return Object.assign({},es,{s:Object.assign({},es.s,{translation:de}),translating:false});
+      });
+      setMsg('✓ Übersetzt');
+    }).catch(function(e){
+      setEditSent(function(es){return es?Object.assign({},es,{translating:false}):es;});
+      setMsg('Fehler: '+(e&&e.message||'Übersetzung fehlgeschlagen'));
+    });
+  }
+  function saveSentenceWithAutoTranslate(){
+    if(!editSent) return;
+    var s = editSent.s; var chId = editSent.chId; var idx = editSent.idx;
+    if(!s.text||!s.text.trim()){ setMsg('Bitte englischen Satz eingeben'); return; }
+    var clean = {text:s.text.trim(), translation:(s.translation||'').trim(), wordRef:(s.wordRef||'').trim()||null, important:!!s.important};
+    if(clean.translation){ doSaveSentence(chId, clean, idx); return; }
+    setEditSent(function(es){return Object.assign({},es,{translating:true});});
+    translateSentenceEN2DE(clean.text).then(function(de){
+      doSaveSentence(chId, Object.assign({},clean,{translation:de}), idx);
+    }).catch(function(e){
+      setEditSent(function(es){return es?Object.assign({},es,{translating:false}):es;});
+      setMsg('Fehler bei Übersetzung: '+(e&&e.message||'unbekannt'));
+    });
+  }
 
   function deleteWord(chapterId, wordIdx) {
     if(!confirm('Wort löschen? Es wird auch aus allen Leiterspiel-Runs entfernt.')) return;
@@ -4521,6 +4808,66 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                         <input type="file" accept=".csv,.tsv,.txt" ref={fileRef} onChange={handleFileUpload} style={{display:'none'}}/>
                       </label>
                     </div>
+                    {(function(){
+                      var sents = ch.sentences||[];
+                      var open = !!showSentences[ch.id];
+                      return <div style={{marginTop:8,borderTop:'1px solid '+G200,paddingTop:6}}>
+                        <div onClick={function(){setShowSentences(function(p){var n=Object.assign({},p);n[ch.id]=!n[ch.id];return n;});}}
+                          style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',padding:'4px 2px',fontSize:11,color:'#7c3aed',fontWeight:'bold'}}>
+                          <span>💬 Sätze ({sents.length})</span>
+                          <span style={{marginLeft:'auto',color:G400,fontSize:10}}>{open?'▲':'▼'}</span>
+                        </div>
+                        {open&&<div>
+                          {sents.map(function(s,si){
+                            return <div key={si} style={{padding:'5px 6px',marginBottom:3,borderRadius:6,border:'1px solid '+G200,background:'white',fontSize:11}}>
+                              <div style={{display:'flex',gap:6,alignItems:'baseline'}}>
+                                <span style={{flex:1,fontWeight:'bold',color:G900}}>{s.important?'⭐ ':''}{s.text}</span>
+                                {s.wordRef&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:8,background:'#ede9fe',color:'#7c3aed',fontWeight:'bold',flexShrink:0}}>→ {s.wordRef}</span>}
+                                <button onClick={function(){setEditSent({chId:ch.id,idx:si,s:Object.assign({important:false,wordRef:''},s),translating:false});}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+T,background:'white',color:T,cursor:'pointer',borderRadius:4,flexShrink:0}}>✏</button>
+                                <button onClick={function(){deleteSentence(ch.id,si);}} style={{padding:'1px 6px',fontSize:9,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:4,flexShrink:0}}>✕</button>
+                              </div>
+                              <div style={{fontSize:10,color:G400,marginTop:2,fontStyle:'italic'}}>{s.translation}</div>
+                            </div>;
+                          })}
+                          {editSent&&editSent.chId===ch.id&&(<div style={{padding:8,background:'white',borderRadius:8,border:'1.5px solid #a855f7',marginTop:6}}>
+                            <div style={{fontSize:10,color:'#7c3aed',fontWeight:'bold',marginBottom:5}}>{editSent.idx==null?'Neuer Satz':'Satz bearbeiten'}</div>
+                            <textarea value={editSent.s.text||''} onChange={function(e){var v=e.target.value;setEditSent(function(es){return Object.assign({},es,{s:Object.assign({},es.s,{text:v})});});}}
+                              placeholder="Englischer Satz" rows={2}
+                              style={{width:'100%',padding:'6px',fontSize:12,border:'1px solid '+G200,borderRadius:5,resize:'vertical',boxSizing:'border-box',marginBottom:4}}/>
+                            <div style={{display:'flex',gap:4,marginBottom:4}}>
+                              <textarea value={editSent.s.translation||''} onChange={function(e){var v=e.target.value;setEditSent(function(es){return Object.assign({},es,{s:Object.assign({},es.s,{translation:v})});});}}
+                                placeholder="Deutsche Übersetzung (leer = automatisch)" rows={2}
+                                style={{flex:1,padding:'6px',fontSize:12,border:'1px solid '+G200,borderRadius:5,resize:'vertical',boxSizing:'border-box'}}/>
+                              <button onClick={autoTranslateInEditor} disabled={editSent.translating||!editSent.s.text} title="Automatisch übersetzen"
+                                style={BtnStyle('#a855f7','white',{padding:'4px 10px',fontSize:11,opacity:(editSent.translating||!editSent.s.text)?0.5:1})}>
+                                {editSent.translating?'⏳':'🌐'}
+                              </button>
+                            </div>
+                            <div style={{display:'flex',gap:4,marginBottom:5}}>
+                              <select value={editSent.s.wordRef||''} onChange={function(e){var v=e.target.value;setEditSent(function(es){return Object.assign({},es,{s:Object.assign({},es.s,{wordRef:v})});});}}
+                                style={{flex:1,padding:'5px',fontSize:11,border:'1px solid '+G200,borderRadius:5,background:'white'}}>
+                                <option value="">— Vokabel zuweisen (für Test) —</option>
+                                {sortVocab(ch.words).map(function(w,wi){
+                                  return <option key={wi} value={w.word}>{w.word} ({w.clue})</option>;
+                                })}
+                              </select>
+                              <div onClick={function(){setEditSent(function(es){return Object.assign({},es,{s:Object.assign({},es.s,{important:!es.s.important})});});}}
+                                style={{width:28,height:28,borderRadius:5,border:'2px solid '+(editSent.s.important?AM:G200),background:editSent.s.important?AM:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                                <span style={{fontSize:11}}>{editSent.s.important?'⭐':'☆'}</span>
+                              </div>
+                            </div>
+                            <div style={{display:'flex',gap:5}}>
+                              <button onClick={saveSentenceWithAutoTranslate} disabled={editSent.translating||saving} style={BtnStyle('#a855f7','white',{flex:1,padding:'5px',fontSize:10,opacity:(editSent.translating||saving)?0.5:1})}>
+                                {editSent.translating?'⏳ Übersetze…':saving?'⏳ Speichere…':'✓ Speichern'}
+                              </button>
+                              <button onClick={function(){setEditSent(null);}} style={BtnStyle(G100,G600,{flex:1,padding:'5px',fontSize:10})}>✕ Abbrechen</button>
+                            </div>
+                          </div>)}
+                          <button onClick={function(){setEditSent({chId:ch.id,idx:null,s:{text:'',translation:'',wordRef:'',important:false},translating:false});}}
+                            style={{width:'100%',padding:'5px',marginTop:6,borderRadius:6,border:'1px dashed #a855f7',background:'#faf5ff',color:'#7c3aed',cursor:'pointer',fontSize:11,fontWeight:'bold'}}>+ Satz hinzufügen</button>
+                        </div>}
+                      </div>;
+                    })()}
                   </div>}
                 </div>;
               })}
