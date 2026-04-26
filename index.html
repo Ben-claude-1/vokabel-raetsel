@@ -2762,16 +2762,18 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
       };
     });
     var prompt =
-      'Du wählst Vokabeln aus einer Lernapp basierend auf dem Wunsch des Nutzers.\n\n'+
+      'Du wählst Vokabeln aus einer Lernapp STRIKT nach dem Wunsch des Nutzers.\n\n'+
       'Vokabel-Datenbank (JSON):\n'+JSON.stringify(vocabList)+'\n\n'+
       'Wunsch des Nutzers: "'+aiWish+'"\n\n'+
-      'Aufgabe: Wähle ALLE Vokabeln aus der Datenbank, die zum Wunsch passen. Beachte:\n'+
-      '- Wenn von "wichtig"/"important"/"bold" die Rede ist, nur Wörter mit important=true wählen\n'+
-      '- Wenn von Seitenzahlen die Rede ist (z.B. "Seite 223"), nur Wörter mit passender book_page\n'+
-      '- Wenn von einem Bereich "von X bis Y" die Rede ist (alphabetisch oder nach Seite), entsprechend filtern\n'+
-      '- Wenn von einem Kapitel/Theme/Themenbereich die Rede ist, in chapter-Pfad suchen\n'+
-      '- Wenn unklar, lieber großzügiger wählen\n\n'+
-      'Antworte AUSSCHLIESSLICH mit JSON-Array der gewählten Wort-Strings (ohne Markdown):\n'+
+      'Auswahl-Regeln (in dieser Reihenfolge anwenden):\n'+
+      '1. Wenn "wichtig", "important", "bold" oder "fett" im Wunsch steht: NUR Wörter mit important=true\n'+
+      '2. Wenn "Seite N" im Wunsch steht: NUR Wörter mit book_page === N (EXAKT, nicht angrenzende)\n'+
+      '3. Wenn "Seiten N-M" oder "von Seite N bis Seite M": NUR Wörter mit book_page zwischen N und M (inklusiv)\n'+
+      '4. Wenn "von WORT_A bis WORT_B": Alphabetisch zwischen den beiden, INKLUSIV\n'+
+      '5. Wenn "Theme N" oder "Kapitel X" im Wunsch: NUR Wörter wo "chapter" diesen Text enthält\n'+
+      '6. Mehrere Bedingungen werden mit UND verknüpft (alle müssen gelten)\n\n'+
+      'Sei restriktiv: lieber zu wenig als zu viel. Wenn keine Bedingung passt, gib ein leeres Array zurück.\n\n'+
+      'Antworte AUSSCHLIESSLICH mit JSON (kein Markdown, kein Kommentar):\n'+
       '{"words":["word1","word2",...]}';
 
     fetch(ollamaUrl+'/api/chat', {
