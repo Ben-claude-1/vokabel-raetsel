@@ -2677,10 +2677,13 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
   var [selectedWords, setSelectedWords] = useState([]);
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
-  var [openCh, setOpenCh] = useState(null);
+  var [openCh, setOpenCh] = useState({});
+  var [filterMode, setFilterMode] = useState('manual');
   var [seqChId, setSeqChId] = useState('');
   var [seqFrom, setSeqFrom] = useState('');
   var [seqTo, setSeqTo] = useState('');
+  var [pageFrom, setPageFrom] = useState('');
+  var [pageTo, setPageTo] = useState('');
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var allWords = useMemo(function(){
     var w=[];
@@ -2710,31 +2713,51 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     var hi = parseInt(seqTo,10) || seqRange.max;
     if(lo>hi){ var x=lo; lo=hi; hi=x; }
     var picked = seqRange.words.filter(function(w){return w.seq>=lo && w.seq<=hi;});
-    setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false};}));
+    setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false,book_page:w.book_page,chapterId:w.chapId};}));
     setMsg('✓ '+picked.length+' Vokabeln aus Bereich '+lo+'–'+hi+' gewählt');
     setTimeout(function(){setMsg('');},2500);
   }
+  function applyPageRange(){
+    var lo = parseInt(pageFrom,10);
+    var hi = parseInt(pageTo,10);
+    if(isNaN(lo) || isNaN(hi)){ setMsg('Bitte Von und Bis angeben'); setTimeout(function(){setMsg('');},2500); return; }
+    if(lo>hi){ var x=lo; lo=hi; hi=x; }
+    var picked = allWords.filter(function(w){return typeof w.book_page==='number' && w.book_page>=lo && w.book_page<=hi;});
+    setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false,book_page:w.book_page,chapterId:w.chapId};}));
+    setMsg('✓ '+picked.length+' Vokabeln auf Seiten '+lo+'–'+hi+' gewählt');
+    setTimeout(function(){setMsg('');},2500);
+  }
+  function applyImportant(){
+    var picked = allWords.filter(function(w){return w.important;});
+    setSelectedWords(picked.map(function(w){return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:true,book_page:w.book_page,chapterId:w.chapId};}));
+    setMsg('✓ '+picked.length+' wichtige Vokabeln gewählt');
+    setTimeout(function(){setMsg('');},2500);
+  }
   function isSelected(word){ return selectedWords.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
+  function makeSel(w){ return {word:w.word,clue:w.clue,pot:1,type:w.type||'noun',important:w.important||false,book_page:w.book_page,chapterId:w.chapId||w.chapterId||''}; }
   function toggleWord(wObj){
     setSelectedWords(function(prev){
       if(isSelected(wObj)) return prev.filter(function(w){return normWordKey(w.word)!==normWordKey(wObj.word);});
-      return prev.concat([{word:wObj.word,clue:wObj.clue,pot:1}]);
+      return prev.concat([makeSel(wObj)]);
     });
   }
-  function selectAll(){ setSelectedWords(allWords.map(function(w){return{word:w.word,clue:w.clue,pot:1};})); }
-  function selectImportant(){ setSelectedWords(allWords.filter(function(w){return w.important;}).map(function(w){return{word:w.word,clue:w.clue,pot:1};})); }
+  function selectAll(){ setSelectedWords(allWords.map(makeSel)); }
   function toggleChapter(ch){
-    var chWords=Array.isArray(ch.words)?ch.words:(ch.words?JSON.parse(ch.words)||[]:[]);
     var allSel=safeWords(ch.words).every(function(w){return isSelected(w);});
     if(allSel){ setSelectedWords(function(prev){return prev.filter(function(sw){return !safeWords(ch.words).some(function(cw){return normWordKey(cw.word)===normWordKey(sw.word);});}); }); }
-    else { var toAdd=safeWords(ch.words).filter(function(w){return !isSelected(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
+    else { var toAdd=safeWords(ch.words).filter(function(w){return !isSelected(w);}).map(function(w){return makeSel(Object.assign({},w,{chapId:ch.id}));}); setSelectedWords(function(prev){return prev.concat(toAdd);}); }
   }
   function save(){
     if(!name.trim()||selectedWords.length<2){setMsg('Name und mind. 2 Wörter erforderlich');return;}
     setSaving(true);
-    var wordsJson=JSON.stringify(selectedWords.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapId||'',important:w.important||false};}));
+    var sortedSel = selectedWords.slice().sort(function(a,b){
+      var pa=(a.book_page!=null?a.book_page:99999), pb=(b.book_page!=null?b.book_page:99999);
+      if(pa!==pb) return pa-pb;
+      return (a.word||'').localeCompare(b.word||'');
+    });
+    var wordsJson=JSON.stringify(sortedSel.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||w.chapId||'',important:!!w.important,book_page:w.book_page,pot:1};}));
     var newRun={name:name.trim(),icon:icon,player_id:UUID.test(player.id)?player.id:null,
-      is_admin_run:!!(player.is_admin),word_count:selectedWords.length,sentence_count:0,
+      is_admin_run:!!(player.is_admin),word_count:sortedSel.length,sentence_count:0,
       words:wordsJson,sentences:'[]',created_at:new Date().toISOString()};
     sbPost('ls_runs',newRun).then(function(res){
       setSaving(false);
@@ -2751,14 +2774,29 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
         <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Run-Name…"
           style={{flex:1,padding:'10px 12px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
       </div>
-      <div style={{display:'flex',gap:6,marginBottom:10}}>
-        <button onClick={selectImportant} style={BtnStyle(T,'white',{flex:1,padding:'7px',fontSize:11})}>⭐ Alle wichtigen</button>
-        <button onClick={selectAll} style={BtnStyle(G100,G600,{flex:1,padding:'7px',fontSize:11})}>Alle ({allWords.length})</button>
-        <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'7px 10px',fontSize:11})}>✕</button>
-      </div>
-      {seqChapters.length>0 && <div style={{marginBottom:10,padding:10,background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:8}}>
-        <div style={{fontSize:11,fontWeight:'bold',color:'#0369a1',marginBottom:5}}>📖 Buchreihenfolge: Bereich auswählen</div>
-        <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+      <div style={{marginBottom:10,padding:10,background:G50,border:'1px solid '+G200,borderRadius:8}}>
+        <div style={{display:'flex',gap:4,marginBottom:6,flexWrap:'wrap'}}>
+          {[['manual','✋ Manuell'],['important','⭐ Nur wichtige'],['pages','📖 Seitenbereich'],['range','🔤 Vokabel A–B']].map(function(m){
+            return <button key={m[0]} onClick={function(){setFilterMode(m[0]);}} style={BtnStyle(filterMode===m[0]?T:'white', filterMode===m[0]?'white':G600,{padding:'5px 9px',fontSize:11,border:'1px solid '+(filterMode===m[0]?T:G200)})}>{m[1]}</button>;
+          })}
+          <button onClick={function(){setSelectedWords([]);}} style={BtnStyle(RE,'white',{padding:'5px 9px',fontSize:11,marginLeft:'auto'})}>✕ Auswahl leeren</button>
+        </div>
+        {filterMode==='manual' && <div style={{fontSize:10,color:G400}}>Klick die Vokabeln einzeln in der Liste unten an oder ganze Themenbereiche per ✓-Box.</div>}
+        {filterMode==='important' && <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <span style={{fontSize:11,color:G600}}>Alle ⭐-markierten Vokabeln aus allen Kapiteln:</span>
+          <button onClick={applyImportant} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>↳ {allWords.filter(function(w){return w.important;}).length} wählen</button>
+        </div>}
+        {filterMode==='pages' && <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+          <span style={{fontSize:11,color:G600}}>Seiten von</span>
+          <input type='number' value={pageFrom} onChange={function(e){setPageFrom(e.target.value);}} placeholder='z.B. 223'
+            style={{width:80,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
+          <span style={{fontSize:11,color:G600}}>bis</span>
+          <input type='number' value={pageTo} onChange={function(e){setPageTo(e.target.value);}} placeholder='z.B. 227'
+            style={{width:80,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
+          <button onClick={applyPageRange} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>↳ Wählen</button>
+          <span style={{fontSize:9,color:G400}}>(Buchseitenzahl)</span>
+        </div>}
+        {filterMode==='range' && seqChapters.length>0 && <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
           <select value={seqChId} onChange={function(e){setSeqChId(e.target.value);setSeqFrom('');setSeqTo('');}}
             style={{flex:'1 1 140px',padding:'5px 7px',fontSize:11,border:'1px solid '+G200,borderRadius:6}}>
             <option value="">-- Themenbereich --</option>
@@ -2773,41 +2811,84 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
               style={{width:60,padding:'4px 6px',fontSize:11,border:'1px solid '+G200,borderRadius:5}}/>
             <button onClick={applySeqRange} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>↳ Wählen</button>
           </span>}
-        </div>
-        {seqRange && <div style={{fontSize:9,color:G400,marginTop:3}}>{seqRange.words.length} Vokabeln mit Reihenfolge in diesem Bereich (seq {seqRange.min}–{seqRange.max})</div>}
-      </div>}
-      <div style={{marginBottom:12,padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold'}}>{selectedWords.length} Vokabeln ausgewählt</div>
-      {topLevel.map(function(kap){
-        var children=chapters.filter(function(c){return c.parent_id===kap.id;});
-        return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
-          <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
-          {children.map(function(ch){
-            var chSel=safeWords(ch.words).every(function(w){return isSelected(w);});
-            var chSome=!chSel&&safeWords(ch.words).some(function(w){return isSelected(w);});
-            var open=openCh===ch.id;
-            return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
-                <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(chSel?ch.color:chSome?ch.color:G200),background:chSel?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  {chSel&&<span style={{color:'white',fontSize:10}}>✓</span>}
-                  {chSome&&<span style={{color:ch.color,fontSize:12}}>−</span>}
-                </div>
-                <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{safeWords(ch.words).filter(function(w){return isSelected(w);}).length}/{safeWords(ch.words).length}</span>
-                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
+        </div>}
+      </div>
+      <div style={{marginBottom:8,display:'flex',gap:6,alignItems:'center'}}>
+        <span style={{flex:1,padding:'8px 12px',background:TL,borderRadius:8,fontSize:13,color:T,fontWeight:'bold'}}>{selectedWords.length} Vokabeln ausgewählt</span>
+        <button onClick={selectAll} style={BtnStyle(G100,G600,{padding:'8px 12px',fontSize:11})}>Alle ({allWords.length})</button>
+      </div>
+      {(function(){
+        function toggleOpen(id){ setOpenCh(function(prev){var n=Object.assign({},prev); n[id]=!n[id]; return n;}); }
+        function renderVocabRow(w, chId){
+          var sel = isSelected(w);
+          var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
+          var typeLabels={verb:'V',noun:'N',adjective:'Adj',phrase:'Ph',other:'?'};
+          var tc=typeColors[w.type]||G400; var tl=typeLabels[w.type]||'';
+          return <div onClick={function(){toggleWord(Object.assign({},w,{chapId:chId}));}} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 8px',borderBottom:'1px solid '+G100,fontSize:11,cursor:'pointer',background:sel?TL:'transparent'}}>
+            <span style={{width:14,flexShrink:0,fontSize:11,color:sel?T:G200,fontWeight:'bold',textAlign:'center'}}>{sel?'✓':''}</span>
+            <span style={{fontSize:12,flexShrink:0,color:w.important?AM:G200}}>{w.important?'⭐':'☆'}</span>
+            <div style={{flex:1,minWidth:0,display:'flex',gap:6,alignItems:'baseline',overflow:'hidden'}} title={w.word+' → '+w.clue}>
+              <span style={{fontWeight:'bold',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.word}</span>
+              <span style={{color:G400,fontSize:10,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flexShrink:1}}>{w.clue}</span>
+            </div>
+            {w.book_page!=null && <span style={{fontSize:9,color:G400,flexShrink:0}}>S.{w.book_page}</span>}
+            {w.type && <span style={{fontSize:8,padding:'1px 5px',borderRadius:8,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44'}}>{tl}</span>}
+          </div>;
+        }
+        function renderLeaf(ch, depth){
+          var pad = 8 + depth*12;
+          var chSel = safeWords(ch.words).every(function(w){return isSelected(w);});
+          var chSome = !chSel && safeWords(ch.words).some(function(w){return isSelected(w);});
+          var open = openCh[ch.id];
+          var selCount = safeWords(ch.words).filter(function(w){return isSelected(w);}).length;
+          return <div key={ch.id} style={{borderBottom:'1px solid '+G100}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px '+pad+'px',cursor:'pointer',background:open?(ch.color||T)+'10':'white'}} onClick={function(){toggleOpen(ch.id);}}>
+              <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(chSel?ch.color:chSome?ch.color:G200),background:chSel?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+                {chSel&&<span style={{color:'white',fontSize:10}}>✓</span>}
+                {chSome&&<span style={{color:ch.color,fontSize:12}}>−</span>}
               </div>
-              {open&&<div style={{padding:'4px 12px 8px 32px',background:'#fafafa',display:'flex',flexWrap:'wrap',gap:4}}>
-                {safeWords(ch.words).map(function(w,i){
-                  var sel=isSelected(w);
-                  return <div key={i} onClick={function(){toggleWord(w);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:20,border:'1.5px solid '+(sel?ch.color:G200),background:sel?ch.color+'18':'white',cursor:'pointer',touchAction:'manipulation'}}>
-                    {w.important&&<span style={{fontSize:9}}>⭐</span>}
-                    <span style={{fontSize:11,fontWeight:w.important?'bold':'normal',color:sel?ch.color:G600}}>{w.word}</span>
-                  </div>;
-                })}
-              </div>}
-            </div>;
-          })}
-        </div>;
-      })}
+              <span style={{fontSize:13,flexShrink:0}}>{ch.icon}</span>
+              <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ch.title}</span>
+              <span style={{fontSize:10,color:G400,flexShrink:0}}>{selCount}/{safeWords(ch.words).length}</span>
+              <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
+            </div>
+            {open&&<div style={{background:'#fafafa'}}>
+              {safeWords(ch.words).slice().sort(function(a,b){
+                var pa=(a.book_page!=null?a.book_page:99999), pb=(b.book_page!=null?b.book_page:99999);
+                if(pa!==pb) return pa-pb;
+                return (a.seq||9999)-(b.seq||9999) || (a.word||'').localeCompare(b.word||'');
+              }).map(function(w,i){return <div key={i} style={{paddingLeft:pad+'px'}}>{renderVocabRow(w, ch.id)}</div>;})}
+            </div>}
+          </div>;
+        }
+        function renderBranch(ch, depth){
+          var grandkids = chapters.filter(function(c){return c.parent_id===ch.id;}).slice().sort(naturalSort);
+          var open = openCh[ch.id];
+          var pad = 8 + depth*12;
+          if(!grandkids.length) return renderLeaf(ch, depth);
+          return <div key={ch.id} style={{borderBottom:'1px solid '+G100}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px '+pad+'px',cursor:'pointer',background:open?G50:'white'}} onClick={function(){toggleOpen(ch.id);}}>
+              <span style={{fontSize:14,flexShrink:0,marginLeft:18}}>{ch.icon}</span>
+              <span style={{fontSize:12,fontWeight:'bold',color:ch.color||T,flex:1,overflow:'hidden',textOverflow:'ellipsis'}}>{ch.title}</span>
+              <span style={{fontSize:10,color:G400,flexShrink:0}}>{grandkids.length} Bereiche</span>
+              <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
+            </div>
+            {open&&<div>{grandkids.map(function(gk){return renderBranch(gk, depth+1);})}</div>}
+          </div>;
+        }
+        return topLevel.map(function(kap){
+          var open = openCh[kap.id];
+          var children = chapters.filter(function(c){return c.parent_id===kap.id;}).slice().sort(naturalSort);
+          return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:G50,cursor:'pointer'}} onClick={function(){toggleOpen(kap.id);}}>
+              <span style={{fontSize:18}}>{kap.icon}</span>
+              <span style={{fontWeight:'bold',fontSize:13,color:kap.color||T,flex:1}}>{kap.title}</span>
+              <span style={{fontSize:10,color:G400}}>{open?'▲':'▼'}</span>
+            </div>
+            {open && <div>{children.map(function(c){return renderBranch(c, 1);})}</div>}
+          </div>;
+        });
+      })()}
       {msg&&<div style={{padding:'8px 12px',borderRadius:8,background:msg.startsWith('✓')?'#d1fae5':'#fee2e2',color:msg.startsWith('✓')?T:RE,marginBottom:8,fontSize:12}}>{msg}</div>}
       <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'12px',marginTop:8})}>{saving?'Speichern…':'💾 Run speichern'}</button>
     </div>
