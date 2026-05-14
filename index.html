@@ -3649,6 +3649,93 @@ function DailyLearnChart({ sessions, run, pacing }) {
   </div>;
 }
 
+// ── Daily Goal Tracking ─────────────────────────────────────────
+var DAILY_GOAL_SEC = 900; // 15 Minuten
+
+function buildByDay(sessions) {
+  var byDay = {};
+  (sessions||[]).forEach(function(s){
+    var k = s.started_at ? String(s.started_at).slice(0,10) : (s.d||'');
+    if(!k) return;
+    byDay[k] = (byDay[k]||0) + (s.active_seconds||s.dur||0);
+  });
+  return byDay;
+}
+
+function calcStreakFromByDay(byDay) {
+  var today = new Date(); today.setHours(0,0,0,0);
+  var todayKey = today.toISOString().slice(0,10);
+  var streak = (byDay[todayKey]||0) >= DAILY_GOAL_SEC ? 1 : 0;
+  var d = new Date(today); d.setDate(d.getDate()-1);
+  for(var i=0; i<365; i++){
+    var k = d.toISOString().slice(0,10);
+    if((byDay[k]||0) >= DAILY_GOAL_SEC){ streak++; d.setDate(d.getDate()-1); }
+    else break;
+  }
+  return streak;
+}
+
+function getWeekDays() {
+  var d = new Date(); d.setHours(0,0,0,0);
+  var mon = new Date(d); mon.setDate(d.getDate()-((d.getDay()+6)%7));
+  var days = [];
+  for(var i=0; i<7; i++){ var day=new Date(mon); day.setDate(mon.getDate()+i); days.push(day.toISOString().slice(0,10)); }
+  return days;
+}
+
+function getWeekKey() { return getWeekDays()[0]; }
+
+function AdminLernzeitOverview({ allUsers }) {
+  var [sessions, setSessions] = useState([]);
+  useEffect(function(){
+    sbGet('learn_sessions','select=player_id,active_seconds,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
+  },[]);
+  var weekDays = getWeekDays();
+  var today = new Date().toISOString().slice(0,10);
+  var DAY_LABELS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  var playerByDay = {};
+  sessions.forEach(function(s){
+    var pid=s.player_id; var k=s.started_at?String(s.started_at).slice(0,10):'';
+    if(!k||!pid) return;
+    if(!playerByDay[pid]) playerByDay[pid]={};
+    playerByDay[pid][k]=(playerByDay[pid][k]||0)+(s.active_seconds||0);
+  });
+  if(!allUsers||allUsers.length===0) return null;
+  return (
+    <div style={{marginBottom:14}}>
+      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: 15 Min/Tag</div>
+      <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden'}}>
+        <div style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',background:G50,padding:'5px 8px',gap:2,borderBottom:'1px solid '+G200}}>
+          <div/>
+          {weekDays.map(function(d,i){
+            var isToday=d===today, isFuture=d>today;
+            return <div key={d} style={{textAlign:'center',fontSize:9,color:isFuture?G200:isToday?T:G600,fontWeight:isToday?'bold':'normal'}}>{DAY_LABELS[i]}<br/><span style={{fontSize:8}}>{d.slice(8)}.</span></div>;
+          })}
+        </div>
+        {allUsers.map(function(u){
+          var byDay=playerByDay[u.id]||{};
+          var streak=calcStreakFromByDay(byDay);
+          return <div key={u.id} style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',padding:'5px 8px',gap:2,borderBottom:'1px solid '+G50,alignItems:'center'}}>
+            <div style={{fontSize:11,fontWeight:'bold',color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {u.name}{streak>0&&<span style={{fontSize:9,color:'#d97706',marginLeft:3}}>🔥{streak}</span>}
+            </div>
+            {weekDays.map(function(d){
+              var sec=byDay[d]||0, min=Math.round(sec/60);
+              var done=sec>=DAILY_GOAL_SEC, isFuture=d>today, isToday=d===today;
+              var bg=isFuture?'white':done?'#d1fae5':sec>0?'#fef3c7':'#f9fafb';
+              var col=isFuture?G200:done?T:sec>0?'#92400e':G300;
+              return <div key={d} style={{textAlign:'center',padding:'3px 1px',borderRadius:4,background:bg,border:'1px solid '+(isToday?T:'transparent')}}>
+                <span style={{fontSize:9,fontWeight:'bold',color:col}}>{isFuture?'':min>0?min+'′':'–'}</span>
+                {done&&!isFuture&&<div style={{fontSize:7,color:T}}>✓</div>}
+              </div>;
+            })}
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LeitersSpielAdminOverview({ chapters, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
@@ -5019,6 +5106,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       </div>)}
 
       {tab==='users'&&(<div>
+        <AdminLernzeitOverview allUsers={allUsers.filter(function(u){return !u.is_admin;})}/>
         <button onClick={function(){setShowNewUser(!showNewUser);setNewUserErr('');setNewUserName('');setNewUserPw('');}} style={{width:'100%',padding:'9px',borderRadius:8,border:'2px dashed '+T,background:'white',color:T,fontWeight:'bold',fontSize:12,cursor:'pointer',marginBottom:10}}>+ Neuer Spieler</button>
         {showNewUser&&(<div style={{padding:'12px',borderRadius:10,border:'1px solid '+G200,background:'#f0fdf4',marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:'bold',color:T,marginBottom:8}}>Neuen Spieler anlegen</div>
@@ -5282,6 +5370,73 @@ function RegisterScreen({ onRegister, onBack }) {
       </div>
     </div>
   );
+}
+
+// ── Goal Notifications ──────────────────────────────────────────
+function GoalToast({ msg, emoji, onClose }) {
+  useEffect(function(){ var t=setTimeout(onClose,5000); return function(){clearTimeout(t);}; },[]);
+  return (
+    <div onClick={onClose} style={{position:'fixed',bottom:76,left:'50%',transform:'translateX(-50%)',
+      background:'linear-gradient(135deg,#059669,#10b981)',color:'white',borderRadius:20,
+      padding:'14px 20px',boxShadow:'0 4px 24px rgba(5,150,105,0.4)',zIndex:9999,
+      textAlign:'center',maxWidth:300,width:'88%',cursor:'pointer'}}>
+      <div style={{fontSize:30,marginBottom:4}}>{emoji}</div>
+      <div style={{fontWeight:'bold',fontSize:14,lineHeight:1.3}}>{msg}</div>
+      <div style={{fontSize:9,color:'rgba(255,255,255,0.7)',marginTop:5}}>Tippe zum Schließen</div>
+    </div>
+  );
+}
+
+function GoalTracker({ player, onInfo }) {
+  var [toasts, setToasts] = useState([]);
+  var streakKey = 'goal_streak_'+(player&&player.id||'x');
+  var shownKey  = 'goal_shown_' +(player&&player.id||'x');
+
+  function check() {
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!player||!player.id||!UUID.test(player.id)) return;
+    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=active_seconds,started_at').then(function(sessions){
+      if(!Array.isArray(sessions)) return;
+      var byDay = buildByDay(sessions);
+      var today = new Date().toISOString().slice(0,10);
+      var todaySec = byDay[today]||0;
+      var weekDays = getWeekDays();
+      var weekGoalDays = weekDays.filter(function(k){return (byDay[k]||0)>=DAILY_GOAL_SEC;}).length;
+      var streak = calcStreakFromByDay(byDay);
+      var stored={}; try{stored=JSON.parse(localStorage.getItem(streakKey)||'{}');}catch(e){}
+      var shown={};  try{shown =JSON.parse(localStorage.getItem(shownKey)||'{}');}catch(e){}
+      var best = Math.max(stored.best||0, streak);
+      var newToasts=[];
+      if(todaySec>=DAILY_GOAL_SEC && shown.dailyDate!==today){
+        shown.dailyDate=today;
+        newToasts.push({id:'daily',emoji:'🎯',msg:'Super gemacht! Dein Tagesziel hast du erreicht!'});
+      }
+      var weekKey=getWeekKey();
+      if(weekGoalDays>=5 && shown.weekKey!==weekKey){
+        shown.weekKey=weekKey;
+        newToasts.push({id:'weekly',emoji:'🏆',msg:'Glückwunsch, dein Wochenziel hast du erreicht!'});
+      }
+      if(streak>(stored.best||0) && streak>1 && shown.streakRecord!==String(streak)){
+        shown.streakRecord=String(streak);
+        newToasts.push({id:'streak',emoji:'🔥',msg:'Super, du hast deine alte Streak gebrochen! '+streak+' Tage am Stück!'});
+      }
+      localStorage.setItem(streakKey,JSON.stringify({current:streak,best:best}));
+      localStorage.setItem(shownKey, JSON.stringify(shown));
+      if(onInfo) onInfo({current:streak,best:best,todaySec:todaySec});
+      if(newToasts.length>0) setToasts(function(prev){
+        return prev.concat(newToasts.filter(function(n){return !prev.find(function(p){return p.id===n.id;});}));
+      });
+    }).catch(function(){});
+  }
+
+  useEffect(function(){
+    check();
+    var iv=setInterval(check,60000);
+    return function(){clearInterval(iv);};
+  },[player&&player.id]);
+
+  function dismiss(id){ setToasts(function(t){return t.filter(function(x){return x.id!==id;});}); }
+  return <div>{toasts.map(function(t){return <GoalToast key={t.id} emoji={t.emoji} msg={t.msg} onClose={function(){dismiss(t.id);}}/>;})}</div>;
 }
 
 // ── Grammar Trainer ────────────────────────────────────────────
@@ -5941,6 +6096,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [lsStreak, setLsStreak] = useState(null);
   var [onlineIds, setOnlineIds] = useState([]);
   var [quizScoring, setQuizScoring] = useState({correct:10,win:50,loss:-50,draw:30});
+  var [goalInfo, setGoalInfo] = useState({current:0,best:0,todaySec:0});
   var allUsersRef = useRef(allUsers);
   allUsersRef.current = allUsers;
 
@@ -6102,11 +6258,19 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           <button onClick={onLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>Abmelden</button>
         </div>
 
+        {!isAdmin&&<GoalTracker player={player} onInfo={setGoalInfo}/>}
         <div style={{flex:1,overflowY:'auto',padding:'12px 10px 70px'}}>
           {screen==='home'&&(<div>
             <div style={{background:'linear-gradient(135deg,'+T+'22,'+T+'08)',borderRadius:16,padding:16,marginBottom:14,border:'1px solid '+T+'22'}}>
-              <div style={{fontWeight:'bold',fontSize:14,color:T,marginBottom:4}}>Hallo, {player&&player.name}! 👋</div>
-              <div style={{fontSize:12,color:G600}}>Heute Vokabeln lernen?</div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                <div style={{fontWeight:'bold',fontSize:14,color:T}}>Hallo, {player&&player.name}! 👋</div>
+                {goalInfo.current>0&&<span style={{fontSize:13,fontWeight:'bold',color:'#d97706'}}>🔥 {goalInfo.current}</span>}
+              </div>
+              {goalInfo.todaySec>0
+                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute{goalInfo.todaySec>=DAILY_GOAL_SEC?' · ✅ Tagesziel erreicht!':' / 15 Min Ziel'}</div>
+                : <div style={{fontSize:12,color:G600}}>Heute noch nichts gelernt — los geht's! 💪</div>
+              }
+              {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
             </div>
             {[
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
