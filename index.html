@@ -5285,7 +5285,12 @@ function RegisterScreen({ onRegister, onBack }) {
 }
 
 // ── Grammar Trainer ────────────────────────────────────────────
-var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp', sa:'grammar_exercises_sa' };
+var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp', sa:'grammar_exercises_sa', mv:'grammar_exercises_mv' };
+var MODAL_OPTS = ['must', "mustn't", 'should', "shouldn't", 'need to', "don't need to"];
+function isCorrectAnswer(q, input) {
+  var all = (q.acceptable_answers && q.acceptable_answers.length > 0) ? q.acceptable_answers : [q.answer];
+  return all.some(function(a){ return a.toLowerCase().trim() === input.toLowerCase().trim(); });
+}
 var GRAMMAR_VERBS = [
   {word:'to play',clue:'spielen'},{word:'to work',clue:'arbeiten'},
   {word:'to go',clue:'gehen'},{word:'to eat',clue:'essen'},
@@ -5362,14 +5367,25 @@ function GrammarAdmin({ player, chapters }) {
     var key = savedKey || localStorage.getItem('claude_api_key') || '';
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
-    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':'some/any';
+    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
     var promptDetail = topic==='sp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball."}'
       : topic==='pp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball."}'
-      : 'Die Lücke ist "some" oder "any". Verwende alltägliche Sätze (Fragen, Verneinungen, Angebote, Bitten). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"Can I have ___ of these kiwis?","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Kann ich einige dieser Kiwis haben?"}';
-    var distNote = topic==='sa' ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).' : 'Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter).';
-    var promptTemplate = function(n){ return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: sentence (mit ___ als einziger Lücke'+(topic!=='sa'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation. Keine Erklärungen, kein Markdown, nur das JSON-Array.'; };
+      : topic==='sa'
+      ? 'Die Lücke ist "some" oder "any". Verwende alltägliche Sätze (Fragen, Verneinungen, Angebote, Bitten). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"Can I have ___ of these kiwis?","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Kann ich einige dieser Kiwis haben?"}'
+      : 'Erstelle alltagsnahe Sätze für Schüler der 6. Klasse wo ein Modalverb fehlt. Verfügbare Modalverben: must, mustn\'t, should, shouldn\'t, need to, don\'t need to. WICHTIG: Manchmal sind mehrere Modalverben sinnvoll — gib dann ALLE akzeptablen Antworten im "acceptable_answers"-Array an (immer befüllen, auch wenn nur eine Antwort möglich ist). Das "answer"-Feld enthält die beste/typischste Antwort. Kein Hinweis in Klammern am Satzende. Beispiel: {"sentence":"You ___ eat so many sweets.","answer":"shouldn\'t","acceptable_answers":["shouldn\'t","mustn\'t"],"distractors":["must","should","need to"],"rule":"modal verbs","translation":"Du solltest nicht so viele Süßigkeiten essen."}';
+    var distNote = topic==='sa'
+      ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).'
+      : topic==='mv'
+      ? 'Die distractors sind die Modalverben aus [must, mustn\'t, should, shouldn\'t, need to, don\'t need to] die NICHT in acceptable_answers stehen.'
+      : 'Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter).';
+    var promptTemplate = function(n){
+      var fields = topic==='mv'
+        ? 'sentence (mit ___ als einziger Lücke), answer, acceptable_answers, distractors, rule, translation'
+        : 'sentence (mit ___ als einziger Lücke'+(topic==='sp'||topic==='pp'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation';
+      return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: '+fields+'. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
+    };
     var CHUNK=10;
     var chunks=[];
     for(var ci=0;ci<batchN;ci+=CHUNK) chunks.push(Math.min(CHUNK,batchN-ci));
@@ -5441,7 +5457,7 @@ function GrammarAdmin({ player, chapters }) {
         }
       </div>
       <div style={{display:'flex',gap:4,marginBottom:10,background:G100,padding:3,borderRadius:8}}>
-        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any']].map(function(t){
+        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any'],['mv','Modalverben']].map(function(t){
           return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
@@ -5519,6 +5535,12 @@ function GrammarProgress({ ruleStats, sessions, qStats }) {
 function buildOptions(q, pool) {
   // some/any: always exactly 2 options
   if(q.rule==='some/any') return Math.random()<0.5?['some','any']:['any','some'];
+  // modal verbs: show all 6 options shuffled
+  if(q.rule==='modal verbs') {
+    var mo=MODAL_OPTS.slice();
+    for(var mi=mo.length-1;mi>0;mi--){var mj=Math.floor(Math.random()*(mi+1));var mt=mo[mi];mo[mi]=mo[mj];mo[mj]=mt;}
+    return mo;
+  }
   // sp/pp: 4 options = correct + 3 distractors
   var opts = [q.answer];
   var dist = (q.distractors||[]).filter(function(d){ return d&&d.toLowerCase()!==q.answer.toLowerCase(); });
@@ -5590,7 +5612,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
   function choose(opt){
     var q=questions[qIdx];
     if(!q||result) return;
-    var correct=opt.toLowerCase()===q.answer.toLowerCase();
+    var correct=isCorrectAnswer(q,opt);
     var newRes={q:q,input:opt,correct:correct};
     setChosen(opt);
     setResults(function(r){return r.concat([newRes]);});
@@ -5613,7 +5635,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         fetch('https://api.anthropic.com/v1/messages',{
           method:'POST',
           headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-          body:JSON.stringify({model:'claude-haiku-3-5-20241022',max_tokens:200,messages:[{role:'user',content:'Erkläre kurz auf Deutsch, warum "'+q.answer+'" die richtige Antwort ist für: "'+q.sentence+'". Schülerin, 6. Klasse. Max 2 Sätze.'}]})
+          body:JSON.stringify({model:'claude-haiku-3-5-20241022',max_tokens:200,messages:[{role:'user',content:(function(){var aa=(q.acceptable_answers&&q.acceptable_answers.length>0)?q.acceptable_answers:[q.answer];return 'Erkläre kurz auf Deutsch, warum "'+aa.join('" oder "')+(aa.length>1?'" die richtigen Antworten sind':'" die richtige Antwort ist')+' für: "'+q.sentence+'". Schülerin, 6. Klasse. Max 2 Sätze.';}())}]})
         }).then(function(r){return r.json();}).then(function(data){
           var txt=data.content&&data.content[0]&&data.content[0].text||'';
           setAiExplain(txt); setAiLoading(false);
@@ -5650,7 +5672,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
-      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?']].map(function(t){
+      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to']].map(function(t){
         var sel=selTopics.indexOf(t[0])>=0;
         return <div key={t[0]} onClick={function(){
             setSelTopics(function(prev){
@@ -5700,7 +5722,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         {results.map(function(r,i){
           return <div key={i} style={{padding:'6px 8px',marginBottom:3,borderRadius:7,background:r.correct?'#d1fae5':'#fee2e2',fontSize:11}}>
             <div style={{fontWeight:'bold',color:G900}}>{r.q.sentence}</div>
-            <div style={{color:r.correct?T:RE}}>✓ <strong>{r.q.answer}</strong>{!r.correct&&<span style={{color:G400}}> (du: {r.input})</span>}</div>
+            <div style={{color:r.correct?T:RE}}>✓ <strong>{(r.q.acceptable_answers&&r.q.acceptable_answers.length>0)?r.q.acceptable_answers.join(' / '):r.q.answer}</strong>{!r.correct&&<span style={{color:G400}}> (du: {r.input})</span>}</div>
           </div>;
         })}
         <div style={{display:'flex',gap:6,marginTop:12}}>
@@ -5713,7 +5735,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
 
   var q=questions[qIdx];
   if(!q) return null;
-  var isSomeAny=q.rule==='some/any';
+  var isSomeAny=q.rule==='some/any'||q.rule==='modal verbs';
   var prevCorrect=(qStats[q.id]||{}).correct||0;
   var stage2=!isSomeAny&&prevCorrect>=2; // Stufe 2: Freitext
   var opts=q._opts||[q.answer];
@@ -5758,7 +5780,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
           {opts.map(function(opt,i){
             var isChosen=chosen===opt;
-            var isCorrect=opt.toLowerCase()===q.answer.toLowerCase();
+            var isCorrect=isCorrectAnswer(q,opt);
             var bg='white', border='2px solid '+G200, color=G900;
             if(isCorrect){ bg='#d1fae5'; border='2px solid '+GR; color=T; }
             else if(isChosen&&!isCorrect){ bg='#fee2e2'; border='2px solid '+RE; color=RE; }
@@ -5769,7 +5791,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
       {result&&(
         <div style={{padding:'10px 12px',borderRadius:10,background:result.correct?'#d1fae5':'#fee2e2',border:'1px solid '+(result.correct?GR:RE),marginBottom:8}}>
           <div style={{fontWeight:'bold',color:result.correct?T:RE,marginBottom:result.correct?0:4}}>
-            {result.correct?'✓ Richtig!'+(prevCorrect+1>=2&&!isSomeAny?' — Ab jetzt Stufe 2! ✏️':''):'✗ Falsch — richtig: '+q.answer}
+            {result.correct?'✓ Richtig!'+(prevCorrect+1>=2&&!isSomeAny?' — Ab jetzt Stufe 2! ✏️':''):'✗ Falsch — richtig: '+((q.acceptable_answers&&q.acceptable_answers.length>0)?q.acceptable_answers.join(' / '):q.answer)}
           </div>
           {aiLoading&&<div style={{fontSize:11,color:G400,marginTop:4}}>KI erklärt…</div>}
           {aiExplain&&<div style={{fontSize:11,color:G600,marginTop:4}}>{aiExplain}</div>}
