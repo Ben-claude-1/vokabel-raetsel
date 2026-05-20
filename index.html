@@ -4351,6 +4351,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [userRuns, setUserRuns] = useState({});
   var [userLearnSessions, setUserLearnSessions] = useState({});
   var [expandedAdminTest, setExpandedAdminTest] = useState(null);
+  var [expandedLsRun, setExpandedLsRun] = useState(null);
   var [vocabSort, setVocabSort] = useState('seq');
   var [showSentences, setShowSentences] = useState({}); // chapterId -> bool
   var [editSent, setEditSent] = useState(null); // {chId, idx, s, translating}
@@ -5186,7 +5187,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                 var totalMin=Math.round(sess.reduce(function(s,x){return s+(x.dur||0);},0)/60);
                 var lastD=sess.length>0?sess[sess.length-1].d:null;
                 var potPct=Math.round(pct);
-                return {run,pct:potPct,totalMin,lastD,words:run.word_count||0};
+                return {run,pct:potPct,totalMin,lastD,words:run.word_count||0,pots:d.pots||{}};
               }).filter(Boolean);
 
               // ── Test-Historie ───────────────────────────────────
@@ -5215,21 +5216,51 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                   <SectionHead mt>🪜 Leiterspiel-Status</SectionHead>
                   {lsStatus.map(function(ls){
                     var col=ls.pct>=80?T:ls.pct>=40?AM:RE;
-                    return <div key={ls.run.id} style={{background:'white',borderRadius:8,border:'1px solid '+G200,padding:'8px 10px',marginBottom:6}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                        <span style={{fontSize:18}}>{ls.run.icon||'🪜'}</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontWeight:'bold',fontSize:12,color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ls.run.name}</div>
-                          <div style={{fontSize:10,color:G400}}>{ls.words} Vokabeln · {ls.totalMin} Min gelernt{ls.lastD?' · zuletzt '+ls.lastD.slice(5).replace('-','.'):''}  </div>
+                    var lsKey=u.id+'|'+ls.run.id;
+                    var isOpen=expandedLsRun===lsKey;
+                    var POT_COLORS={1:'#fee2e2',2:'#ffedd5',3:'#fef9c3',4:'#dcfce7',5:'#d1fae5',6:'#ccfbf1'};
+                    var POT_LABELS={1:'Topf 1',2:'Topf 2',3:'Topf 3',4:'Topf 4',5:'Topf 5',6:'Gelernt ✓'};
+                    return <div key={ls.run.id} style={{background:'white',borderRadius:8,border:'1px solid '+G200,marginBottom:6,overflow:'hidden'}}>
+                      <div onClick={function(){setExpandedLsRun(isOpen?null:lsKey);}} style={{padding:'8px 10px',cursor:'pointer'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                          <span style={{fontSize:18}}>{ls.run.icon||'🪜'}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:'bold',fontSize:12,color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ls.run.name}</div>
+                            <div style={{fontSize:10,color:G400}}>{ls.words} Vokabeln · {ls.totalMin} Min gelernt{ls.lastD?' · zuletzt '+ls.lastD.slice(5).replace('-','.'):''}  </div>
+                          </div>
+                          <div style={{textAlign:'right',flexShrink:0,display:'flex',alignItems:'center',gap:6}}>
+                            <div>
+                              <div style={{fontWeight:'bold',fontSize:14,color:col}}>{ls.pct}%</div>
+                              <div style={{fontSize:9,color:G400}}>Fortschritt</div>
+                            </div>
+                            <span style={{fontSize:10,color:G400}}>{isOpen?'▲':'▼'}</span>
+                          </div>
                         </div>
-                        <div style={{textAlign:'right',flexShrink:0}}>
-                          <div style={{fontWeight:'bold',fontSize:14,color:col}}>{ls.pct}%</div>
-                          <div style={{fontSize:9,color:G400}}>Fortschritt</div>
+                        <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:ls.pct+'%',background:col,borderRadius:3,transition:'width 0.3s'}}/>
                         </div>
                       </div>
-                      <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
-                        <div style={{height:'100%',width:ls.pct+'%',background:col,borderRadius:3,transition:'width 0.3s'}}/>
-                      </div>
+                      {isOpen&&<div style={{borderTop:'1px solid '+G200,padding:'8px 10px'}}>
+                        {[1,2,3,4,5,6].map(function(pot){
+                          var words=ls.pots[pot]||[];
+                          if(words.length===0) return null;
+                          return <div key={pot} style={{marginBottom:6}}>
+                            <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
+                              <span style={{background:POT_COLORS[pot],borderRadius:4,padding:'1px 6px'}}>{POT_LABELS[pot]}</span>
+                              <span style={{color:G400,fontWeight:'normal'}}>({words.length})</span>
+                            </div>
+                            <div style={{display:'flex',flexWrap:'wrap',gap:'3px 4px'}}>
+                              {words.map(function(w,wi){
+                                return <span key={wi} style={{fontSize:10,background:G50,border:'1px solid '+G200,borderRadius:4,padding:'2px 5px',color:G900,whiteSpace:'nowrap'}}>
+                                  {w.word}<span style={{color:G400}}> {w.clue}</span>
+                                </span>;
+                              })}
+                            </div>
+                          </div>;
+                        })}
+                        {[1,2,3,4,5,6].every(function(p){return (ls.pots[p]||[]).length===0;})&&
+                          <div style={{fontSize:10,color:G400,fontStyle:'italic'}}>Noch keine Topf-Daten geladen.</div>}
+                      </div>}
                     </div>;
                   })}
                 </div>}
