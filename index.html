@@ -4577,10 +4577,18 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   }
 
   function deleteChapter(ch) {
-    if(!confirm('Kapitel und alle Vokabeln löschen?')) return;
-    sbDel('chapters','id=eq.'+ch.id).then(function(){
-      setChapters(function(prev){return prev.filter(function(c){return c.id!==ch.id;});});
-    });
+    if(!confirm('Kapitel "'+ch.title+'" und alle enthaltenen Vokabeln löschen?')) return;
+    // collect all descendants so FK constraints don't block deletion
+    var childIds = chapters.filter(function(c){return c.parent_id===ch.id;}).map(function(c){return c.id;});
+    var grandIds = chapters.filter(function(c){return childIds.indexOf(c.parent_id)>-1;}).map(function(c){return c.id;});
+    var allChildIds = childIds.concat(grandIds);
+    Promise.all(allChildIds.map(function(id){return sbDel('chapters','id=eq.'+id);}))
+      .then(function(){return sbDel('chapters','id=eq.'+ch.id);})
+      .then(function(){
+        var gone=allChildIds.concat([ch.id]);
+        setChapters(function(prev){return prev.filter(function(c){return gone.indexOf(c.id)<0;});});
+      })
+      .catch(function(){alert('Löschen fehlgeschlagen – möglicherweise gibt es noch abhängige Daten.');});
   }
 
   function handleFileUpload(e) {
@@ -4776,7 +4784,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             <div onClick={function(){toggleCh(kap.id);}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:open?(kap.color||T)+'15':'white',cursor:'pointer'}}>
               <span style={{fontSize:20}}>{kap.icon}</span>
               <span style={{flex:1,fontWeight:'bold',fontSize:13,color:kap.color||T}}>{kap.title}</span>
-              {kap.id&&!kap.is_builtin&&<button onClick={function(e){e.stopPropagation();if(confirm('Kapitel löschen?'))deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
+              {kap.id&&!kap.is_builtin&&<button onClick={function(e){e.stopPropagation();deleteChapter(kap);}} style={{padding:'2px 8px',fontSize:10,border:'1px solid '+RE,background:'white',color:RE,cursor:'pointer',borderRadius:5}}>🗑</button>}
               <span style={{color:G400,fontSize:11}}>{open?'▲':'▼'}</span>
             </div>
             {open&&<div style={{borderTop:'1px solid '+G100}}>
