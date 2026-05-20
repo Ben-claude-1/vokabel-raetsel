@@ -3723,7 +3723,7 @@ function AdminLernzeitOverview({ allUsers }) {
               var sec=byDay[d]||0, min=Math.round(sec/60);
               var done=sec>=DAILY_GOAL_SEC, isFuture=d>today, isToday=d===today;
               var bg=isFuture?'white':done?'#d1fae5':sec>0?'#fef3c7':'#f9fafb';
-              var col=isFuture?G200:done?T:sec>0?'#92400e':G300;
+              var col=isFuture?G200:done?T:sec>0?'#92400e':G400;
               return <div key={d} style={{textAlign:'center',padding:'3px 1px',borderRadius:4,background:bg,border:'1px solid '+(isToday?T:'transparent')}}>
                 <span style={{fontSize:9,fontWeight:'bold',color:col}}>{isFuture?'':min>0?min+'′':'–'}</span>
                 {done&&!isFuture&&<div style={{fontSize:7,color:T}}>✓</div>}
@@ -4349,6 +4349,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [expandedUserId, setExpandedUserId] = useState(null);
   var [userProgress, setUserProgress] = useState({});
   var [userRuns, setUserRuns] = useState({});
+  var [userLearnSessions, setUserLearnSessions] = useState({});
   var [expandedAdminTest, setExpandedAdminTest] = useState(null);
   var [vocabSort, setVocabSort] = useState('seq');
   var [showSentences, setShowSentences] = useState({}); // chapterId -> bool
@@ -4380,6 +4381,9 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     }).catch(function(){});
     sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+userId+')&select=*').then(function(rows){
       setUserRuns(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
+    }).catch(function(){});
+    sbGet('learn_sessions','player_id=eq.'+userId+'&select=active_seconds,started_at&order=started_at.desc&limit=200').then(function(rows){
+      setUserLearnSessions(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
     }).catch(function(){});
   }
   var [showDup, setShowDup] = useState(false);
@@ -5148,68 +5152,120 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             {isOpen && (function(){
               var rows = userProgress[u.id];
               var runs = userRuns[u.id]||[];
-              if(!rows) return <div style={{padding:'8px 12px',fontSize:11,color:G400}}>Lade…</div>;
-              var allSessions = [];
+              var learnSess = userLearnSessions[u.id];
+              if(!rows || !learnSess) return <div style={{padding:'8px 12px',fontSize:11,color:G400}}>Lade…</div>;
+
+              // ── Lernzeit-Chart ──────────────────────────────────
+              // Prefer learn_sessions (covers all activity); fall back to ls_progress sessions
+              var chartSessions;
+              if(learnSess.length>0){
+                chartSessions = learnSess.filter(function(s){return s.started_at&&s.active_seconds>0;})
+                  .map(function(s){return {d:String(s.started_at).slice(0,10),dur:s.active_seconds};});
+              } else {
+                chartSessions = [];
+                rows.forEach(function(r){var d=parseData(r.data);(d.sessions||[]).forEach(function(s){chartSessions.push(s);});});
+              }
               var totalSollMin = 0;
               rows.forEach(function(r){
-                var d = parseData(r.data);
-                (d.sessions||[]).forEach(function(s){ allSessions.push(s); });
-                var run = runs.find(function(rn){return rn.id===r.run_id;});
-                if(run && run.target_date){
-                  var pct = lsPercent(d, DEFAULT_STREAK);
-                  var spentSec = (d.sessions||[]).reduce(function(s,sess){return s+(sess.dur||0);},0);
-                  var pacing = lsRunPacing(pct, run.target_pct, run.target_date, spentSec);
-                  if(pacing && pacing.requiredMinPerDay) totalSollMin += pacing.requiredMinPerDay;
+                var d=parseData(r.data), run=runs.find(function(rn){return rn.id===r.run_id;});
+                if(run&&run.target_date){
+                  var pct=lsPercent(d,DEFAULT_STREAK);
+                  var spentSec=(d.sessions||[]).reduce(function(s,sess){return s+(sess.dur||0);},0);
+                  var pacing=lsRunPacing(pct,run.target_pct,run.target_date,spentSec);
+                  if(pacing&&pacing.requiredMinPerDay) totalSollMin+=pacing.requiredMinPerDay;
                 }
               });
-              var runsWithTests = rows.map(function(r){
-                var d = parseData(r.data);
-                var tests = Array.isArray(d.tests)?d.tests:[];
-                if(tests.length===0) return null;
-                var run = runs.find(function(rn){return rn.id===r.run_id;});
-                return {run_id:r.run_id, runName:(run&&run.name)||r.run_id, runIcon:(run&&run.icon)||'🎯', tests:tests};
+              var nearestTarget=runs.filter(function(r){return r.target_date;}).map(function(r){return r.target_date;}).sort()[0];
+
+              // ── Leiterspiel-Status ──────────────────────────────
+              var lsStatus = rows.map(function(r){
+                var d=parseData(r.data), run=runs.find(function(rn){return rn.id===r.run_id;});
+                if(!run) return null;
+                var pct=lsPercent(d,DEFAULT_STREAK);
+                var sess=d.sessions||[];
+                var totalMin=Math.round(sess.reduce(function(s,x){return s+(x.dur||0);},0)/60);
+                var lastD=sess.length>0?sess[sess.length-1].d:null;
+                var potPct=Math.round(pct);
+                return {run,pct:potPct,totalMin,lastD,words:run.word_count||0};
               }).filter(Boolean);
-              if(allSessions.length===0 && totalSollMin===0 && runsWithTests.length===0) return <div style={{padding:'8px 12px',fontSize:11,color:G400,fontStyle:'italic'}}>Noch keine Lernzeit gemessen.</div>;
-              var nearestTarget = runs.filter(function(r){return r.target_date;}).map(function(r){return r.target_date;}).sort()[0];
-              return <div style={{padding:'8px 12px',background:G50,borderTop:'1px solid '+G200}}>
-                {(allSessions.length>0||totalSollMin>0)&&<LernVerlaufChart sessions={allSessions} requiredMinPerDay={totalSollMin||null} targetDate={nearestTarget} title={'Lernverlauf von '+u.name}/>}
-                {runsWithTests.length>0&&<div style={{marginTop:10}}>
-                  <div style={{fontSize:11,fontWeight:'bold',color:'#7c3aed',marginBottom:6,letterSpacing:1,textTransform:'uppercase'}}>📝 Test-Historie</div>
+
+              // ── Test-Historie ───────────────────────────────────
+              var runsWithTests = rows.map(function(r){
+                var d=parseData(r.data), tests=Array.isArray(d.tests)?d.tests:[];
+                if(tests.length===0) return null;
+                var run=runs.find(function(rn){return rn.id===r.run_id;});
+                return {run_id:r.run_id,runName:(run&&run.name)||r.run_id,runIcon:(run&&run.icon)||'🎯',tests:tests};
+              }).filter(Boolean);
+
+              var hasAny = chartSessions.length>0||lsStatus.length>0||runsWithTests.length>0;
+              if(!hasAny) return <div style={{padding:'8px 12px',fontSize:11,color:G400,fontStyle:'italic'}}>Noch keine Aktivität.</div>;
+
+              var SectionHead = function(p){ return <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1,marginTop:p.mt?10:0}}>{p.children}</div>; };
+
+              return <div style={{padding:'10px 12px',background:G50,borderTop:'1px solid '+G200}}>
+
+                {/* Lernzeit-Grafik */}
+                {chartSessions.length>0&&<div>
+                  <SectionHead>📈 Lernzeit (letzte 30 Tage)</SectionHead>
+                  <LernVerlaufChart sessions={chartSessions} requiredMinPerDay={totalSollMin||null} targetDate={nearestTarget}/>
+                </div>}
+
+                {/* Leiterspiel-Status */}
+                {lsStatus.length>0&&<div>
+                  <SectionHead mt>🪜 Leiterspiel-Status</SectionHead>
+                  {lsStatus.map(function(ls){
+                    var col=ls.pct>=80?T:ls.pct>=40?AM:RE;
+                    return <div key={ls.run.id} style={{background:'white',borderRadius:8,border:'1px solid '+G200,padding:'8px 10px',marginBottom:6}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                        <span style={{fontSize:18}}>{ls.run.icon||'🪜'}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:'bold',fontSize:12,color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ls.run.name}</div>
+                          <div style={{fontSize:10,color:G400}}>{ls.words} Vokabeln · {ls.totalMin} Min gelernt{ls.lastD?' · zuletzt '+ls.lastD.slice(5).replace('-','.'):''}  </div>
+                        </div>
+                        <div style={{textAlign:'right',flexShrink:0}}>
+                          <div style={{fontWeight:'bold',fontSize:14,color:col}}>{ls.pct}%</div>
+                          <div style={{fontSize:9,color:G400}}>Fortschritt</div>
+                        </div>
+                      </div>
+                      <div style={{height:6,background:G200,borderRadius:3,overflow:'hidden'}}>
+                        <div style={{height:'100%',width:ls.pct+'%',background:col,borderRadius:3,transition:'width 0.3s'}}/>
+                      </div>
+                    </div>;
+                  })}
+                </div>}
+
+                {/* Test-Historie */}
+                {runsWithTests.length>0&&<div>
+                  <SectionHead mt>📝 Test-Historie</SectionHead>
                   {runsWithTests.map(function(rt){
-                    var len = rt.tests.length;
-                    var sorted = rt.tests.slice().reverse();
+                    var len=rt.tests.length, sorted=rt.tests.slice().reverse();
                     return <div key={rt.run_id} style={{marginBottom:8,padding:'7px 9px',background:'white',borderRadius:8,border:'1px solid #e9d5ff'}}>
                       <div style={{fontSize:11,fontWeight:'bold',color:G900,marginBottom:4}}>{rt.runIcon} {rt.runName} <span style={{color:G400,fontWeight:'normal'}}>({len} Test{len===1?'':'s'})</span></div>
                       {sorted.map(function(t,i){
-                        var realIdx = len-1-i;
-                        var key = u.id+'|'+rt.run_id+'|'+realIdx;
-                        var isOpen = expandedAdminTest===key;
-                        var gColor = t.grade<=2?'#059669':t.grade<=4?'#7c3aed':'#dc2626';
-                        var wrongs = (t.items||[]).filter(function(it){return !it.correct;}).length;
+                        var realIdx=len-1-i, key=u.id+'|'+rt.run_id+'|'+realIdx, isTestOpen=expandedAdminTest===key;
+                        var gColor=t.grade<=2?'#059669':t.grade<=4?'#7c3aed':'#dc2626';
+                        var wrongs=(t.items||[]).filter(function(it){return !it.correct;}).length;
                         return <div key={realIdx} style={{borderTop:i>0?'1px solid '+G100:'none'}}>
-                          <div onClick={function(){setExpandedAdminTest(isOpen?null:key);}}
+                          <div onClick={function(){setExpandedAdminTest(isTestOpen?null:key);}}
                             style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer',fontSize:11}}>
                             <span style={{fontSize:16,fontWeight:'bold',color:gColor,minWidth:18,textAlign:'center'}}>{t.grade}</span>
                             <span style={{fontSize:10,color:G900,flex:1}}>{t.correct}/{t.total} richtig{wrongs>0?' · '+wrongs+' Fehler':''}</span>
                             <span style={{fontSize:9,color:G400,fontFamily:'monospace'}}>{fmtTestStamp(t)}</span>
-                            <span style={{fontSize:9,color:G400,minWidth:10,textAlign:'right'}}>{isOpen?'▲':'▼'}</span>
+                            <span style={{fontSize:9,color:G400}}>{isTestOpen?'▲':'▼'}</span>
                           </div>
-                          {isOpen&&<div style={{padding:'2px 0 6px'}}>
+                          {isTestOpen&&<div style={{padding:'2px 0 6px'}}>
                             {(t.items||[]).map(function(it,j){
-                              var bg = it.correct?'#d1fae5':it.skipped?G50:'#fee2e2';
-                              var icon = it.correct?'✓':it.skipped?'⏭':'✗';
-                              if(it.kind==='sentence'){
-                                return <div key={j} style={{padding:'4px 7px',marginBottom:3,borderRadius:5,background:bg,fontSize:10}}>
-                                  <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}>
-                                    <span>{icon}</span>
-                                    <span style={{fontSize:8,padding:'1px 4px',borderRadius:5,background:'#a855f7',color:'white',fontWeight:'bold'}}>💬 SATZ</span>
-                                    {it.wordRef&&<span style={{fontSize:9,color:G400,marginLeft:'auto'}}>{it.wordRef}</span>}
-                                  </div>
-                                  <div style={{fontWeight:'bold',color:G900}}>{it.word}</div>
-                                  <div style={{color:G600,fontStyle:'italic'}}>{it.clue}</div>
-                                  {!it.correct&&!it.skipped&&it.typed&&<div style={{color:'#991b1b',marginTop:2}}>Antwort: <span style={{textDecoration:'line-through'}}>{it.typed}</span></div>}
-                                </div>;
-                              }
+                              var bg=it.correct?'#d1fae5':it.skipped?G50:'#fee2e2', icon=it.correct?'✓':it.skipped?'⏭':'✗';
+                              if(it.kind==='sentence') return <div key={j} style={{padding:'4px 7px',marginBottom:3,borderRadius:5,background:bg,fontSize:10}}>
+                                <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:2}}>
+                                  <span>{icon}</span>
+                                  <span style={{fontSize:8,padding:'1px 4px',borderRadius:5,background:'#a855f7',color:'white',fontWeight:'bold'}}>💬 SATZ</span>
+                                  {it.wordRef&&<span style={{fontSize:9,color:G400,marginLeft:'auto'}}>{it.wordRef}</span>}
+                                </div>
+                                <div style={{fontWeight:'bold',color:G900}}>{it.word}</div>
+                                <div style={{color:G600,fontStyle:'italic'}}>{it.clue}</div>
+                                {!it.correct&&!it.skipped&&it.typed&&<div style={{color:'#991b1b',marginTop:2}}>Antwort: <span style={{textDecoration:'line-through'}}>{it.typed}</span></div>}
+                              </div>;
                               return <div key={j} style={{display:'flex',alignItems:'center',gap:5,padding:'3px 7px',marginBottom:2,borderRadius:5,background:bg,fontSize:10}}>
                                 <span>{icon}</span>
                                 <span style={{fontWeight:'bold',color:G900}}>{it.word}</span>
