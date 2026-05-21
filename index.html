@@ -5371,11 +5371,11 @@ function Stats({ player, chapters }) {
   );
 }
 
-function StickerCard({ num, unlocked, label }) {
+function StickerCard({ num, unlocked, label, onOpen }) {
   var url = 'https://ben-claude-1.github.io/vokabel-raetsel/stickers/sticker_'+String(num).padStart(2,'0')+'.png';
   return (
     <div style={{textAlign:'center'}}>
-      <div style={{borderRadius:10,overflow:'hidden',aspectRatio:'1',background:unlocked?TL:G100,border:'2px solid '+(unlocked?T:G200),position:'relative'}}>
+      <div onClick={unlocked?onOpen:undefined} style={{borderRadius:10,overflow:'hidden',aspectRatio:'1',background:unlocked?TL:G100,border:'2px solid '+(unlocked?T:G200),position:'relative',cursor:unlocked?'pointer':'default'}}>
         <img src={url} style={{width:'100%',height:'100%',objectFit:'contain',filter:unlocked?'none':'grayscale(100%) opacity(0.5)'}} loading="lazy"/>
         {!unlocked&&<div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🔒</div>}
       </div>
@@ -5388,6 +5388,7 @@ function Scoreboard({ player }) {
   var [streak, setStreak] = useState(null);
   var [vocab, setVocab] = useState(null);
   var [runs, setRuns] = useState(null);
+  var [bigSticker, setBigSticker] = useState(null);
 
   useEffect(function() {
     if (!player) return;
@@ -5435,8 +5436,17 @@ function Scoreboard({ player }) {
 
   if (streak===null||vocab===null||runs===null) return <div style={{padding:40,textAlign:'center',color:G400}}>Lade…</div>;
 
+  var CATALOG_NAMES = {1:'Chick',2:'Cat',3:'Dog',4:'Donkey',5:'Hedgehog',6:'Turtle',7:'Cat',8:'Panda',9:'Giraffe',10:'Pig',11:'Koala',12:'Monkey',13:'Raccoon',14:'Mouse',15:'Rabbit',16:'Fox',17:'Zebra',18:'Bear',19:'Lion',20:'Otter',21:'Eagle',22:'Owl',23:'Shark',24:'Duck',25:'Bear',26:'Shark',27:'Squirrel',28:'Rooster',29:'Sloth',30:'Dog',31:'Bear',32:'Toucan',33:'Wolf',34:'Cardinal',35:'Buffalo',36:'Penguin',37:'Goat',38:'Tiger',39:'Bulldog',40:'Llama',41:'Chick',42:'Penguin',43:'Beaver',44:'Sloth',45:'Pig',46:'Elephant',47:'Tiger',48:'Crocodile',49:'Fox',50:'Panda'};
+  var CATALOG_LABELS = {1:'GREAT!',2:'WELL DONE!',3:'AWESOME!',4:'YOU ROCK!',5:'STAR!',6:'WAY TO GO!',7:'EXCELLENT!',8:'GOOD JOB!',9:'KEEP IT UP!',10:'BRILLIANT!',11:'NICE WORK!',12:'YES!',13:'PERFECT!',14:'GOOD!',15:'KEEP SHINING!',16:'AMAZING!',17:'LOVE IT!',18:'YOU CAN DO IT!',19:'KING JOB!',20:'FANTASTIC!',21:"LET'S GO!",22:'SMART MOVE!',23:'WOOHOO!',24:'YOU GOT THIS!',25:'AWESOME WORK!',26:"KILLIN' IT!",27:'NICE!',28:'COCK-A-DOODLE-DOO!',29:'TAKE IT EASY!',30:'GOOD ONE!',31:'YOU DID IT!',32:'TOUCAN DO IT!',33:"DON'T GIVE UP!",34:'STAY FOCUSED!',35:'STRONG WORK!',36:"YOU'RE THE BEST!",37:'UNBEATABLE!',38:'TIGERIFIC!',39:'PAW-SOME!',40:'NO PROB-LLAMA!',41:'CHEEP CHEEP HOORAY!',42:'HIGH FIVE!',43:'KEEP GOING!',44:'HANG IN THERE!',45:'HOORAY!',46:'BIG EFFORT!',47:'SO PROUD OF YOU!',48:'CRUSHED IT!',49:'SUPER STAR!',50:'MISSION COMPLETE!'};
+
   return (
     <div style={{padding:'12px 14px'}}>
+      {bigSticker&&<div onClick={function(){setBigSticker(null);}} style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.75)',zIndex:999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,touchAction:'manipulation'}}>
+        <img src={'https://ben-claude-1.github.io/vokabel-raetsel/stickers/sticker_'+String(bigSticker).padStart(2,'0')+'.png'} style={{width:'min(80vw,320px)',height:'min(80vw,320px)',objectFit:'contain',borderRadius:20,background:TL,padding:12}} onClick={function(e){e.stopPropagation();}}/>
+        <div style={{color:'white',fontWeight:'bold',fontSize:18,marginTop:16}}>{CATALOG_NAMES[bigSticker]}</div>
+        <div style={{color:'rgba(255,255,255,0.8)',fontSize:14,marginTop:4}}>{CATALOG_LABELS[bigSticker]}</div>
+        <div style={{color:'rgba(255,255,255,0.5)',fontSize:12,marginTop:20}}>Tippen zum Schließen</div>
+      </div>}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
         <div style={{background:'white',borderRadius:12,padding:'12px 8px',textAlign:'center',border:'1px solid '+G200}}>
           <div style={{fontSize:24}}>🔥</div>
@@ -5458,19 +5468,19 @@ function Scoreboard({ player }) {
       <div style={{marginBottom:18}}>
         <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>🔥 Streak-Sticker · {streak} Tage</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-          {streakMs.map(function(m){return <StickerCard key={m.n} num={m.n} unlocked={streak>=m.v} label={m.v+'d'}/>;})}</div>
+          {streakMs.map(function(m){return <StickerCard key={m.n} num={m.n} unlocked={streak>=m.v} label={m.v+'d'} onOpen={function(){setBigSticker(m.n);}}/>;})}</div>
       </div>
 
       <div style={{marginBottom:18}}>
         <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>📚 Vokabel-Sticker · {vocab} Wörter</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-          {vocabMs.map(function(m){var l=m.v>=1000?(m.v/1000)+'k':''+m.v;return <StickerCard key={m.n} num={m.n} unlocked={vocab>=m.v} label={l}/>;})}</div>
+          {vocabMs.map(function(m){var l=m.v>=1000?(m.v/1000)+'k':''+m.v;return <StickerCard key={m.n} num={m.n} unlocked={vocab>=m.v} label={l} onOpen={function(){setBigSticker(m.n);}}/>;})}</div>
       </div>
 
       <div style={{marginBottom:18}}>
         <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>🪜 Leiterspiel-Sticker · {runs} Läufe</div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-          {runNums.map(function(num,idx){return <StickerCard key={num} num={num} unlocked={runs>idx} label={'#'+(idx+1)}/>;})}</div>
+          {runNums.map(function(num,idx){return <StickerCard key={num} num={num} unlocked={runs>idx} label={'#'+(idx+1)} onOpen={function(){setBigSticker(num);}}/>;})}</div>
       </div>
     </div>
   );
