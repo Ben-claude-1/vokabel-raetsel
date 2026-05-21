@@ -5371,6 +5371,111 @@ function Stats({ player, chapters }) {
   );
 }
 
+function StickerCard({ num, unlocked, label }) {
+  var url = 'https://ben-claude-1.github.io/vokabel-raetsel/stickers/sticker_'+String(num).padStart(2,'0')+'.png';
+  return (
+    <div style={{textAlign:'center'}}>
+      <div style={{borderRadius:10,overflow:'hidden',aspectRatio:'1',background:unlocked?TL:G100,border:'2px solid '+(unlocked?T:G200),position:'relative'}}>
+        <img src={url} style={{width:'100%',height:'100%',objectFit:'contain',filter:unlocked?'none':'grayscale(100%) opacity(0.5)'}} loading="lazy"/>
+        {!unlocked&&<div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>🔒</div>}
+      </div>
+      <div style={{fontSize:9,marginTop:2,color:unlocked?T:G400,fontWeight:unlocked?'bold':'normal'}}>{label}</div>
+    </div>
+  );
+}
+
+function Scoreboard({ player }) {
+  var [streak, setStreak] = useState(null);
+  var [vocab, setVocab] = useState(null);
+  var [runs, setRuns] = useState(null);
+
+  useEffect(function() {
+    if (!player) return;
+    var pid = player.id;
+    var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID.test(pid)) { setStreak(0); setVocab(0); setRuns(0); return; }
+
+    sbGet('learn_sessions','player_id=eq.'+pid+'&select=started_at&order=started_at.desc&limit=500')
+      .then(function(rows) {
+        if (!rows||!rows.length) { setStreak(0); return; }
+        var days = {};
+        rows.forEach(function(r) { if (r.started_at) days[r.started_at.slice(0,10)] = true; });
+        var sorted = Object.keys(days).sort().reverse();
+        var today = new Date().toISOString().slice(0,10);
+        var yest  = new Date(Date.now()-86400000).toISOString().slice(0,10);
+        if (sorted[0]!==today && sorted[0]!==yest) { setStreak(0); return; }
+        var n = 1;
+        for (var i = 1; i < sorted.length; i++) {
+          if (Math.round((new Date(sorted[i-1])-new Date(sorted[i]))/86400000)===1) n++;
+          else break;
+        }
+        setStreak(n);
+      })
+      .catch(function() { setStreak(0); });
+
+    sbGet('ls_progress','player_id=eq.'+pid+'&select=run_id,data')
+      .then(function(rows) {
+        if (!rows||!rows.length) { setVocab(0); setRuns(0); return; }
+        var words = {}, completedRuns = 0;
+        rows.forEach(function(r) {
+          var data = parseData(r.data);
+          var pot6 = (data.pots&&(data.pots[6]||data.pots['6']))||[];
+          pot6.forEach(function(w) { if (w.word) words[w.word] = true; });
+          if (pot6.length>0) completedRuns++;
+        });
+        setVocab(Object.keys(words).length);
+        setRuns(completedRuns);
+      })
+      .catch(function() { setVocab(0); setRuns(0); });
+  }, [player.id]);
+
+  var streakMs = [{v:7,n:1},{v:14,n:10},{v:30,n:7},{v:60,n:9},{v:90,n:18},{v:180,n:16},{v:365,n:30}];
+  var vocabMs  = [{v:50,n:3},{v:100,n:31},{v:200,n:32},{v:300,n:33},{v:500,n:21},{v:750,n:17},{v:1000,n:35}];
+  var runNums  = [6,20,23,26,29,36,37,38,39,40];
+
+  if (streak===null||vocab===null||runs===null) return <div style={{padding:40,textAlign:'center',color:G400}}>Lade…</div>;
+
+  return (
+    <div style={{padding:'12px 14px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:20}}>
+        <div style={{background:'white',borderRadius:12,padding:'12px 8px',textAlign:'center',border:'1px solid '+G200}}>
+          <div style={{fontSize:24}}>🔥</div>
+          <div style={{fontSize:20,fontWeight:'bold',color:T}}>{streak}</div>
+          <div style={{fontSize:9,color:G400}}>Tage Streak</div>
+        </div>
+        <div style={{background:'white',borderRadius:12,padding:'12px 8px',textAlign:'center',border:'1px solid '+G200}}>
+          <div style={{fontSize:24}}>📚</div>
+          <div style={{fontSize:20,fontWeight:'bold',color:T}}>{vocab}</div>
+          <div style={{fontSize:9,color:G400}}>Vokabeln</div>
+        </div>
+        <div style={{background:'white',borderRadius:12,padding:'12px 8px',textAlign:'center',border:'1px solid '+G200}}>
+          <div style={{fontSize:24}}>🪜</div>
+          <div style={{fontSize:20,fontWeight:'bold',color:T}}>{runs}</div>
+          <div style={{fontSize:9,color:G400}}>Läufe</div>
+        </div>
+      </div>
+
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>🔥 Streak-Sticker · {streak} Tage</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+          {streakMs.map(function(m){return <StickerCard key={m.n} num={m.n} unlocked={streak>=m.v} label={m.v+'d'}/>;})}</div>
+      </div>
+
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>📚 Vokabel-Sticker · {vocab} Wörter</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+          {vocabMs.map(function(m){var l=m.v>=1000?(m.v/1000)+'k':''+m.v;return <StickerCard key={m.n} num={m.n} unlocked={vocab>=m.v} label={l}/>;})}</div>
+      </div>
+
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:12,fontWeight:'bold',color:G600,marginBottom:8}}>🪜 Leiterspiel-Sticker · {runs} Läufe</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
+          {runNums.map(function(num,idx){return <StickerCard key={num} num={num} unlocked={runs>idx} label={'#'+(idx+1)}/>;})}</div>
+      </div>
+    </div>
+  );
+}
+
 function LoginScreen({ onLogin, onRegister }) {
   var [name, setName] = useState('');
   var [pw, setPw] = useState('');
@@ -6293,10 +6398,11 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var tabs = isAdmin
     ? [{id:'admin', label:'⚙️', title:'Admin'}]
     : [
-        {id:'home',     label:'🏠', title:'Home'},
-        {id:'learn',    label:'📚', title:'Lernen'},
-        {id:'games',    label:'🎮', title:'Spiele'},
-        {id:'progress', label:'📊', title:'Fortschritt'},
+        {id:'home',       label:'🏠', title:'Home'},
+        {id:'learn',      label:'📚', title:'Lernen'},
+        {id:'games',      label:'🎮', title:'Spiele'},
+        {id:'progress',   label:'📊', title:'Fortschritt'},
+        {id:'scoreboard', label:'🏆', title:'Sticker'},
       ];
 
   var childChapters = chapters.filter(function(c){return c.parent_id;});
@@ -6333,12 +6439,13 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     vocab_trainer:'📝 Vokabeltrainer',workout:'🏋️ Workout',workout_setup:'🏋️ Workout',sentence_learner:'💬 Sätze',
     quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
-    grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer'
+    grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
+    scoreboard:'🏆 Meine Sticker'
   };
 
   var mainScreens = isAdmin
     ? ['admin']
-    : ['home','learn','games','progress','admin'];
+    : ['home','learn','games','progress','scoreboard','admin'];
   var showBack = mainScreens.indexOf(screen)<0;
 
   if(inner===null||mainScreens.indexOf(screen)>=0){
@@ -6420,6 +6527,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             </div>
             <Stats player={player} chapters={childChapters}/>
           </div>)}
+
+          {screen==='scoreboard'&&<Scoreboard player={player}/>}
 
           {screen==='admin'&&<AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>}
         </div>
