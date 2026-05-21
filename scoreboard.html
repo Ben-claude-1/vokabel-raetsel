@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Scoreboard</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100dvh;
+  max-width: 430px;
+  margin: 0 auto;
+  overflow-x: hidden;
+  padding-bottom: 32px;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(135deg, #0f766e, #0d9488);
+  padding: 16px 16px 14px;
+  display: flex; align-items: center; gap: 10px;
+}
+.header h1 { font-size: 18px; font-weight: 800; color: white; }
+.header p  { font-size: 10px; color: rgba(255,255,255,.65); margin-top: 1px; }
+.player-pill {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.18);
+  border-radius: 20px; padding: 3px 10px 3px 4px;
+  cursor: pointer;
+}
+.avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #fde047; display: flex; align-items: center;
+  justify-content: center; font-size: 13px;
+}
+.player-name { font-size: 12px; font-weight: 600; color: white; }
+
+/* ── Player picker ───────────────────────────────────────── */
+.picker {
+  position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  display: flex; align-items: flex-end; z-index: 100;
+}
+.picker.hidden { display: none; }
+.picker-sheet {
+  background: #1e293b; border-radius: 20px 20px 0 0;
+  width: 100%; padding: 20px 16px 40px;
+}
+.picker-title { color: #94a3b8; font-size: 13px; font-weight: 700; margin-bottom: 14px; }
+.picker-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0; border-bottom: 1px solid #334155;
+  cursor: pointer;
+}
+.picker-btn:last-child { border-bottom: none; }
+.picker-btn .av {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #0d9488; display: flex; align-items: center;
+  justify-content: center; font-size: 18px; flex-shrink: 0;
+}
+.picker-btn .pn { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+
+/* ── Section ─────────────────────────────────────────────── */
+.section { margin-top: 22px; }
+.section-header {
+  padding: 0 14px 6px;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.section-title { font-size: 14px; font-weight: 800; color: #e2e8f0; }
+.section-sub   { font-size: 11px; color: #475569; }
+.section-score { margin-left: auto; font-size: 12px; font-weight: 700; }
+
+/* ── Progress bar ─────────────────────────────────────────── */
+.mini-progress {
+  padding: 0 14px 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.bar-wrap { flex: 1; background: #1e293b; border-radius: 3px; height: 5px; overflow: hidden; }
+.bar-fill  { height: 100%; border-radius: 3px; transition: width .6s; }
+.bar-text  { font-size: 10px; color: #475569; white-space: nowrap; }
+
+/* ── Scroll row ──────────────────────────────────────────── */
+.scroll-row {
+  display: flex; gap: 10px;
+  overflow-x: auto;
+  padding: 4px 14px 14px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+.scroll-row::-webkit-scrollbar { display: none; }
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  flex-shrink: 0; width: 82px;
+  scroll-snap-align: start;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.sticker-frame {
+  width: 82px; height: 82px; border-radius: 16px; overflow: hidden;
+  position: relative; border: 2px solid #1e293b; background: #1e293b;
+}
+.sticker-frame img { width: 100%; height: 100%; object-fit: contain; }
+
+/* Unlocked */
+.unlocked .sticker-frame {
+  border-color: var(--accent, #0d9488);
+  box-shadow: 0 0 10px rgba(var(--rgb,13,148,136),.35);
+}
+.star-badge {
+  position: absolute; top: 4px; right: 4px;
+  background: #fbbf24; border-radius: 50%;
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; z-index: 2;
+}
+.card-label { font-size: 10px; font-weight: 700; color: #475569; text-align: center; line-height: 1.3; }
+.card-date  { font-size: 9px; text-align: center; color: #334155; margin-top: -2px; }
+.unlocked .card-label { color: #94a3b8; }
+.unlocked .card-date  { color: var(--accent, #0d9488); }
+
+/* Locked */
+.locked .sticker-frame img { filter: blur(5px) grayscale(1) brightness(.22); transform: scale(1.08); }
+.lock-overlay {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: center;
+}
+.lock-icon { font-size: 22px; }
+
+/* Next up */
+.next-up .sticker-frame { border-color: #f59e0b; box-shadow: 0 0 8px rgba(245,158,11,.35); }
+.next-up .card-label { color: #f59e0b; }
+.next-up .card-date  { color: #d97706; }
+.next-up .lock-icon  { animation: pulse 1.6s ease-in-out infinite; }
+
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+
+.divider { height: 1px; background: #1e293b; margin: 4px 14px 0; }
+
+/* Loading */
+.loading {
+  color: #475569; font-size: 13px; text-align: center;
+  padding: 48px 0;
+}
+.error {
+  color: #f87171; font-size: 12px; text-align: center;
+  padding: 32px 14px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div style="font-size:24px">🏆</div>
+  <div>
+    <h1>Scoreboard</h1>
+    <p>Sticker &amp; Ziele</p>
+  </div>
+  <div class="player-pill" onclick="openPicker()">
+    <div class="avatar" id="hdr-avatar">👤</div>
+    <span class="player-name" id="hdr-name">Spieler wählen</span>
+  </div>
+</div>
+
+<div id="picker" class="picker hidden" onclick="closePicker(event)">
+  <div class="picker-sheet">
+    <div class="picker-title">SPIELER WÄHLEN</div>
+    <div id="picker-list"></div>
+  </div>
+</div>
+
+<div id="main"><p class="loading">Spieler wählen …</p></div>
+
+<script>
+const BASE    = 'https://mac-studio.taild5562c.ts.net';
+const ANON    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlhdCI6MTc3NzEyMjQ2OSwiZXhwIjoxOTM0ODAyNDY5fQ.jzXBjrLedWlHB0l-TRKvrWlxkod6d5Ox8dbMbqV2LMU';
+const STICKERS = 'https://ben-claude-1.github.io/vokabel-raetsel/stickers';
+
+const AVATARS = ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐸','🐵'];
+
+// ── Milestone-Definitionen ───────────────────────────────────────────────────
+const STREAK_M = [
+  { val:7,   sticker:'01', label:'7 Tage',    sub:'erreicht' },
+  { val:14,  sticker:'10', label:'14 Tage',   sub:'fehlen' },
+  { val:30,  sticker:'07', label:'30 Tage',   sub:'fehlen' },
+  { val:60,  sticker:'09', label:'60 Tage',   sub:'fehlen' },
+  { val:90,  sticker:'18', label:'90 Tage',   sub:'fehlen' },
+  { val:180, sticker:'16', label:'6 Monate',  sub:'fehlen' },
+  { val:365, sticker:'30', label:'1 Jahr',    sub:'fehlen' },
+];
+const VOCAB_M = [
+  { val:50,   sticker:'03', label:'50 Vokabeln' },
+  { val:100,  sticker:'31', label:'100 Vokabeln' },
+  { val:200,  sticker:'32', label:'200 Vokabeln' },
+  { val:300,  sticker:'33', label:'300 Vokabeln' },
+  { val:500,  sticker:'21', label:'500 Vokabeln' },
+  { val:750,  sticker:'17', label:'750 Vokabeln' },
+  { val:1000, sticker:'35', label:'1000 Vokabeln' },
+];
+// Ein Sticker pro 100%-abgeschlossenem Leiterspiel
+const LS_STICKERS = ['06','20','23','26','29','36','37','38','39','40','41','42','43','44','45'];
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(BASE + path, {
+    headers: { apikey: ANON, Authorization: 'Bearer ' + ANON }
+  });
+  if (!r.ok) throw new Error(r.status + ' ' + path);
+  return r.json();
+}
+
+// ── Players laden ────────────────────────────────────────────────────────────
+let players = [];
+async function loadPlayers() {
+  players = await api('/rest/v1/players?is_active=eq.true&select=id,name&order=name');
+  const list = document.getElementById('picker-list');
+  list.innerHTML = players.map((p, i) =>
+    `<div class="picker-btn" onclick="selectPlayer(${p.id})">
+       <div class="av">${AVATARS[i % AVATARS.length]}</div>
+       <div class="pn">${p.name}</div>
+     </div>`
+  ).join('');
+
+  // Auto-select from URL param
+  const urlId = new URLSearchParams(location.search).get('player');
+  if (urlId) {
+    const p = players.find(x => x.id == urlId || x.name.toLowerCase() === urlId.toLowerCase());
+    if (p) selectPlayer(p.id);
+  }
+}
+
+function openPicker()  { document.getElementById('picker').classList.remove('hidden'); }
+function closePicker(e){ if (e.target === e.currentTarget) document.getElementById('picker').classList.add('hidden'); }
+
+// ── Spieler wählen ───────────────────────────────────────────────────────────
+async function selectPlayer(id) {
+  document.getElementById('picker').classList.add('hidden');
+  const player = players.find(p => p.id === id);
+  const idx    = players.indexOf(player);
+  document.getElementById('hdr-avatar').textContent = AVATARS[idx % AVATARS.length];
+  document.getElementById('hdr-name').textContent   = player.name;
+  history.replaceState(null, '', '?player=' + id);
+
+  document.getElementById('main').innerHTML = '<p class="loading">Lade Daten …</p>';
+  try {
+    await renderScoreboard(id, player.name);
+  } catch(e) {
+    document.getElementById('main').innerHTML =
+      `<p class="error">Fehler beim Laden: ${e.message}<br><small>Ist die App (Tailscale) erreichbar?</small></p>`;
+  }
+}
+
+// ── Streak berechnen ─────────────────────────────────────────────────────────
+function computeStreak(sessions) {
+  if (!sessions.length) return 0;
+  // Eindeutige Tage sammeln (lokales Datum)
+  const days = new Set(sessions.map(s =>
+    new Date(s.started_at).toLocaleDateString('sv') // YYYY-MM-DD in Systemzone
+  ));
+  const sorted = [...days].sort().reverse(); // neueste zuerst
+  const today  = new Date().toLocaleDateString('sv');
+  const yest   = new Date(Date.now() - 864e5).toLocaleDateString('sv');
+
+  if (sorted[0] !== today && sorted[0] !== yest) return 0; // Streak unterbrochen
+
+  let streak = 0;
+  let expected = sorted[0] === today ? today : yest;
+  for (const d of sorted) {
+    if (d === expected) {
+      streak++;
+      expected = new Date(new Date(d) - 864e5).toLocaleDateString('sv');
+    } else break;
+  }
+  return streak;
+}
+
+// ── Leiterspiel: 100% abgeschlossen ─────────────────────────────────────────
+function isCompleted(data) {
+  if (!data || !data.pots) return false;
+  const pots = data.pots;
+  let total = 0, done = 0;
+  for (const k of ['1','2','3','4','5','6']) {
+    const arr = pots[k] || pots[Number(k)] || [];
+    total += arr.length;
+    if (k === '6') done = arr.length;
+  }
+  return total > 0 && done === total;
+}
+
+// ── Scoreboard rendern ───────────────────────────────────────────────────────
+async function renderScoreboard(playerId, playerName) {
+  const [progressRows, sessions] = await Promise.all([
+    api(`/rest/v1/ls_progress?player_id=eq.${playerId}&select=data`),
+    api(`/rest/v1/learn_sessions?player_id=eq.${playerId}&select=started_at&order=started_at.desc&limit=500`),
+  ]);
+
+  // Streak
+  const streak = computeStreak(sessions);
+
+  // Gelernte Vokabeln (Summe Topf 6 über alle Runs)
+  let vocab = 0;
+  let completedRuns = 0;
+  for (const row of progressRows) {
+    const d = row.data;
+    if (!d || !d.pots) continue;
+    const pot6 = d.pots['6'] || d.pots[6] || [];
+    vocab += pot6.length;
+    if (isCompleted(d)) completedRuns++;
+  }
+
+  // Nächstes Milestone finden
+  const streakNext  = STREAK_M.find(m => m.val > streak);
+  const vocabNext   = VOCAB_M.find(m => m.val > vocab);
+  const lsTotal     = completedRuns;
+
+  // HTML bauen
+  const html = `
+    ${renderSection({
+      icon: '🔥', title: 'Lern-Streak', sub: '15 min/Tag',
+      score: streak + ' Tage', scoreColor: '#34d399',
+      current: streak, next: streakNext ? streakNext.val : null,
+      barGrad: '#0d9488,#34d399',
+      milestones: STREAK_M,
+      getValue: m => m.val,
+      getLabel: m => m.label,
+      getSub:   (m, cur) => m.val <= cur ? '' : (m.val - cur) + ' fehlen',
+      accent: '13,148,136', accentHex: '#0d9488',
+    })}
+    <div class="divider"></div>
+    ${renderSection({
+      icon: '📚', title: 'Vokabeln', sub: 'Topf „Gelernt"',
+      score: vocab, scoreColor: '#a78bfa',
+      current: vocab, next: vocabNext ? vocabNext.val : null,
+      barGrad: '#7c3aed,#a78bfa',
+      milestones: VOCAB_M,
+      getValue: m => m.val,
+      getLabel: m => m.label,
+      getSub:   (m, cur) => m.val <= cur ? '' : (m.val - cur) + ' fehlen',
+      accent: '124,58,237', accentHex: '#7c3aed',
+    })}
+    <div class="divider"></div>
+    ${renderLsSection(lsTotal)}
+  `;
+
+  document.getElementById('main').innerHTML = html;
+}
+
+// ── Generic section ──────────────────────────────────────────────────────────
+function renderSection({ icon, title, sub, score, scoreColor, current, next,
+                          barGrad, milestones, getValue, getLabel, getSub,
+                          accent, accentHex }) {
+  const lastUnlocked = milestones.filter(m => getValue(m) <= current).pop();
+  const nextM        = milestones.find(m => getValue(m) > current);
+  const pct          = nextM
+    ? Math.round((current / getValue(nextM)) * 100)
+    : 100;
+  const barText = nextM
+    ? `${current} / ${getValue(nextM)} nächstes Ziel`
+    : `✓ Alle Ziele erreicht`;
+
+  const cards = milestones.map(m => {
+    const unlocked = getValue(m) <= current;
+    const isNext   = m === nextM;
+    const sub2     = unlocked ? '' : getSub(m, current);
+    return renderCard(m.sticker, getLabel(m), sub2, unlocked, isNext, accentHex, accent);
+  }).join('');
+
+  return `
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">${icon} ${title}</span>
+        <span class="section-sub">${sub}</span>
+        <span class="section-score" style="color:${scoreColor}">${score}</span>
+      </div>
+      <div class="mini-progress">
+        <div class="bar-wrap">
+          <div class="bar-fill" style="width:${Math.min(pct,100)}%;background:linear-gradient(90deg,${barGrad})"></div>
+        </div>
+        <div class="bar-text">${barText}</div>
+      </div>
+      <div class="scroll-row">${cards}</div>
+    </div>`;
+}
+
+// ── Leiterspiel section ───────────────────────────────────────────────────────
+function renderLsSection(completed) {
+  // Zeige abgeschlossene Runs + nächste 3
+  const show = Math.max(5, completed + 3);
+  const cards = Array.from({length: show}, (_, i) => {
+    const stickerIdx = i < LS_STICKERS.length ? LS_STICKERS[i] : '50';
+    const unlocked   = i < completed;
+    const isNext     = i === completed;
+    const label      = `${i+1}. Spiel`;
+    const sub2       = isNext ? 'in Arbeit' : '';
+    return renderCard(stickerIdx, label, sub2, unlocked, isNext, '#f97316', '249,115,22');
+  }).join('');
+
+  const pct = completed > 0 ? Math.round((completed / (completed + 1)) * 100) : 0;
+
+  return `
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">🪜 Leiterspiel</span>
+        <span class="section-sub">je 100% abgeschlossen</span>
+        <span class="section-score" style="color:#fb923c">${completed} ×</span>
+      </div>
+      <div class="mini-progress">
+        <div class="bar-wrap">
+          <div class="bar-fill" style="width:${pct}%;background:linear-gradient(90deg,#ea580c,#fb923c)"></div>
+        </div>
+        <div class="bar-text">${completed} abgeschlossen</div>
+      </div>
+      <div class="scroll-row">${cards}</div>
+    </div>`;
+}
+
+// ── Card HTML ─────────────────────────────────────────────────────────────────
+function renderCard(stickerNum, label, sub, unlocked, isNext, accentHex, accentRgb) {
+  const imgSrc = `${STICKERS}/sticker_${stickerNum.padStart(2,'0')}.png`;
+
+  if (unlocked) {
+    return `<div class="card unlocked" style="--accent:${accentHex};--rgb:${accentRgb}">
+      <div class="sticker-frame"><img src="${imgSrc}" alt="">
+        <div class="star-badge">⭐</div></div>
+      <div class="card-label">${label}</div>
+    </div>`;
+  }
+  if (isNext) {
+    return `<div class="card next-up">
+      <div class="sticker-frame"><img src="${imgSrc}" alt="">
+        <div class="lock-overlay"><div class="lock-icon">🔒</div></div></div>
+      <div class="card-label">${label}</div>
+      ${sub ? `<div class="card-date">${sub}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="card locked">
+    <div class="sticker-frame"><img src="${imgSrc}" alt="">
+      <div class="lock-overlay"><div class="lock-icon">🔒</div></div></div>
+    <div class="card-label">${label}</div>
+  </div>`;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadPlayers().catch(e =>
+  document.getElementById('main').innerHTML =
+    `<p class="error">Server nicht erreichbar.<br><small>${e.message}</small></p>`
+);
+</script>
+</body>
+</html>
