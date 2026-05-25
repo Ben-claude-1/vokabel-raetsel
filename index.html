@@ -391,10 +391,21 @@ function checkAnswer(typed, correct) {
   var t = typed.trim();
   var tCan = canonAnswer(t);
   var tCanNS = tCan.replace(/\s+/g,'');
-  var corrects = correct.split(/[\/]+/).map(function(s){ return s.trim(); }).filter(Boolean);
-  if(corrects.length===1&&corrects[0].indexOf(',')>=0&&!/\([^)]*,[^)]*\)/.test(corrects[0])){
-    corrects=corrects[0].split(',').map(function(s){return s.trim();}).filter(Boolean);
-  }
+  // Split by comma first (main alternatives), then expand x/y suffix patterns within each
+  var mainAlts = !/\([^)]*,[^)]*\)/.test(correct)
+    ? correct.split(',').map(function(s){return s.trim();}).filter(Boolean)
+    : [correct.trim()];
+  var corrects = [];
+  mainAlts.forEach(function(alt){
+    var sp = alt.split(/\/+/).map(function(s){return s.trim();}).filter(Boolean);
+    if(sp.length<=1){corrects.push(alt);return;}
+    corrects.push(sp[0]);
+    for(var si=1;si<sp.length;si++){
+      // Short suffix (1-2 chars) on base ≥3 chars → expand: "jede/r"→"jeder", "ein/e"→"eine"
+      if(sp[si].length<=2&&sp[0].length>=3) corrects.push(sp[0]+sp[si]);
+      if(sp[si].length>1) corrects.push(sp[si]); // also as standalone
+    }
+  });
   function isToVerb(c){ return /^to\s+/i.test(c.trim()); }
   function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
   var allVariants = [];
@@ -2365,10 +2376,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       pot:current.pot,chapter_id:'',status:'open',dispute_type:type,
       created_at:new Date().toISOString()};
     sbPost('word_disputes',payload).then(function(res){
-      if(!res||res._err) return;
+      if(!res||res._err){alert('⚠️ Fehler beim Senden – bitte Admin kontaktieren.');return;}
       if(type==='unimportant') alert('✅ Meldung gesendet. Admin prüft die Anfrage.');
       else alert('✅ Anfrage gesendet. Admin prüft deine Antwort.');
-    }).catch(function(){});
+    }).catch(function(){alert('⚠️ Verbindungsfehler beim Senden.');});
   }
 
   function handleQuizAnswer(opt){
@@ -2600,6 +2611,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         })()}
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
         <button onClick={startTest} disabled={totalWords===0} style={BtnStyle('#a855f7','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>📝 Test starten (10 Vokabeln)</button>
+        <button onClick={function(){setPhase('satzmeister');}} disabled={totalWords===0} style={BtnStyle('#0ea5e9','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>✍️ Satzmeister</button>
+        <button onClick={function(){setPhase('satzquiz');}} disabled={totalWords===0} style={BtnStyle('#f97316','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🔤 Satzquiz</button>
         {Array.isArray(data.tests)&&data.tests.length>0&&(function(){
           var len = data.tests.length;
           var recent = data.tests.slice(-10).reverse();
@@ -2932,7 +2945,235 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       </div>
     );
   }
+  if(phase==='satzmeister'){
+    var smW=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(w){smW.push(w);});});
+    return <div>{liveChip}<SatzmeisterGame words={smW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+  }
+  if(phase==='satzquiz'){
+    var sqW=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(w){sqW.push(w);});});
+    return <div>{liveChip}<SatzquizGame words={sqW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+  }
   return null;
+}
+
+function generateSentences(words, runName) {
+  var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
+  var wordList = picked.map(function(w){return '"'+w.word+'" ('+w.clue+')';}).join(', ');
+  var prompt = 'Erstelle für jede dieser englischen Vokabeln genau einen kurzen einfachen englischen Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"englisches Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
+  return sbGet('settings','key=eq.anthropic_key').then(function(kd){
+    var key=(kd&&kd[0]&&kd[0].value)||localStorage.getItem('claude_api_key')||'';
+    if(!key) return Promise.reject(new Error('Kein API-Key hinterlegt'));
+    return fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.error) throw new Error(d.error.message||'API Fehler');
+      var text=d.content&&d.content[0]&&d.content[0].text||'';
+      var m=text.match(/\[[\s\S]*\]/);
+      if(!m) throw new Error('Kein JSON in Antwort');
+      return JSON.parse(m[0]);
+    });
+  });
+}
+
+function SatzmeisterGame({ words, runName, player, onUpdateScore, setPlayer, onDone }) {
+  var [sentences, setSentences] = useState(null);
+  var [loadErr, setLoadErr] = useState('');
+  var [idx, setIdx] = useState(0);
+  var [input, setInput] = useState('');
+  var [hints, setHints] = useState(0);
+  var [revealed, setRevealed] = useState([]);
+  var [gPhase, setGPhase] = useState('q');
+  var [lastOk, setLastOk] = useState(false);
+  var [lastPts, setLastPts] = useState(0);
+  var [lastSkip, setLastSkip] = useState(false);
+  var [total, setTotal] = useState(0);
+  var ref = useRef(null);
+
+  useEffect(function(){
+    if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
+    generateSentences(words, runName).then(function(s){setSentences(s);})
+      .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
+  },[]);
+
+  useEffect(function(){if(ref.current&&gPhase==='q')ref.current.focus();},[idx,gPhase]);
+
+  if(!sentences) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
+  if(loadErr||!sentences.length) return <div style={{padding:20,textAlign:'center'}}><div style={{color:RE,fontSize:13,marginBottom:12}}>{loadErr||'Keine Sätze generiert.'}</div><button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 24px'})}>← Zurück</button></div>;
+  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🏆</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzmeister!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 24px',fontSize:15})}>← Zurück</button></div>;
+
+  var sent = sentences[idx];
+  var answer = (sent.answer||'').trim();
+  var letters = answer.split('');
+  var nonSpace = letters.reduce(function(a,l,i){if(!/\s/.test(l))a.push(i);return a;},[]);
+  var parts = sent.sentence.split('___');
+
+  function calcPts(){ return Math.max(0, 10-hints*2); }
+
+  function makeDisplay(){
+    if(hints===0) return null;
+    return letters.map(function(l,i){
+      if(/\s/.test(l)) return ' ';
+      if(hints===1) return '_';
+      if(i===0) return l;
+      return revealed.indexOf(i)>=0?l:'_';
+    }).join('');
+  }
+
+  function isAllRevealed(){
+    if(hints<2) return false;
+    return nonSpace.every(function(i){return i===0||revealed.indexOf(i)>=0;});
+  }
+
+  function addHint(){
+    var nh=hints+1;
+    if(nh>=3){
+      var hidden=nonSpace.filter(function(i){return i>0&&revealed.indexOf(i)<0;});
+      if(hidden.length>0){
+        var pick=hidden[Math.floor(Math.random()*hidden.length)];
+        setRevealed(function(r){return r.concat([pick]);});
+      }
+    }
+    setHints(nh);
+  }
+
+  function submit(){
+    var typed=input.trim(); if(!typed) return;
+    var res=checkAnswer(typed,answer);
+    var ok=res==='correct'||res==='partial';
+    var pts=ok?calcPts():0;
+    if(pts>0&&onUpdateScore) onUpdateScore(pts);
+    if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
+    setTotal(function(t){return t+pts;});
+    setLastOk(ok); setLastPts(pts); setLastSkip(false); setGPhase('a');
+  }
+
+  function skip(){ setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a'); }
+
+  function next(){
+    setIdx(function(i){return i+1;});
+    setInput(''); setHints(0); setRevealed([]);
+    setLastOk(false); setLastPts(0); setLastSkip(false); setGPhase('q');
+  }
+
+  var wordDisplay=makeDisplay();
+
+  if(gPhase==='a') return(
+    <div style={{padding:16}}>
+      <div style={{fontSize:11,color:G400,marginBottom:12}}>Satz {idx+1} / {sentences.length}</div>
+      <div style={{borderRadius:14,padding:16,marginBottom:12,background:lastSkip?G50:lastOk?'#d1fae5':'#fee2e2',border:'2px solid '+(lastSkip?G200:lastOk?GR:RE)}}>
+        <div style={{fontSize:16,fontWeight:'bold',color:lastSkip?G600:lastOk?'#065f46':'#991b1b',marginBottom:6}}>
+          {lastSkip?'⏭ Übersprungen':lastOk?'✓ Richtig':'✗ Falsch'}
+          {lastPts>0&&<span style={{marginLeft:8,fontSize:14,color:AM}}>+{lastPts} Pkt</span>}
+        </div>
+        <div style={{fontSize:14,color:G900,lineHeight:1.6,marginBottom:4}}>
+          {parts[0]||''}<strong style={{color:T}}>{answer}</strong>{parts[1]||''}
+        </div>
+        {!lastOk&&!lastSkip&&<div style={{fontSize:11,color:G400}}>Deine Antwort: {input||'–'}</div>}
+        <div style={{fontSize:11,color:G400,marginTop:4}}>{sent.clue}</div>
+      </div>
+      <div style={{fontSize:12,color:G400,marginBottom:12,textAlign:'right'}}>Gesamt: {total} Pkt</div>
+      <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15})}>{idx+1>=sentences.length?'Fertig':'→ Weiter'}</button>
+    </div>
+  );
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:11,color:G400}}>Satz {idx+1} / {sentences.length}</div>
+        <div style={{fontSize:13,fontWeight:'bold',color:AM}}>{total} Pkt</div>
+      </div>
+      <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:12,border:'1px solid #bfdbfe',fontSize:16,lineHeight:1.8,color:G900}}>
+        <span>{parts[0]||''}</span>
+        <span style={{display:'inline-block',minWidth:64,textAlign:'center',background:T+'22',borderRadius:6,padding:'0 6px',color:T,fontWeight:'bold',fontFamily:'monospace',letterSpacing:2}}>{wordDisplay||'___'}</span>
+        <span>{parts[1]||''}</span>
+      </div>
+      <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:12}}>🇩🇪 {sent.clue}</div>
+      <div style={{display:'flex',gap:8,marginBottom:10}}>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder="Englische Antwort…" style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={addHint} disabled={isAllRevealed()} style={BtnStyle(isAllRevealed()?G100:'#f59e0b','white',{flex:1,padding:'10px',fontSize:13,opacity:isAllRevealed()?0.4:1})}>
+          💡 Tipp{hints>0?' ('+calcPts()+'P)':''}
+        </button>
+        <button onClick={skip} style={BtnStyle(G100,G400,{flex:1,padding:'10px',fontSize:13})}>⏭ Überspringen</button>
+      </div>
+      <div style={{marginTop:8,fontSize:10,color:G400,textAlign:'center'}}>{calcPts()>0?'Richtig jetzt = '+calcPts()+' Punkte':'0 Punkte (Wort komplett aufgedeckt)'}</div>
+    </div>
+  );
+}
+
+function SatzquizGame({ words, runName, player, onUpdateScore, setPlayer, onDone }) {
+  var [sentences, setSentences] = useState(null);
+  var [allOpts, setAllOpts] = useState(null);
+  var [loadErr, setLoadErr] = useState('');
+  var [idx, setIdx] = useState(0);
+  var [chosen, setChosen] = useState(null);
+  var [total, setTotal] = useState(0);
+
+  useEffect(function(){
+    if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);setAllOpts([]);return;}
+    generateSentences(words, runName).then(function(sents){
+      var opts=sents.map(function(s){
+        var ans=(s.answer||'').trim();
+        var dists=shuffleArr(words.filter(function(w){return w.word.toLowerCase()!==ans.toLowerCase();})).slice(0,3).map(function(w){return w.word;});
+        return shuffleArr([ans].concat(dists));
+      });
+      setSentences(sents); setAllOpts(opts);
+    }).catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);setAllOpts([]);});
+  },[]);
+
+  if(!sentences||!allOpts) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
+  if(loadErr||!sentences.length) return <div style={{padding:20,textAlign:'center'}}><div style={{color:RE,fontSize:13,marginBottom:12}}>{loadErr||'Keine Sätze generiert.'}</div><button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 24px'})}>← Zurück</button></div>;
+  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🎉</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzquiz!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 24px',fontSize:15})}>← Zurück</button></div>;
+
+  var sent=sentences[idx];
+  var answer=(sent.answer||'').trim();
+  var opts=allOpts[idx]||[];
+  var parts=sent.sentence.split('___');
+
+  function pick(opt){
+    if(chosen) return;
+    setChosen(opt);
+    var res=checkAnswer(opt,answer);
+    var ok=res==='correct'||res==='partial';
+    var pts=ok?10:0;
+    if(pts>0&&onUpdateScore) onUpdateScore(pts);
+    if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
+    setTotal(function(t){return t+pts;});
+    setTimeout(function(){setIdx(function(i){return i+1;});setChosen(null);},1500);
+  }
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:11,color:G400}}>Frage {idx+1} / {sentences.length}</div>
+        <div style={{fontSize:13,fontWeight:'bold',color:AM}}>{total} Pkt</div>
+      </div>
+      <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:12,border:'1px solid #bfdbfe',fontSize:16,lineHeight:1.8,color:G900}}>
+        <span>{parts[0]||''}</span>
+        <span style={{display:'inline-block',minWidth:64,textAlign:'center',background:T+'22',borderRadius:6,padding:'0 6px',color:T,fontWeight:'bold'}}>___</span>
+        <span>{parts[1]||''}</span>
+      </div>
+      <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:14}}>🇩🇪 {sent.clue}</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        {opts.map(function(opt,i){
+          var res=checkAnswer(opt,answer);
+          var isCorrect=res==='correct'||res==='partial';
+          var isChosen=chosen===opt;
+          var bg=!chosen?'white':isCorrect?'#d1fae5':isChosen?'#fee2e2':'white';
+          var border=!chosen?G200:isCorrect?GR:isChosen?RE:G200;
+          var col=!chosen?G900:isCorrect?'#065f46':isChosen?'#991b1b':G400;
+          return <button key={i} onClick={function(){pick(opt);}} disabled={!!chosen}
+            style={{padding:'14px 8px',borderRadius:12,border:'2px solid '+border,background:bg,cursor:chosen?'default':'pointer',fontSize:14,fontWeight:'bold',color:col,touchAction:'manipulation'}}>
+            {opt}
+          </button>;
+        })}
+      </div>
+    </div>
+  );
 }
 
 function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
