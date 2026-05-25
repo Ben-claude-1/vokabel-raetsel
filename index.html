@@ -2956,13 +2956,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   return null;
 }
 
-function generateSentences(words, runName) {
+function generateSentences(words, runName, forceNew) {
   var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
   var wordList = picked.map(function(w){return '"'+w.word+'" ('+w.clue+')';}).join(', ');
   var prompt = 'Erstelle für jede dieser englischen Vokabeln genau einen kurzen einfachen englischen Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"englisches Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
-  return sbGet('settings','key=eq.anthropic_key').then(function(kd){
-    var key=(kd&&kd[0]&&kd[0].value)||localStorage.getItem('claude_api_key')||'';
-    if(!key) return Promise.reject(new Error('Kein API-Key hinterlegt'));
+  var cacheKey = 'satz_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
+  function callApi(key) {
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -2972,8 +2971,26 @@ function generateSentences(words, runName) {
       var text=d.content&&d.content[0]&&d.content[0].text||'';
       var m=text.match(/\[[\s\S]*\]/);
       if(!m) throw new Error('Kein JSON in Antwort');
-      return JSON.parse(m[0]);
+      var sents=JSON.parse(m[0]);
+      fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
+      return sents;
     });
+  }
+  function generate() {
+    return fetch(SB_URL+'/rest/v1/rpc/get_claude_key',{method:'POST',headers:HW_POST,body:'{}',mode:'cors',credentials:'omit'})
+      .then(function(r){return r.json();})
+      .then(function(key){
+        if(!key) key=localStorage.getItem('claude_api_key')||'';
+        if(!key) return Promise.reject(new Error('Kein API-Key hinterlegt'));
+        return callApi(key);
+      });
+  }
+  if(forceNew) return generate();
+  return sbGet('settings','key=eq.'+encodeURIComponent(cacheKey)).then(function(cached){
+    if(cached&&cached[0]&&cached[0].value){
+      try{var p=JSON.parse(cached[0].value);if(Array.isArray(p)&&p.length>0)return p;}catch(e){}
+    }
+    return generate();
   });
 }
 
@@ -2989,19 +3006,21 @@ function SatzmeisterGame({ words, runName, player, onUpdateScore, setPlayer, onD
   var [lastPts, setLastPts] = useState(0);
   var [lastSkip, setLastSkip] = useState(false);
   var [total, setTotal] = useState(0);
+  var [regenKey, setRegenKey] = useState(0);
   var ref = useRef(null);
 
   useEffect(function(){
+    setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setRevealed([]); setGPhase('q');
     if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
-    generateSentences(words, runName).then(function(s){setSentences(s);})
+    generateSentences(words, runName, regenKey>0).then(function(s){setSentences(s);})
       .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
-  },[]);
+  },[regenKey]);
 
   useEffect(function(){if(ref.current&&gPhase==='q')ref.current.focus();},[idx,gPhase]);
 
   if(!sentences) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
   if(loadErr||!sentences.length) return <div style={{padding:20,textAlign:'center'}}><div style={{color:RE,fontSize:13,marginBottom:12}}>{loadErr||'Keine Sätze generiert.'}</div><button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 24px'})}>← Zurück</button></div>;
-  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🏆</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzmeister!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 24px',fontSize:15})}>← Zurück</button></div>;
+  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🏆</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzmeister!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><div style={{display:'flex',gap:8,justifyContent:'center'}}><button onClick={function(){setRegenKey(function(k){return k+1;});}} style={BtnStyle('#0ea5e9','white',{padding:'12px 20px',fontSize:14})}>↺ Neue Sätze</button><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 20px',fontSize:14})}>← Zurück</button></div></div>;
 
   var sent = sentences[idx];
   var answer = (sent.answer||'').trim();
@@ -3112,10 +3131,12 @@ function SatzquizGame({ words, runName, player, onUpdateScore, setPlayer, onDone
   var [idx, setIdx] = useState(0);
   var [chosen, setChosen] = useState(null);
   var [total, setTotal] = useState(0);
+  var [regenKey, setRegenKey] = useState(0);
 
   useEffect(function(){
+    setSentences(null); setAllOpts(null); setLoadErr(''); setIdx(0); setTotal(0); setChosen(null);
     if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);setAllOpts([]);return;}
-    generateSentences(words, runName).then(function(sents){
+    generateSentences(words, runName, regenKey>0).then(function(sents){
       var opts=sents.map(function(s){
         var ans=(s.answer||'').trim();
         var dists=shuffleArr(words.filter(function(w){return w.word.toLowerCase()!==ans.toLowerCase();})).slice(0,3).map(function(w){return w.word;});
@@ -3123,11 +3144,11 @@ function SatzquizGame({ words, runName, player, onUpdateScore, setPlayer, onDone
       });
       setSentences(sents); setAllOpts(opts);
     }).catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);setAllOpts([]);});
-  },[]);
+  },[regenKey]);
 
   if(!sentences||!allOpts) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
   if(loadErr||!sentences.length) return <div style={{padding:20,textAlign:'center'}}><div style={{color:RE,fontSize:13,marginBottom:12}}>{loadErr||'Keine Sätze generiert.'}</div><button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 24px'})}>← Zurück</button></div>;
-  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🎉</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzquiz!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 24px',fontSize:15})}>← Zurück</button></div>;
+  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🎉</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Satzquiz!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><div style={{display:'flex',gap:8,justifyContent:'center'}}><button onClick={function(){setRegenKey(function(k){return k+1;});}} style={BtnStyle('#f97316','white',{padding:'12px 20px',fontSize:14})}>↺ Neue Sätze</button><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 20px',fontSize:14})}>← Zurück</button></div></div>;
 
   var sent=sentences[idx];
   var answer=(sent.answer||'').trim();
