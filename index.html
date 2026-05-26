@@ -2946,11 +2946,21 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     );
   }
   if(phase==='satzmeister'){
-    var smW=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(w){smW.push(w);});});
+    var smW=(function(){
+      var rw=[]; try{rw=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
+      if(rw.length>0) return rw;
+      var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
+      return w;
+    })();
     return <div>{liveChip}<SatzmeisterGame words={smW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
   }
   if(phase==='satzquiz'){
-    var sqW=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(w){sqW.push(w);});});
+    var sqW=(function(){
+      var rw=[]; try{rw=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
+      if(rw.length>0) return rw;
+      var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
+      return w;
+    })();
     return <div>{liveChip}<SatzquizGame words={sqW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
   }
   return null;
