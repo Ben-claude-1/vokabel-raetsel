@@ -2952,7 +2952,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzmeisterGame words={smW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
   }
   if(phase==='satzquiz'){
     var sqW=(function(){
@@ -2961,7 +2961,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzquizGame words={sqW} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
   }
   return null;
 }
@@ -3004,7 +3004,7 @@ function generateSentences(words, runName, forceNew) {
   });
 }
 
-function SatzmeisterGame({ words, runName, player, onUpdateScore, setPlayer, onDone }) {
+function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlayer, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [loadErr, setLoadErr] = useState('');
   var [idx, setIdx] = useState(0);
@@ -3021,9 +3021,18 @@ function SatzmeisterGame({ words, runName, player, onUpdateScore, setPlayer, onD
 
   useEffect(function(){
     setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setRevealed([]); setGPhase('q');
-    if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
-    generateSentences(words, runName, regenKey>0).then(function(s){setSentences(s);})
-      .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
+    function start(ws) {
+      if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
+      generateSentences(ws, runName, regenKey>0).then(function(s){setSentences(s);})
+        .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
+    }
+    if(words&&words.length){start(words);return;}
+    if(runId){
+      sbGet('ls_runs','id=eq.'+runId+'&select=words').then(function(rows){
+        var rw=[]; try{var raw=rows&&rows[0]&&rows[0].words;rw=typeof raw==='string'?JSON.parse(raw||'[]'):(raw||[]);}catch(e){}
+        start(rw);
+      }).catch(function(){start([]);});
+    } else { start([]); }
   },[regenKey]);
 
   useEffect(function(){if(ref.current&&gPhase==='q')ref.current.focus();},[idx,gPhase]);
@@ -3134,7 +3143,7 @@ function SatzmeisterGame({ words, runName, player, onUpdateScore, setPlayer, onD
   );
 }
 
-function SatzquizGame({ words, runName, player, onUpdateScore, setPlayer, onDone }) {
+function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [allOpts, setAllOpts] = useState(null);
   var [loadErr, setLoadErr] = useState('');
@@ -3145,15 +3154,24 @@ function SatzquizGame({ words, runName, player, onUpdateScore, setPlayer, onDone
 
   useEffect(function(){
     setSentences(null); setAllOpts(null); setLoadErr(''); setIdx(0); setTotal(0); setChosen(null);
-    if(!words||!words.length){setLoadErr('Keine Vokabeln.');setSentences([]);setAllOpts([]);return;}
-    generateSentences(words, runName, regenKey>0).then(function(sents){
-      var opts=sents.map(function(s){
-        var ans=(s.answer||'').trim();
-        var dists=shuffleArr(words.filter(function(w){return w.word.toLowerCase()!==ans.toLowerCase();})).slice(0,3).map(function(w){return w.word;});
-        return shuffleArr([ans].concat(dists));
-      });
-      setSentences(sents); setAllOpts(opts);
-    }).catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);setAllOpts([]);});
+    function start(ws) {
+      if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);setAllOpts([]);return;}
+      generateSentences(ws, runName, regenKey>0).then(function(sents){
+        var opts=sents.map(function(s){
+          var ans=(s.answer||'').trim();
+          var dists=shuffleArr(ws.filter(function(w){return w.word.toLowerCase()!==ans.toLowerCase();})).slice(0,3).map(function(w){return w.word;});
+          return shuffleArr([ans].concat(dists));
+        });
+        setSentences(sents); setAllOpts(opts);
+      }).catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);setAllOpts([]);});
+    }
+    if(words&&words.length){start(words);return;}
+    if(runId){
+      sbGet('ls_runs','id=eq.'+runId+'&select=words').then(function(rows){
+        var rw=[]; try{var raw=rows&&rows[0]&&rows[0].words;rw=typeof raw==='string'?JSON.parse(raw||'[]'):(raw||[]);}catch(e){}
+        start(rw);
+      }).catch(function(){start([]);});
+    } else { start([]); }
   },[regenKey]);
 
   if(!sentences||!allOpts) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
