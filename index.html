@@ -3022,7 +3022,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlay
   useEffect(function(){
     setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setRevealed([]); setGPhase('q');
     function start(ws) {
-      if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
+      if(!ws||!ws.length){setLoadErr('Keine Vokabeln (v4, words='+JSON.stringify((words||[]).length)+', runId='+runId+')');setSentences([]);return;}
       generateSentences(ws, runName, regenKey>0).then(function(s){setSentences(s);})
         .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
     }
