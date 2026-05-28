@@ -6062,7 +6062,7 @@ function KlassenarbeitSetup({ player, onStart, onDone }) {
         <div style={{marginBottom:16}}>
           {runs.map(function(run){var ck=selRuns.has(run.id);return(
             <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer'}}>
-              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G300),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                 {ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}
               </div>
               <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
@@ -6075,7 +6075,7 @@ function KlassenarbeitSetup({ player, onStart, onDone }) {
       <div style={{marginBottom:16}}>
         {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
           <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer'}}>
-            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G300),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
               {ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}
             </div>
             <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
@@ -6266,7 +6266,7 @@ function KlassenarbeitAdmin({ player }) {
         <div style={{marginBottom:16}}>
           {runs.map(function(run){var ck=selRuns.has(run.id);return(
             <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer',touchAction:'manipulation'}}>
-              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G300),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
               <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
             </div>);
           })}
@@ -6277,7 +6277,7 @@ function KlassenarbeitAdmin({ player }) {
       <div style={{marginBottom:16}}>
         {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
           <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer',touchAction:'manipulation'}}>
-            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G300),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
             <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
           </div>);
         })}
