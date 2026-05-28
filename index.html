@@ -6947,7 +6947,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
-    if(screen==='klassenarbeit_setup') return <KlassenarbeitSetup player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
+    if(screen==='klassenarbeit_setup'&&isAdmin) return <KlassenarbeitSetup player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_setup');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
     if(screen==='stats') return <Stats player={player} chapters={childChapters}/>;
@@ -7006,7 +7006,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
-              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}},
+              ...(isAdmin?[{icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}}]:[]),
               {icon:'🏆',title:'Gesamtrangliste',sub:'Punkte aus allen Spielen',action:function(){go('leaderboard');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
@@ -7037,8 +7037,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
-              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}},
-              ...(player&&player.is_admin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
+              ...(isAdmin?[{icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}}]:[]),
+              ...(isAdmin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
                 <span style={{fontSize:22,flexShrink:0}}>{item.icon}</span>
