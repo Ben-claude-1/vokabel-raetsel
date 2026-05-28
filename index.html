@@ -5021,7 +5021,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -5625,6 +5625,9 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
       {tab==='vocabcheck'&&(<div>
         <VocabCheckAdmin chapters={chapters} setChapters={setChapters}/>
       </div>)}
+      {tab==='klassenarbeit'&&(<div>
+        <KlassenarbeitAdmin player={player}/>
+      </div>)}
     </div>
   );
 }
@@ -6211,6 +6214,114 @@ function KlassenarbeitTest({ player, questions, onDone }) {
         <button onClick={function(){submit(true);}} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:13})}>⏭ Überspringen</button>
         <button onClick={function(){submit(false);}} disabled={!input.trim()} style={BtnStyle('#dc2626','white',{flex:2,padding:'12px',fontSize:14,fontWeight:'bold',opacity:input.trim()?1:0.5})}>✓ Prüfen</button>
       </div>
+    </div>
+  );
+}
+
+function KlassenarbeitAdmin({ player }) {
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(['sp','pp','sa','mv'])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
+  useEffect(function(){
+    lsGetRunsForPlayer(player.id).then(function(r){setRuns(r||[]);setLoading(false);}).catch(function(){setLoading(false);});
+    sbGet('settings','key=eq.klassenarbeit_active_test&select=value').then(function(rows){
+      if(rows&&rows[0]){try{setActiveInfo(JSON.parse(rows[0].value));}catch(e){}}
+    }).catch(function(){});
+  },[]);
+  function toggleRun(id){setSelRuns(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
+  function toggleTopic(t){setSelTopics(function(p){var n=new Set(p);n.has(t)?n.delete(t):n.add(t);return n;});}
+  function handleSave(){
+    if(!canSave||saving) return;
+    setSaving(true); setMsg('');
+    var topicArr=Array.from(selTopics);
+    var selRunObjs=runs.filter(function(r){return selRuns.has(r.id);});
+    var gp=topicArr.length>0?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
+    gp.then(function(gPool){
+      var qs=buildKaQuestions(selRunObjs,gPool);
+      var payload={questions:qs,created_at:new Date().toISOString(),created_by:player.name,question_count:qs.length};
+      sbGet('settings','key=eq.klassenarbeit_active_test&select=key').then(function(rows){
+        var op=(rows&&rows.length>0)?sbPatch('settings',{value:JSON.stringify(payload)},'key=eq.klassenarbeit_active_test'):sbPost('settings',{key:'klassenarbeit_active_test',value:JSON.stringify(payload)});
+        Promise.resolve(op).then(function(){setSaving(false);setActiveInfo(payload);setMsg('✅ Test gespeichert – alle Spieler können ihn jetzt starten.');}).catch(function(){setSaving(false);setMsg('❌ Fehler beim Speichern.');});
+      }).catch(function(){setSaving(false);setMsg('❌ DB-Fehler.');});
+    }).catch(function(){setSaving(false);setMsg('❌ Fehler beim Laden der Grammatik.');});
+  }
+  function handleDelete(){
+    sbDel('settings','key=eq.klassenarbeit_active_test').then(function(){setActiveInfo(null);setMsg('Test gelöscht.');}).catch(function(){setMsg('❌ Löschen fehlgeschlagen.');});
+  }
+  var vocabEst=0; runs.filter(function(r){return selRuns.has(r.id);}).forEach(function(r){vocabEst+=(r.word_count||0);});
+  var hasV=selRuns.size>0,hasG=selTopics.size>0;
+  var vQ=hasV&&hasG?20:(hasV?40:0),gQ=hasG&&hasV?20:(hasG?40:0);
+  var totalEst=Math.min(vQ,vocabEst)+gQ+10;
+  var canSave=hasV||hasG;
+  return(
+    <div>
+      {activeInfo&&(
+        <div style={{padding:'10px 12px',borderRadius:10,background:'#d1fae5',border:'1px solid #6ee7b7',marginBottom:12}}>
+          <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>✅ Aktiver Test</div>
+          <div style={{fontSize:11,color:'#065f46',marginBottom:6}}>{activeInfo.question_count||'?'} Fragen · erstellt von {activeInfo.created_by} · {activeInfo.created_at?new Date(activeInfo.created_at).toLocaleDateString('de'):''}</div>
+          <button onClick={handleDelete} style={{padding:'4px 10px',borderRadius:6,border:'none',background:'#dc2626',color:'white',fontSize:11,cursor:'pointer',touchAction:'manipulation'}}>🗑 Test löschen</button>
+        </div>
+      )}
+      {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
+      {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:(
+        <div style={{marginBottom:16}}>
+          {runs.map(function(run){var ck=selRuns.has(run.id);return(
+            <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer',touchAction:'manipulation'}}>
+              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G300),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
+            </div>);
+          })}
+          {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
+        </div>
+      )}
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
+      <div style={{marginBottom:16}}>
+        {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
+          <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer',touchAction:'manipulation'}}>
+            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G300),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
+          </div>);
+        })}
+      </div>
+      <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:16}}>
+        <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
+        <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
+      </div>
+      {!canSave&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
+      <button onClick={handleSave} disabled={!canSave||saving} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:14,fontWeight:'bold',opacity:(!canSave||saving)?0.5:1,touchAction:'manipulation'})}>{saving?'Erstelle Test…':'💾 Test erstellen & aktivieren (~'+totalEst+' Fragen)'}</button>
+    </div>
+  );
+}
+
+function KlassenarbeitPlayer({ player, onStart, onDone }) {
+  var [info,setInfo]=useState(null); var [loading,setLoading]=useState(true);
+  useEffect(function(){
+    sbGet('settings','key=eq.klassenarbeit_active_test&select=value').then(function(rows){
+      if(rows&&rows[0]){try{setInfo(JSON.parse(rows[0].value));}catch(e){}}
+      setLoading(false);
+    }).catch(function(){setLoading(false);});
+  },[]);
+  if(loading) return <div style={{padding:32,textAlign:'center',color:G400,fontSize:14}}>Lade…</div>;
+  if(!info) return(
+    <div style={{padding:24,textAlign:'center'}}>
+      <div style={{fontSize:48,marginBottom:12}}>📋</div>
+      <div style={{fontWeight:'bold',fontSize:16,color:G700,marginBottom:8}}>Keine Klassenarbeit aktiv</div>
+      <div style={{fontSize:12,color:G400,marginBottom:24}}>Der Lehrer hat noch keinen Test erstellt.</div>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'12px',fontSize:13,touchAction:'manipulation'})}>← Zurück</button>
+    </div>
+  );
+  var dateStr=info.created_at?new Date(info.created_at).toLocaleDateString('de'):'';
+  return(
+    <div style={{padding:16}}>
+      <div style={{textAlign:'center',marginBottom:24}}>
+        <div style={{fontSize:52,marginBottom:8}}>📋</div>
+        <div style={{fontWeight:'bold',fontSize:20,color:'#dc2626',marginBottom:4}}>Klassenarbeit</div>
+        <div style={{fontSize:12,color:G400}}>{info.question_count||'?'} Fragen{dateStr?' · erstellt am '+dateStr:''}</div>
+      </div>
+      <div style={{padding:'12px 14px',borderRadius:12,background:'#fef2f2',border:'1px solid #fca5a5',marginBottom:24}}>
+        <div style={{fontSize:12,color:'#991b1b'}}>⚠️ Schreibe alle Antworten so vollständig wie möglich. Du hast nur einen Versuch.</div>
+      </div>
+      <button onClick={function(){onStart(info.questions);}} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:16,fontWeight:'bold',marginBottom:8,touchAction:'manipulation'})}>▶ Test starten</button>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13,touchAction:'manipulation'})}>← Zurück</button>
     </div>
   );
 }
@@ -6947,8 +7058,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
-    if(screen==='klassenarbeit_setup'&&isAdmin) return <KlassenarbeitSetup player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
-    if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_setup');}}/>;
+    if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
+    if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
     if(screen==='stats') return <Stats player={player} chapters={childChapters}/>;
     if(screen==='leaderboard') return <Leaderboard allUsers={allUsers} player={player}/>;
@@ -6966,7 +7077,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
-    scoreboard:'🏆 Meine Sticker',klassenarbeit_setup:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit'
+    scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit'
   };
 
   var mainScreens = isAdmin
@@ -7006,7 +7117,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
-              ...(isAdmin?[{icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}}]:[]),
+              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_player');}},
               {icon:'🏆',title:'Gesamtrangliste',sub:'Punkte aus allen Spielen',action:function(){go('leaderboard');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
@@ -7037,7 +7148,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
-              ...(isAdmin?[{icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}}]:[]),
+              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_player');}},
               ...(isAdmin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
@@ -7081,7 +7192,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
             word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
-            grammar:'games',klassenarbeit_setup:'games',klassenarbeit_play:'klassenarbeit_setup',
+            grammar:'games',klassenarbeit_player:'games',klassenarbeit_play:'klassenarbeit_player',
             stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
           go(dest);
