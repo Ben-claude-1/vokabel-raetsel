@@ -5992,6 +5992,229 @@ function grammarPickQuestions(pool, ruleStats, count) {
   return shuffle(picked);
 }
 
+// ── Klassenarbeit ────────────────────────────────────────────────────────
+var KA_SAETZE = [
+  {de:'Ein Hund braucht tägliche Pflege: man muss ihn füttern und ihm die Zähne putzen.',en:'A dog needs daily care: you have to feed it and clean its teeth.'},
+  {de:'Du solltest deinen Hund regelmäßig waschen, damit er sauber bleibt.',en:'You should wash your dog regularly so that it stays clean.'},
+  {de:'Es ist wichtig, mit deinem Hund spazieren zu gehen, damit er genug Bewegung bekommt.',en:'It is important to go for a walk with your dog so it gets enough exercise.'},
+  {de:'Sorge immer dafür, dass dein Hund eine Schüssel frisches Wasser hat.',en:'Always make sure your dog has a bowl of fresh water.'},
+  {de:'Ein guter Besitzer muss sicherstellen, dass der Hund zum Arzt geht, wenn er krank ist.',en:'A good owner has to make sure that the dog sees a doctor when it is sick.'},
+  {de:'Einen Hund zu haben hält dich aktiv, weil du jeden Tag draußen mit ihm rennst und spielst.',en:'Having a dog keeps you active because you run and play outside with it every day.'},
+  {de:'Du fühlst dich nie ganz allein, wenn ein Haustier zuhause auf dich wartet.',en:'You never feel completely alone when you have a pet at home waiting for you.'},
+  {de:'Einen Hund oder eine Katze zu streicheln hilft dir nach einem langen Schultag, ruhig und weniger gestresst zu sein.',en:'Stroking a cat or a dog helps you feel calm and less stressed after a long day at school.'},
+  {de:'Wenn du für ein Haustier sorgst, lernst du verantwortungsbewusst zu sein und an andere zu denken.',en:'When you take care of a pet, you learn to be responsible and to think about others.'},
+  {de:'Es ist wichtig, ein Haustier zu haben, weil es dir beibringt, dass jedes Lebewesen Liebe und Aufmerksamkeit braucht.',en:'It is important to have a pet because it teaches you that every living thing needs love and attention.'}
+];
+var KA_TOPIC_LABELS = {sp:'Simple Present',pp:'Present Progressive',sa:'some / any',mv:'Modalverben'};
+function kaSentenceMatch(input, target) {
+  function norm(s){return (s||'').toLowerCase().replace(/[^a-z0-9\s]/g,'').trim();}
+  var inp=norm(input).split(/\s+/).filter(Boolean);
+  var tgt=norm(target).split(/\s+/).filter(Boolean);
+  if(!tgt.length) return false;
+  var inpSet={}; inp.forEach(function(w){inpSet[w]=1;});
+  var matches=tgt.filter(function(w){return !!inpSet[w];}).length;
+  return matches/tgt.length>=0.65;
+}
+function kaGradeFor(correct, total) {
+  var pct=total>0?correct/total:0;
+  if(pct>=0.95) return 1; if(pct>=0.85) return 2; if(pct>=0.70) return 3;
+  if(pct>=0.55) return 4; if(pct>=0.40) return 5; return 6;
+}
+function buildKaQuestions(selectedRuns, grammarPool) {
+  var vocabMap={};
+  selectedRuns.forEach(function(run){safeWords(run.words).forEach(function(w){var k=normWordKey(w.word);if(!vocabMap[k])vocabMap[k]=w;});});
+  var vocabArr=Object.values(vocabMap);
+  var sentQs=KA_SAETZE.map(function(s){return {kind:'sentence',german:s.de,answer:s.en};});
+  var remaining=40;
+  var hasV=vocabArr.length>0, hasG=grammarPool.length>0;
+  var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
+  var vocabQs=shuffleArr(vocabArr.slice()).slice(0,Math.min(vQ,vocabArr.length)).map(function(w){return {kind:'vocab',german:w.clue,answer:w.word};});
+  var grammarQs=shuffleArr(grammarPool.slice()).slice(0,Math.min(gQ,grammarPool.length)).map(function(q){return {kind:'grammar',sentence:q.sentence,answer:q.answer,acceptable_answers:q.acceptable_answers||[],hint:q.rule||''};});
+  return shuffleArr(vocabQs.concat(grammarQs).concat(sentQs));
+}
+
+function KlassenarbeitSetup({ player, onStart, onDone }) {
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(['sp','pp','sa','mv'])); var [loading,setLoading]=useState(true); var [starting,setStarting]=useState(false);
+  useEffect(function(){lsGetRunsForPlayer(player.id).then(function(r){setRuns(r||[]);setLoading(false);}).catch(function(){setLoading(false);});}, []);
+  function toggleRun(id){setSelRuns(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
+  function toggleTopic(t){setSelTopics(function(p){var n=new Set(p);n.has(t)?n.delete(t):n.add(t);return n;});}
+  function handleStart(){
+    setStarting(true);
+    var topicArr=Array.from(selTopics);
+    var selRunObjs=runs.filter(function(r){return selRuns.has(r.id);});
+    var gp=topicArr.length>0?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
+    gp.then(function(gPool){var qs=buildKaQuestions(selRunObjs,gPool);setStarting(false);onStart(qs);}).catch(function(){setStarting(false);});
+  }
+  var vocabEst=0; runs.filter(function(r){return selRuns.has(r.id);}).forEach(function(r){vocabEst+=(r.word_count||0);});
+  var hasV=selRuns.size>0, hasG=selTopics.size>0;
+  var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
+  var totalEst=Math.min(vQ,vocabEst)+gQ+10;
+  var canStart=hasV||hasG;
+  return (
+    <div style={{padding:12}}>
+      <div style={{fontWeight:'bold',fontSize:16,color:'#dc2626',marginBottom:2}}>📋 Klassenarbeit</div>
+      <div style={{fontSize:12,color:G400,marginBottom:16}}>Vorbereitung — ca. {totalEst} Fragen</div>
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
+      {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:
+        <div style={{marginBottom:16}}>
+          {runs.map(function(run){var ck=selRuns.has(run.id);return(
+            <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer'}}>
+              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G300),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                {ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}
+              </div>
+              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
+            </div>);
+          })}
+          {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
+        </div>
+      }
+      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
+      <div style={{marginBottom:16}}>
+        {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
+          <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer'}}>
+            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G300),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              {ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}
+            </div>
+            <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
+          </div>);
+        })}
+      </div>
+      <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:20}}>
+        <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
+        <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
+      </div>
+      {!canStart&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
+      <button onClick={handleStart} disabled={!canStart||starting} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:15,fontWeight:'bold',opacity:(!canStart||starting)?0.5:1})}>{starting?'Lade Fragen…':'📋 Test starten (~'+totalEst+' Fragen)'}</button>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13,marginTop:8})}>← Zurück</button>
+    </div>
+  );
+}
+
+function KlassenarbeitTest({ player, questions, onDone }) {
+  var [idx,setIdx]=useState(0); var [input,setInput]=useState(''); var [log,setLog]=useState([]); var [phase,setPhase]=useState('q'); var [lastCorrect,setLastCorrect]=useState(false); var [lastExpected,setLastExpected]=useState('');
+  var inputRef=useRef(null);
+  useEffect(function(){if(inputRef.current&&phase==='q')inputRef.current.focus();},[idx,phase]);
+  var total=questions.length;
+  var q=questions[Math.min(idx,total-1)];
+  function submit(skipped){
+    if(!q) return;
+    var inp=input.trim();
+    var correct=false;
+    if(!skipped){
+      if(q.kind==='vocab') correct=checkAnswer(inp,q.answer);
+      else if(q.kind==='grammar') correct=isCorrectAnswer(q,inp);
+      else if(q.kind==='sentence') correct=kaSentenceMatch(inp,q.answer);
+    }
+    setLastCorrect(correct); setLastExpected(q.answer); setPhase('feedback');
+  }
+  function commitAnswer(correct){
+    var entry={kind:q.kind,german:q.german||q.sentence||'',answer:q.answer,typed:input.trim(),correct:correct};
+    var newLog=log.concat([entry]);
+    setLog(newLog);
+    if(idx+1>=total){setIdx(total);setPhase('done');}
+    else{setIdx(function(i){return i+1;});setInput('');setPhase('q');}
+  }
+  if(phase==='done'||idx>=total){
+    var corr=log.filter(function(l){return l.correct;}).length;
+    var tot=log.length||total;
+    var grade=kaGradeFor(corr,tot);
+    var gCol=grade<=2?GR:grade<=3?AM:grade<=4?'#f97316':RE;
+    var bk={vocab:{c:0,t:0},grammar:{c:0,t:0},sentence:{c:0,t:0}};
+    log.forEach(function(l){var k=l.kind||'vocab';bk[k].t++;if(l.correct)bk[k].c++;});
+    return(
+      <div style={{padding:16}}>
+        <div style={{textAlign:'center',marginBottom:24}}>
+          <div style={{fontSize:56,marginBottom:8}}>🎓</div>
+          <div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Test abgeschlossen!</div>
+          <div style={{fontSize:40,fontWeight:'bold',color:gCol,marginBottom:4}}>{corr}/{tot}</div>
+          <div style={{fontSize:14,color:G600,marginBottom:4}}>Note: <span style={{fontWeight:'bold',fontSize:24,color:gCol}}>{grade}</span></div>
+          <div style={{fontSize:11,color:G400}}>{Math.round(corr/tot*100)}% richtig</div>
+        </div>
+        <div style={{background:G50,borderRadius:12,padding:12,marginBottom:20}}>
+          {bk.vocab.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderBottom:'1px solid '+G100}}><span style={{color:G600}}>📝 Vokabeln</span><span style={{fontWeight:'bold',color:bk.vocab.c/bk.vocab.t>=0.7?GR:RE}}>{bk.vocab.c}/{bk.vocab.t}</span></div>}
+          {bk.grammar.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderBottom:'1px solid '+G100}}><span style={{color:G600}}>✏️ Grammatik</span><span style={{fontWeight:'bold',color:bk.grammar.c/bk.grammar.t>=0.7?GR:RE}}>{bk.grammar.c}/{bk.grammar.t}</span></div>}
+          {bk.sentence.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0'}}><span style={{color:G600}}>🐾 Sätze</span><span style={{fontWeight:'bold',color:bk.sentence.c/bk.sentence.t>=0.7?GR:RE}}>{bk.sentence.c}/{bk.sentence.t}</span></div>}
+        </div>
+        <button onClick={onDone} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:15,fontWeight:'bold'})}>← Zurück</button>
+      </div>
+    );
+  }
+  if(phase==='feedback'){
+    var isSent=q.kind==='sentence';
+    return(
+      <div style={{padding:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+          <div style={{flex:1,height:6,borderRadius:3,background:G100,overflow:'hidden'}}><div style={{height:'100%',width:(idx/total*100)+'%',background:lastCorrect?GR:RE,borderRadius:3}}/></div>
+          <span style={{fontSize:11,color:G400,minWidth:40,textAlign:'right'}}>{idx}/{total}</span>
+        </div>
+        <div style={{textAlign:'center',padding:'16px',borderRadius:14,background:lastCorrect?'#d1fae5':'#fee2e2',marginBottom:16}}>
+          <div style={{fontSize:32,marginBottom:4}}>{lastCorrect?'✅':'❌'}</div>
+          <div style={{fontSize:16,fontWeight:'bold',color:lastCorrect?'#065f46':'#991b1b'}}>{lastCorrect?'Richtig!':'Nicht ganz.'}</div>
+        </div>
+        <div style={{background:G50,borderRadius:10,padding:12,marginBottom:12}}>
+          <div style={{fontSize:11,color:G400,marginBottom:4}}>Richtige Antwort:</div>
+          <div style={{fontSize:15,fontWeight:'bold',color:G900}}>{lastExpected}</div>
+          {input.trim()&&input.trim()!==lastExpected&&<div style={{fontSize:12,color:RE,marginTop:4}}>Deine Antwort: <span style={{textDecoration:'line-through'}}>{input.trim()}</span></div>}
+        </div>
+        {isSent?(
+          <div>
+            <div style={{fontSize:12,color:G600,marginBottom:6,textAlign:'center'}}>Stimmt deine Antwort inhaltlich überein?</div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={function(){commitAnswer(true);}} style={BtnStyle(GR,'white',{flex:1,padding:'12px',fontSize:13,fontWeight:'bold'})}>✓ Ja</button>
+              <button onClick={function(){commitAnswer(false);}} style={BtnStyle(RE,'white',{flex:1,padding:'12px',fontSize:13,fontWeight:'bold'})}>✗ Nein</button>
+            </div>
+          </div>
+        ):(
+          <button onClick={function(){commitAnswer(lastCorrect);}} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:14,fontWeight:'bold'})}>Weiter →</button>
+        )}
+      </div>
+    );
+  }
+  var kindIcon=q.kind==='vocab'?'📝':q.kind==='grammar'?'✏️':'🐾';
+  var kindLabel=q.kind==='vocab'?'Vokabel':q.kind==='grammar'?'Grammatik':'Satz übersetzen';
+  var kindCol=q.kind==='vocab'?T:q.kind==='grammar'?'#7c3aed':'#059669';
+  return(
+    <div style={{padding:12}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+        <div style={{flex:1,height:6,borderRadius:3,background:G100,overflow:'hidden'}}><div style={{height:'100%',width:(idx/total*100)+'%',background:'#dc2626',borderRadius:3,transition:'width 0.3s'}}/></div>
+        <span style={{fontSize:11,color:G400,minWidth:40,textAlign:'right'}}>{idx+1}/{total}</span>
+      </div>
+      <div style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 10px',borderRadius:20,background:kindCol+'22',marginBottom:12}}>
+        <span style={{fontSize:12}}>{kindIcon}</span>
+        <span style={{fontSize:10,fontWeight:'bold',color:kindCol,letterSpacing:0.5}}>{kindLabel.toUpperCase()}</span>
+      </div>
+      {q.kind==='vocab'&&(
+        <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:16,border:'2px solid #93c5fd'}}>
+          <div style={{fontSize:11,color:G400,marginBottom:6}}>Deutsch — schreibe das englische Wort:</div>
+          <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{q.german}</div>
+        </div>
+      )}
+      {q.kind==='grammar'&&(
+        <div style={{background:'#f5f3ff',borderRadius:14,padding:16,marginBottom:16,border:'2px solid #c4b5fd'}}>
+          <div style={{fontSize:11,color:G400,marginBottom:6}}>{q.hint} — Lücke ausfüllen:</div>
+          <div style={{fontSize:18,fontWeight:'bold',color:G900,lineHeight:1.6}}>{q.sentence}</div>
+        </div>
+      )}
+      {q.kind==='sentence'&&(
+        <div style={{background:'#f0fdf4',borderRadius:14,padding:16,marginBottom:16,border:'2px solid #86efac'}}>
+          <div style={{fontSize:11,color:G400,marginBottom:6}}>Übersetze auf Englisch:</div>
+          <div style={{fontSize:16,fontWeight:'bold',color:'#065f46',lineHeight:1.6}}>{q.german}</div>
+        </div>
+      )}
+      <textarea ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+        onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey&&q.kind!=='sentence'){e.preventDefault();submit(false);}}}
+        placeholder={q.kind==='sentence'?'Englischen Satz eingeben…':'Antwort eingeben…'}
+        rows={q.kind==='sentence'?3:2}
+        style={{width:'100%',padding:'12px',fontSize:15,border:'2px solid #dc2626',borderRadius:10,outline:'none',resize:'none',boxSizing:'border-box',marginBottom:10}}
+      />
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={function(){submit(true);}} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:13})}>⏭ Überspringen</button>
+        <button onClick={function(){submit(false);}} disabled={!input.trim()} style={BtnStyle('#dc2626','white',{flex:2,padding:'12px',fontSize:14,fontWeight:'bold',opacity:input.trim()?1:0.5})}>✓ Prüfen</button>
+      </div>
+    </div>
+  );
+}
+
 function GrammarAdmin({ player, chapters }) {
   var [topic, setTopic] = useState('sp');
   var [pool, setPool] = useState([]);
@@ -6594,6 +6817,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [screenData, setScreenData] = useState(null);
   var [lsRun, setLsRun] = useState(null);
   var [lsStreak, setLsStreak] = useState(null);
+  var [kaQuestions, setKaQuestions] = useState(null);
   var [onlineIds, setOnlineIds] = useState([]);
   var [quizScoring, setQuizScoring] = useState({correct:10,win:50,loss:-50,draw:30});
   var [goalInfo, setGoalInfo] = useState({current:0,best:0,todaySec:0});
@@ -6723,6 +6947,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
+    if(screen==='klassenarbeit_setup') return <KlassenarbeitSetup player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
+    if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_setup');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
     if(screen==='stats') return <Stats player={player} chapters={childChapters}/>;
     if(screen==='leaderboard') return <Leaderboard allUsers={allUsers} player={player}/>;
@@ -6740,7 +6966,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
-    scoreboard:'🏆 Meine Sticker'
+    scoreboard:'🏆 Meine Sticker',klassenarbeit_setup:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit'
   };
 
   var mainScreens = isAdmin
@@ -6780,6 +7006,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
+              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}},
               {icon:'🏆',title:'Gesamtrangliste',sub:'Punkte aus allen Spielen',action:function(){go('leaderboard');}},
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
@@ -6810,6 +7037,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
               {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
+              {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_setup');}},
               ...(player&&player.is_admin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
               return <button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:12,width:'100%',padding:'12px 14px',marginBottom:7,borderRadius:12,border:'1px solid '+G200,background:'white',cursor:'pointer',textAlign:'left',touchAction:'manipulation'}}>
@@ -6853,7 +7081,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
             word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
-            grammar:'games',stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
+            grammar:'games',klassenarbeit_setup:'games',klassenarbeit_play:'klassenarbeit_setup',
+            stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';
           go(dest);
         }} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'5px 10px',borderRadius:8,cursor:'pointer',fontSize:14,touchAction:'manipulation',flexShrink:0}}>←</button>}
