@@ -2318,6 +2318,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes'||phase==='test_q')) inputRef.current.focus(); },[phase,testIdx]);
 
+  useEffect(function(){
+    var active=phase==='test_q'||phase==='test_show'||phase==='satzmeister'||phase==='satzquiz';
+    if(!active) return;
+    var id=setInterval(trackActiveTime,120000);
+    return function(){clearInterval(id);};
+  },[phase]);
+
   function saveAndUpdate(newData){
     lsSaveProgress(player.id, run.id, newData);
     setData(newData);
@@ -2369,8 +2376,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function submitDispute(type){
     if(!current||!player) return;
-    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if(!UUID.test(player.id)||!UUID.test(run.id)) return;
     var payload={player_id:player.id,player_name:player.name,run_id:run.id,
       word:current.word,clue:current.clue,typed_answer:result?result.typed:'',
       pot:current.pot,chapter_id:'',status:'open',dispute_type:type,
@@ -2507,6 +2512,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var sents = collectRunSentences(data, chapters);
     var picked = pickTestItems(data, sents, 10);
     if(picked.length===0){ alert('Keine Vokabeln im Run.'); return; }
+    if(!sesStart) setSesStart(Date.now());
     setTestWords(picked); setTestIdx(0); setTestLog([]);
     setInput(''); setResult(null); setCurrent(picked[0]);
     setPhase('test_q');
@@ -2520,6 +2526,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var correctAnswer = testItemAnswer(w);
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:entry.word,clue:entry.clue,typed:typed,skipped:false,kind:w.kind});
@@ -2527,6 +2534,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
   function skipTestAnswer(){
     var w = testWords[testIdx]; if(!w) return;
+    setSesAns(function(n){return n+1;}); trackActiveTime();
     var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:'', correct:false, partial:false, skipped:true, wordRef:w.wordRef||null};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({skipped:true,correct:false,answer:testItemAnswer(w),word:entry.word,clue:entry.clue,typed:'',kind:w.kind});
@@ -2611,8 +2619,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         })()}
         <button onClick={pickWord} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8})}>▶ Lernen starten</button>
         <button onClick={startTest} disabled={totalWords===0} style={BtnStyle('#a855f7','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>📝 Test starten (10 Vokabeln)</button>
-        <button onClick={function(){setPhase('satzmeister');}} disabled={totalWords===0} style={BtnStyle('#0ea5e9','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>✍️ Satzmeister</button>
-        <button onClick={function(){setPhase('satzquiz');}} disabled={totalWords===0} style={BtnStyle('#f97316','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🔤 Satzquiz</button>
+        <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzmeister');}} disabled={totalWords===0} style={BtnStyle('#0ea5e9','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>✍️ Satzmeister</button>
+        <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzquiz');}} disabled={totalWords===0} style={BtnStyle('#f97316','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🔤 Satzquiz</button>
         {Array.isArray(data.tests)&&data.tests.length>0&&(function(){
           var len = data.tests.length;
           var recent = data.tests.slice(-10).reverse();
@@ -2952,7 +2960,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   if(phase==='satzquiz'){
     var sqW=(function(){
@@ -2961,7 +2969,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   return null;
 }
@@ -6104,7 +6112,7 @@ function KlassenarbeitTest({ player, questions, onDone }) {
     var inp=input.trim();
     var correct=false;
     if(!skipped){
-      if(q.kind==='vocab') correct=checkAnswer(inp,q.answer);
+      if(q.kind==='vocab'){var s=checkAnswer(inp,q.answer);correct=s==='correct'||s==='partial';}
       else if(q.kind==='grammar') correct=isCorrectAnswer(q,inp);
       else if(q.kind==='sentence') correct=kaSentenceMatch(inp,q.answer);
     }
