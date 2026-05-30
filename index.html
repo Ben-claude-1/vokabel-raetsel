@@ -353,7 +353,7 @@ function isProperNoun(correct) {
 }
 function wordVariants(raw) {
   var w = raw.trim(), variants = [w];
-  var core = w.replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim();
+  var core = w.replace(/\([^)]*\)/g,'').replace(/[()]/g,'').replace(/\s+/g,' ').trim();
   if (core && core!==w) variants.push(core);
   var parts = w.split(/(\([^)]*\))/);
   var optionals = [], base2 = [];
@@ -385,7 +385,7 @@ function canonAnswer(s){
   s = s.replace(/\s+/g,' ').trim();
   return s;
 }
-function stripParens(s){ return String(s||'').replace(/\([^)]*\)/g,'').replace(/\s+/g,' ').trim(); }
+function stripParens(s){ return String(s||'').replace(/\([^)]*\)/g,'').replace(/[()]/g,'').replace(/\s+/g,' ').trim(); }
 function checkAnswer(typed, correct) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
