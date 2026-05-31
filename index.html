@@ -5969,6 +5969,23 @@ var GRAMMAR_VERBS = [
   {word:'to buy',clue:'kaufen'},{word:'to sell',clue:'verkaufen'}
 ];
 
+function kaResultsSave(result) {
+  return sbGet('settings','key=eq.ka_results&select=value').then(function(rows){
+    var arr=[];
+    if(rows&&rows[0]){try{arr=JSON.parse(rows[0].value);}catch(e){}}
+    arr.push(result);
+    if(arr.length>500) arr=arr.slice(-500);
+    var val=JSON.stringify(arr);
+    if(rows&&rows[0]) return sbPatch('settings',{value:val},'key=eq.ka_results');
+    return sbPost('settings',{key:'ka_results',value:val});
+  });
+}
+function kaResultsLoad() {
+  return sbGet('settings','key=eq.ka_results&select=value').then(function(rows){
+    if(rows&&rows[0]){try{return JSON.parse(rows[0].value);}catch(e){}}
+    return [];
+  });
+}
 function loadGrammarPool(topic) {
   return sbGet('settings','key=eq.'+GRAMMAR_KEYS[topic]).then(function(d){
     if(d&&d[0]){try{return JSON.parse(d[0].value);}catch(e){return [];}}
@@ -6040,7 +6057,7 @@ function buildKaQuestions(selectedRuns, grammarPool) {
   var hasV=vocabArr.length>0, hasG=grammarPool.length>0;
   var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
   var vocabQs=shuffleArr(vocabArr.slice()).slice(0,Math.min(vQ,vocabArr.length)).map(function(w){return {kind:'vocab',german:w.clue,answer:w.word};});
-  var grammarQs=shuffleArr(grammarPool.slice()).slice(0,Math.min(gQ,grammarPool.length)).map(function(q){return {kind:'grammar',sentence:q.sentence,answer:q.answer,acceptable_answers:q.acceptable_answers||[],hint:q.rule||'',translation:q.translation||''};});
+  var grammarQs=shuffleArr(grammarPool.slice()).slice(0,Math.min(gQ,grammarPool.length)).map(function(q){return {kind:'grammar',sentence:q.sentence,answer:q.answer,acceptable_answers:q.acceptable_answers||[],hint:q.rule||'',german_hint:q.german_hint||''};});
   return shuffleArr(vocabQs.concat(grammarQs).concat(sentQs));
 }
 
@@ -6103,8 +6120,17 @@ function KlassenarbeitSetup({ player, onStart, onDone }) {
 
 function KlassenarbeitTest({ player, questions, onDone }) {
   var [idx,setIdx]=useState(0); var [input,setInput]=useState(''); var [log,setLog]=useState([]); var [phase,setPhase]=useState('q'); var [lastCorrect,setLastCorrect]=useState(false); var [lastExpected,setLastExpected]=useState('');
+  var [showLog,setShowLog]=useState(false); var [saved,setSaved]=useState(false);
   var inputRef=useRef(null);
   useEffect(function(){if(inputRef.current&&phase==='q')inputRef.current.focus();},[idx,phase]);
+  useEffect(function(){
+    if(phase==='done'&&log.length>0&&!saved){
+      setSaved(true);
+      var corr=log.filter(function(l){return l.correct;}).length;
+      var grade=kaGradeFor(corr,log.length);
+      kaResultsSave({player_id:player.id,player_name:player.name,completed_at:new Date().toISOString(),correct:corr,total:log.length,grade:grade,log:log});
+    }
+  },[phase,log,saved]);
   var total=questions.length;
   var q=questions[Math.min(idx,total-1)];
   function submit(skipped){
@@ -6119,7 +6145,7 @@ function KlassenarbeitTest({ player, questions, onDone }) {
     setLastCorrect(correct); setLastExpected(q.answer); setPhase('feedback');
   }
   function commitAnswer(correct){
-    var entry={kind:q.kind,german:q.german||q.sentence||'',answer:q.answer,typed:input.trim(),correct:correct};
+    var entry={kind:q.kind,question:q.kind==='sentence'?q.german:(q.kind==='vocab'?q.german:q.sentence.replace(/\s*\([^)]+\)\s*$/,'').trim()),answer:q.answer,typed:input.trim(),correct:correct};
     var newLog=log.concat([entry]);
     setLog(newLog);
     if(idx+1>=total){setIdx(total);setPhase('done');}
@@ -6132,6 +6158,31 @@ function KlassenarbeitTest({ player, questions, onDone }) {
     var gCol=grade<=2?GR:grade<=3?AM:grade<=4?'#f97316':RE;
     var bk={vocab:{c:0,t:0},grammar:{c:0,t:0},sentence:{c:0,t:0}};
     log.forEach(function(l){var k=l.kind||'vocab';bk[k].t++;if(l.correct)bk[k].c++;});
+    if(showLog){
+      return(
+        <div style={{padding:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+            <button onClick={function(){setShowLog(false);}} style={{background:'none',border:'none',color:T,fontSize:18,cursor:'pointer',padding:4}}>←</button>
+            <span style={{fontWeight:'bold',fontSize:15,color:G900}}>Alle Antworten</span>
+          </div>
+          {log.map(function(l,i){
+            var kindIcon=l.kind==='vocab'?'📝':l.kind==='grammar'?'✏️':'🐾';
+            return(
+              <div key={i} style={{borderRadius:10,border:'2px solid '+(l.correct?'#86efac':'#fca5a5'),background:l.correct?'#f0fdf4':'#fef2f2',padding:'10px 12px',marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                  <span style={{fontSize:13}}>{l.correct?'✅':'❌'}</span>
+                  <span style={{fontSize:10,color:G400}}>{kindIcon}</span>
+                  <span style={{fontSize:12,color:G600,flex:1}}>{l.question}</span>
+                </div>
+                <div style={{fontSize:13,fontWeight:'bold',color:l.correct?'#065f46':'#991b1b'}}>→ {l.answer}</div>
+                {!l.correct&&l.typed&&<div style={{fontSize:12,color:G500,marginTop:2}}>Du: <span style={{textDecoration:'line-through'}}>{l.typed}</span></div>}
+              </div>
+            );
+          })}
+          <button onClick={onDone} style={BtnStyle('#dc2626','white',{width:'100%',padding:'12px',fontSize:14,fontWeight:'bold',marginTop:8})}>← Zurück</button>
+        </div>
+      );
+    }
     return(
       <div style={{padding:16}}>
         <div style={{textAlign:'center',marginBottom:24}}>
@@ -6141,11 +6192,12 @@ function KlassenarbeitTest({ player, questions, onDone }) {
           <div style={{fontSize:14,color:G600,marginBottom:4}}>Note: <span style={{fontWeight:'bold',fontSize:24,color:gCol}}>{grade}</span></div>
           <div style={{fontSize:11,color:G400}}>{Math.round(corr/tot*100)}% richtig</div>
         </div>
-        <div style={{background:G50,borderRadius:12,padding:12,marginBottom:20}}>
+        <div style={{background:G50,borderRadius:12,padding:12,marginBottom:16}}>
           {bk.vocab.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderBottom:'1px solid '+G100}}><span style={{color:G600}}>📝 Vokabeln</span><span style={{fontWeight:'bold',color:bk.vocab.c/bk.vocab.t>=0.7?GR:RE}}>{bk.vocab.c}/{bk.vocab.t}</span></div>}
           {bk.grammar.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0',borderBottom:'1px solid '+G100}}><span style={{color:G600}}>✏️ Grammatik</span><span style={{fontWeight:'bold',color:bk.grammar.c/bk.grammar.t>=0.7?GR:RE}}>{bk.grammar.c}/{bk.grammar.t}</span></div>}
           {bk.sentence.t>0&&<div style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'5px 0'}}><span style={{color:G600}}>🐾 Sätze</span><span style={{fontWeight:'bold',color:bk.sentence.c/bk.sentence.t>=0.7?GR:RE}}>{bk.sentence.c}/{bk.sentence.t}</span></div>}
         </div>
+        <button onClick={function(){setShowLog(true);}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'12px',fontSize:13,fontWeight:'bold',marginBottom:8})}>📋 Alle Antworten ansehen</button>
         <button onClick={onDone} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:15,fontWeight:'bold'})}>← Zurück</button>
       </div>
     );
@@ -6203,8 +6255,10 @@ function KlassenarbeitTest({ player, questions, onDone }) {
       {q.kind==='grammar'&&(
         <div style={{background:'#f5f3ff',borderRadius:14,padding:16,marginBottom:16,border:'2px solid #c4b5fd'}}>
           <div style={{fontSize:11,color:G400,marginBottom:6}}>{q.hint} — Lücke ausfüllen:</div>
-          <div style={{fontSize:18,fontWeight:'bold',color:G900,lineHeight:1.6}}>{q.sentence.replace(/\s*\([^)]+\)\s*$/,'').trim()}</div>
-          {q.translation&&<div style={{fontSize:13,color:'#7c3aed',marginTop:8,fontStyle:'italic'}}>🇩🇪 {q.translation}</div>}
+          <div style={{fontSize:18,fontWeight:'bold',color:G900,lineHeight:1.6}}>
+            {q.sentence.replace(/\s*\([^)]+\)\s*$/,'').trim()}
+            {q.german_hint&&<span style={{color:'#7c3aed',fontWeight:'normal'}}> ({q.german_hint})</span>}
+          </div>
         </div>
       )}
       {q.kind==='sentence'&&(
@@ -6229,11 +6283,13 @@ function KlassenarbeitTest({ player, questions, onDone }) {
 
 function KlassenarbeitAdmin({ player }) {
   var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(['sp','pp','sa','mv'])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
+  var [results,setResults]=useState([]); var [expandedResult,setExpandedResult]=useState(null); var [resultTab,setResultTab]=useState('test');
   useEffect(function(){
     lsGetRunsForPlayer(player.id).then(function(r){setRuns(r||[]);setLoading(false);}).catch(function(){setLoading(false);});
     sbGet('settings','key=eq.klassenarbeit_active_test&select=value').then(function(rows){
       if(rows&&rows[0]){try{setActiveInfo(JSON.parse(rows[0].value));}catch(e){}}
     }).catch(function(){});
+    kaResultsLoad().then(function(r){setResults(r||[]);}).catch(function(){});
   },[]);
   function toggleRun(id){setSelRuns(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
   function toggleTopic(t){setSelTopics(function(p){var n=new Set(p);n.has(t)?n.delete(t):n.add(t);return n;});}
@@ -6260,43 +6316,93 @@ function KlassenarbeitAdmin({ player }) {
   var vQ=hasV&&hasG?20:(hasV?40:0),gQ=hasG&&hasV?20:(hasG?40:0);
   var totalEst=Math.min(vQ,vocabEst)+gQ+10;
   var canSave=hasV||hasG;
+  var sortedResults=results.slice().sort(function(a,b){return (b.completed_at||'').localeCompare(a.completed_at||'');});
   return(
     <div>
-      {activeInfo&&(
-        <div style={{padding:'10px 12px',borderRadius:10,background:'#d1fae5',border:'1px solid #6ee7b7',marginBottom:12}}>
-          <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>✅ Aktiver Test</div>
-          <div style={{fontSize:11,color:'#065f46',marginBottom:6}}>{activeInfo.question_count||'?'} Fragen · erstellt von {activeInfo.created_by} · {activeInfo.created_at?new Date(activeInfo.created_at).toLocaleDateString('de'):''}</div>
-          <button onClick={handleDelete} style={{padding:'4px 10px',borderRadius:6,border:'none',background:'#dc2626',color:'white',fontSize:11,cursor:'pointer',touchAction:'manipulation'}}>🗑 Test löschen</button>
+      <div style={{display:'flex',gap:4,marginBottom:12}}>
+        {[['test','📋 Test'],['results','📊 Ergebnisse ('+results.length+')']].map(function(t){var ck=resultTab===t[0];return(
+          <button key={t[0]} onClick={function(){setResultTab(t[0]);}} style={{flex:1,padding:'8px 4px',borderRadius:8,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc2626':'white',color:ck?'white':G600,fontSize:12,fontWeight:ck?'bold':'normal',cursor:'pointer',touchAction:'manipulation'}}>{t[1]}</button>
+        );})}
+      </div>
+      {resultTab==='test'&&(
+        <div>
+          {activeInfo&&(
+            <div style={{padding:'10px 12px',borderRadius:10,background:'#d1fae5',border:'1px solid #6ee7b7',marginBottom:12}}>
+              <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>✅ Aktiver Test</div>
+              <div style={{fontSize:11,color:'#065f46',marginBottom:6}}>{activeInfo.question_count||'?'} Fragen · erstellt von {activeInfo.created_by} · {activeInfo.created_at?new Date(activeInfo.created_at).toLocaleDateString('de'):''}</div>
+              <button onClick={handleDelete} style={{padding:'4px 10px',borderRadius:6,border:'none',background:'#dc2626',color:'white',fontSize:11,cursor:'pointer',touchAction:'manipulation'}}>🗑 Test löschen</button>
+            </div>
+          )}
+          {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
+          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
+          {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:(
+            <div style={{marginBottom:16}}>
+              {runs.map(function(run){var ck=selRuns.has(run.id);return(
+                <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer',touchAction:'manipulation'}}>
+                  <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+                  <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
+                </div>);
+              })}
+              {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
+            </div>
+          )}
+          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
+          <div style={{marginBottom:16}}>
+            {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
+              <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer',touchAction:'manipulation'}}>
+                <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
+                <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
+              </div>);
+            })}
+          </div>
+          <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:16}}>
+            <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
+            <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
+          </div>
+          {!canSave&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
+          <button onClick={handleSave} disabled={!canSave||saving} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:14,fontWeight:'bold',opacity:(!canSave||saving)?0.5:1,touchAction:'manipulation'})}>{saving?'Erstelle Test…':'💾 Test erstellen & aktivieren (~'+totalEst+' Fragen)'}</button>
         </div>
       )}
-      {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
-      {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:(
-        <div style={{marginBottom:16}}>
-          {runs.map(function(run){var ck=selRuns.has(run.id);return(
-            <div key={run.id} onClick={function(){toggleRun(run.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc262611':'white',cursor:'pointer',touchAction:'manipulation'}}>
-              <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#dc2626':G200),background:ck?'#dc2626':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
-              <div style={{flex:1}}><div style={{fontWeight:'bold',fontSize:13,color:G900}}>{run.icon||'🎯'} {run.name}</div><div style={{fontSize:11,color:G400}}>{run.word_count||0} Vokabeln</div></div>
-            </div>);
+      {resultTab==='results'&&(
+        <div>
+          {sortedResults.length===0&&<div style={{textAlign:'center',color:G400,fontSize:13,padding:24}}>Noch keine Ergebnisse vorhanden.</div>}
+          {sortedResults.map(function(r,i){
+            var gCol=r.grade<=2?GR:r.grade<=3?AM:r.grade<=4?'#f97316':RE;
+            var isOpen=expandedResult===i;
+            return(
+              <div key={i} style={{borderRadius:12,border:'2px solid '+G200,marginBottom:10,overflow:'hidden'}}>
+                <div onClick={function(){setExpandedResult(isOpen?null:i);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:G50,cursor:'pointer',touchAction:'manipulation'}}>
+                  <div style={{width:32,height:32,borderRadius:8,background:gCol,display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontWeight:'bold',fontSize:15,flexShrink:0}}>{r.grade}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{r.player_name}</div>
+                    <div style={{fontSize:11,color:G400}}>{r.correct}/{r.total} richtig · {r.completed_at?new Date(r.completed_at).toLocaleString('de',''):''}
+                    </div>
+                  </div>
+                  <span style={{color:G400,fontSize:12}}>{isOpen?'▲':'▼'}</span>
+                </div>
+                {isOpen&&r.log&&(
+                  <div style={{padding:'8px 12px',borderTop:'1px solid '+G200}}>
+                    {r.log.map(function(l,j){
+                      var kindIcon=l.kind==='vocab'?'📝':l.kind==='grammar'?'✏️':'🐾';
+                      return(
+                        <div key={j} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'5px 0',borderBottom:j<r.log.length-1?'1px solid '+G100:'none'}}>
+                          <span style={{fontSize:12,flexShrink:0,marginTop:1}}>{l.correct?'✅':'❌'}</span>
+                          <span style={{fontSize:10,color:G400,flexShrink:0,marginTop:2}}>{kindIcon}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12,color:G600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{l.question}</div>
+                            <div style={{fontSize:12,fontWeight:'bold',color:l.correct?'#065f46':'#991b1b'}}>→ {l.answer}</div>
+                            {!l.correct&&l.typed&&<div style={{fontSize:11,color:G400}}>War: <span style={{textDecoration:'line-through'}}>{l.typed}</span></div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
           })}
-          {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
         </div>
       )}
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
-      <div style={{marginBottom:16}}>
-        {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
-          <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer',touchAction:'manipulation'}}>
-            <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
-            <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
-          </div>);
-        })}
-      </div>
-      <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:16}}>
-        <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
-        <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
-      </div>
-      {!canSave&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
-      <button onClick={handleSave} disabled={!canSave||saving} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:14,fontWeight:'bold',opacity:(!canSave||saving)?0.5:1,touchAction:'manipulation'})}>{saving?'Erstelle Test…':'💾 Test erstellen & aktivieren (~'+totalEst+' Fragen)'}</button>
     </div>
   );
 }
@@ -6367,9 +6473,9 @@ function GrammarAdmin({ player, chapters }) {
     setGenerating(true); setMsg('');
     var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
     var promptDetail = topic==='sp'
-      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball."}'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball.","german_hint":"spielen"}'
       : topic==='pp'
-      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball."}'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball.","german_hint":"spielen"}'
       : topic==='sa'
       ? 'Die Lücke ist "some" oder "any". Verwende alltägliche Sätze (Fragen, Verneinungen, Angebote, Bitten). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"Can I have ___ of these kiwis?","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Kann ich einige dieser Kiwis haben?"}'
       : 'Erstelle alltagsnahe Sätze für Schüler der 6. Klasse wo ein Modalverb fehlt. Verfügbare Modalverben: must, mustn\'t, should, shouldn\'t, need to, don\'t need to. WICHTIG: Manchmal sind mehrere Modalverben sinnvoll — gib dann ALLE akzeptablen Antworten im "acceptable_answers"-Array an (immer befüllen, auch wenn nur eine Antwort möglich ist). Das "answer"-Feld enthält die beste/typischste Antwort. Kein Hinweis in Klammern am Satzende. Beispiel: {"sentence":"You ___ eat so many sweets.","answer":"shouldn\'t","acceptable_answers":["shouldn\'t","mustn\'t"],"distractors":["must","should","need to"],"rule":"modal verbs","translation":"Du solltest nicht so viele Süßigkeiten essen."}';
@@ -6381,7 +6487,9 @@ function GrammarAdmin({ player, chapters }) {
     var promptTemplate = function(n){
       var fields = topic==='mv'
         ? 'sentence (mit ___ als einziger Lücke), answer, acceptable_answers, distractors, rule, translation'
-        : 'sentence (mit ___ als einziger Lücke'+(topic==='sp'||topic==='pp'?', Infinitiv am Ende in Klammern':'')+'), answer, distractors, rule, translation';
+        : (topic==='sp'||topic==='pp')
+        ? 'sentence (mit ___ als einziger Lücke, Infinitiv am Ende in Klammern), answer, distractors, rule, translation, german_hint'
+        : 'sentence (mit ___ als einziger Lücke), answer, distractors, rule, translation';
       return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: '+fields+'. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
     };
     var CHUNK=10;
