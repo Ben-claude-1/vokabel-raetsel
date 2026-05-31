@@ -6040,7 +6040,7 @@ function buildKaQuestions(selectedRuns, grammarPool) {
   var hasV=vocabArr.length>0, hasG=grammarPool.length>0;
   var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
   var vocabQs=shuffleArr(vocabArr.slice()).slice(0,Math.min(vQ,vocabArr.length)).map(function(w){return {kind:'vocab',german:w.clue,answer:w.word};});
-  var grammarQs=shuffleArr(grammarPool.slice()).slice(0,Math.min(gQ,grammarPool.length)).map(function(q){return {kind:'grammar',sentence:q.sentence,answer:q.answer,acceptable_answers:q.acceptable_answers||[],hint:q.rule||''};});
+  var grammarQs=shuffleArr(grammarPool.slice()).slice(0,Math.min(gQ,grammarPool.length)).map(function(q){return {kind:'grammar',sentence:q.sentence,answer:q.answer,acceptable_answers:q.acceptable_answers||[],hint:q.rule||'',translation:q.translation||''};});
   return shuffleArr(vocabQs.concat(grammarQs).concat(sentQs));
 }
 
@@ -6203,7 +6203,8 @@ function KlassenarbeitTest({ player, questions, onDone }) {
       {q.kind==='grammar'&&(
         <div style={{background:'#f5f3ff',borderRadius:14,padding:16,marginBottom:16,border:'2px solid #c4b5fd'}}>
           <div style={{fontSize:11,color:G400,marginBottom:6}}>{q.hint} — Lücke ausfüllen:</div>
-          <div style={{fontSize:18,fontWeight:'bold',color:G900,lineHeight:1.6}}>{q.sentence}</div>
+          <div style={{fontSize:18,fontWeight:'bold',color:G900,lineHeight:1.6}}>{q.sentence.replace(/\s*\([^)]+\)\s*$/,'').trim()}</div>
+          {q.translation&&<div style={{fontSize:13,color:'#7c3aed',marginTop:8,fontStyle:'italic'}}>🇩🇪 {q.translation}</div>}
         </div>
       )}
       {q.kind==='sentence'&&(
