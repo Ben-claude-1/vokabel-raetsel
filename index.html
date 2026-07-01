@@ -4202,18 +4202,41 @@ function WiederholungMode({ player, chapters, onDone }){
     }).catch(function(){ setPhase('empty'); });
   },[pid]);
 
-  function startRun(){
-    var struggled={};
-    if(history.length>0){
-      var li=parseData(history[0].items);
+  // Pro Wort: wann & mit welchem Ergebnis zuletzt im Wiederholungsmodus gesehen.
+  // history ist newest-first → erster Treffer je Wort ist der aktuellste.
+  var wordStats = useMemo(function(){
+    var m={};
+    (history||[]).forEach(function(run){
+      var ts=Date.parse(run.created_at||'')||0;
+      var li=parseData(run.items);
       (Array.isArray(li)?li:[]).forEach(function(it){
-        if(!it.correct || (it.hints||0)>0) struggled[(it.word||'').toLowerCase()+'|'+(it.clue||'').toLowerCase()]=1;
+        var k=(it.word||'').toLowerCase()+'|'+(it.clue||'').toLowerCase();
+        if(!m[k]) m[k]={ts:ts, correct:!!it.correct, hints:it.hints||0};
       });
-    }
+    });
+    return m;
+  },[history]);
+
+  // Leitner/FSRS-artiger Aktualitäts-Faktor: verdientes Intervall wächst bei "richtig
+  // ohne Tipp" (4 Tage), schrumpft bei Tipp (2) bzw. Fehler (1). Fällig = lange überfällig.
+  var DAY_MS=86400000;
+  function recencyFactor(k){
+    var st=wordStats[k];
+    if(!st) return 2.2;                                   // nie im Wiederholungsmodus → dran
+    var interval = st.correct ? (st.hints===0?4:2) : 1;   // Tage bis nächste Fälligkeit
+    var overdue = ((Date.now()-st.ts)/DAY_MS) / interval;
+    return Math.max(0.35, Math.min(3, overdue));          // frisch gekonnt → selten, überfällig → oft
+  }
+  // Wie viele Vokabeln sind "dran"? (nie geübt oder überfällig)
+  var dueCount = useMemo(function(){
+    return (pool||[]).filter(function(w){ return recencyFactor(wkey(w))>=1.5; }).length;
+  },[pool,wordStats]);
+
+  function startRun(){
+    // Gewicht = Fehler-Gewichtung × Aktualität (echtes Spaced Repetition).
     var weighted = pool.map(function(w){
-      var wt = 1 + 0.2*Math.max(0,(w.wrong||0)-(w.correct||0));
-      if(struggled[wkey(w)]) wt *= 1.6;   // zuletzt falsch/mit Tipp → häufiger (Spaced Repetition)
-      return {item:w, weight:wt};
+      var base = 1 + 0.2*Math.max(0,(w.wrong||0)-(w.correct||0));
+      return {item:w, weight: base * recencyFactor(wkey(w))};
     });
     var n=Math.min(20, weighted.length), picked=[], poolC=weighted.slice();
     for(var i=0;i<n;i++){
@@ -4293,10 +4316,10 @@ function WiederholungMode({ player, chapters, onDone }){
     </div>
     <div style={{background:TL,borderRadius:12,padding:'12px 14px',marginBottom:12,fontSize:12,color:TD,lineHeight:1.5}}>
       <div style={{fontWeight:'bold',marginBottom:4}}>So geht's</div>
-      Tippe das englische Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Jeder Lauf zählt neu — schau, ob du dich steigerst!
+      Tippe das englische Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Vokabeln, die du länger nicht geübt oder oft falsch hattest, kommen häufiger dran. Jeder Lauf zählt neu — schau, ob du dich steigerst!
     </div>
     {poolNote&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:8,padding:'8px 10px',fontSize:11,marginBottom:12}}>{poolNote}</div>}
-    <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln aus deinen Leiterspielen</div>
+    <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln{dueCount>0&&<span> · <b style={{color:T}}>{dueCount}</b> sind dran 🔔</span>}</div>
     {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
     <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
     <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
