@@ -2189,9 +2189,16 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
   var yMax = Math.max(maxMin, soll, 30);
   var totalMin = days.reduce(function(s,d){return s+Math.round(d.dur/60);},0);
   var avgMin = Math.round(totalMin/30);
-  var W=320,H=140,pL=28,pB=22,pR=6,pT=10;
+  // Anzahl Lerntage / freie Tage + aktuelle Serie (aufeinanderfolgende Lerntage bis heute/gestern)
+  var learnedDays = days.filter(function(d){return d.dur>0;}).length;
+  var streak = 0;
+  for(var si=days.length-1; si>=0; si--){ if(days[si].dur>0){ streak++; } else if(si===days.length-1){ continue; /* heute noch 0 → zählt nicht als Abbruch */ } else { break; } }
+  function wdOf(k){ var p=k.split('-'); return new Date(+p[0],+p[1]-1,+p[2]).getDay(); } // 0=So..6=Sa
+  var C_NONE='#cbd5e1'; // Grau für Tage ohne Lernen (deutlich sichtbarer Punkt)
+  var W=320,H=150,pL=28,pB=30,pR=6,pT=10;
   var cW=W-pL-pR, cH=H-pB-pT;
-  var bW=Math.max(2,Math.floor(cW/30)-1);
+  var slot=cW/30, bW=Math.max(3,slot-2);
+  var baseY=pT+cH;
   var yFor = function(v){ return pT+cH-(v/yMax)*cH; };
   return(
     <div style={{background:G50,borderRadius:10,padding:'8px 8px 4px 8px',marginBottom:8}}>
@@ -2200,6 +2207,14 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
         <span style={{fontSize:10,color:G400}}>letzte 30 Tage · ⌀ {avgMin} Min/Tag</span>
       </div>
       <svg width="100%" viewBox={'0 0 '+W+' '+H} style={{display:'block'}}>
+        {/* Wochenend-Tönung + Tages-Slots: jeder Tag ist ein sichtbarer Bereich */}
+        {days.map(function(day,i){
+          var x=pL+i*slot; var w=wdOf(day.k); var wknd=(w===0||w===6);
+          return <g key={'bg'+day.k}>
+            {wknd&&<rect x={x} y={pT} width={slot} height={cH} fill="#0f172a" opacity={0.05}/>}
+            {w===1&&i>0&&<line x1={x} x2={x} y1={pT} y2={baseY} stroke={G200} strokeWidth={0.5}/>}
+          </g>;
+        })}
         {[0,0.5,1].map(function(f,i){
           var v=Math.round(yMax*f);
           var y=yFor(v);
@@ -2208,24 +2223,29 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
             <line x1={pL} y1={y} x2={W-pR} y2={y} stroke={G200} strokeWidth={0.5}/>
           </g>;
         })}
+        <line x1={pL} y1={baseY} x2={W-pR} y2={baseY} stroke={G400} strokeWidth={0.75}/>
         {days.map(function(day,i){
-          var x=pL+i*(bW+1);
+          var x=pL+i*slot, cx=x+slot/2;
           var dMin=Math.round(day.dur/60);
-          if(dMin<=0) {
-            var lbl0=day.isToday?'Heute':(day.k.slice(8)==='01'?day.k.slice(5,10).replace('-','.'):null);
+          var w=wdOf(day.k);
+          // Datum an jedem Montag + heute; sonst kein Label (sonst zu voll)
+          var lbl=day.isToday?'Heute':((w===1&&i<days.length-3)?((+day.k.slice(8))+'.'+(+day.k.slice(5,7))+'.'):null);
+          var labelEl=lbl?<text x={cx} y={H-16} fontSize={7} fill={day.isToday?T:G600} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl}</text>:null;
+          var wdEl=<text x={cx} y={H-6} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{'MDMDFSS'[(w+6)%7]}</text>;
+          if(dMin<=0){
+            // Tag OHNE Lernen: klar erkennbarer grauer Punkt an der Grundlinie
             return <g key={day.k}>
-              {day.isToday&&<rect x={x-1} y={pT} width={bW+2} height={cH} fill={T+'12'} rx={1}/>}
-              {lbl0&&<text x={x+bW/2} y={H-5} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl0}</text>}
+              {day.isToday&&<rect x={x} y={pT} width={slot} height={cH} fill={T} opacity={0.10} rx={1}/>}
+              <circle cx={cx} cy={baseY-2} r={1.6} fill={C_NONE}/>
+              {labelEl}{wdEl}
             </g>;
           }
           var y=yFor(dMin);
-          var bH=cH-(y-pT);
-          var col=day.dur>=900?GR:day.dur>=300?AM:G400;
-          var lbl=day.isToday?'Heute':(day.k.slice(8)==='01'?day.k.slice(5,10).replace('-','.'):null);
+          var col=day.dur>=900?GR:day.dur>=300?AM:'#5eead4';
           return <g key={day.k}>
-            {day.isToday&&<rect x={x-1} y={pT} width={bW+2} height={cH} fill={T+'12'} rx={1}/>}
-            <rect x={x} y={y} width={bW} height={Math.max(2,bH)} fill={col} rx={1}/>
-            {lbl&&<text x={x+bW/2} y={H-5} fontSize={6} fill={day.isToday?T:G400} textAnchor="middle" fontWeight={day.isToday?'bold':'normal'}>{lbl}</text>}
+            {day.isToday&&<rect x={x} y={pT} width={slot} height={cH} fill={T} opacity={0.10} rx={1}/>}
+            <rect x={cx-bW/2} y={y} width={bW} height={Math.max(3,baseY-y)} fill={col} rx={1}/>
+            {labelEl}{wdEl}
           </g>;
         })}
         {soll>0 && <g>
@@ -2235,13 +2255,14 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
       </svg>
       <div style={{marginTop:4,display:'flex',justifyContent:'space-between',fontSize:10,color:G600}}>
         <span>Heute: <span style={{fontWeight:'bold',color:todayMin>=15?GR:todayMin>=5?AM:G600}}>{todayMin} Min</span></span>
-        {soll>0 ? <span>Soll/Tag: <span style={{fontWeight:'bold',color:'#dc2626'}}>{soll} Min</span></span> : null}
+        <span>Gelernt: <span style={{fontWeight:'bold',color:G900}}>{learnedDays}</span>/30 Tage{streak>1?<span style={{color:AM}}> · 🔥 {streak}</span>:null}</span>
         <span>Σ 30T: <span style={{fontWeight:'bold'}}>{totalMin} Min</span></span>
       </div>
-      <div style={{display:'flex',gap:10,fontSize:9,color:G400,marginTop:4,justifyContent:'center'}}>
+      <div style={{display:'flex',gap:8,fontSize:9,color:G400,marginTop:4,justifyContent:'center',flexWrap:'wrap'}}>
         <span><span style={{color:GR}}>&#9632;</span> ≥15 Min</span>
         <span><span style={{color:AM}}>&#9632;</span> 5-14 Min</span>
-        <span><span style={{color:G400}}>&#9632;</span> &lt;5 Min</span>
+        <span><span style={{color:'#5eead4'}}>&#9632;</span> &lt;5 Min</span>
+        <span><span style={{color:C_NONE}}>&#9679;</span> kein Lernen</span>
       </div>
     </div>
   );
