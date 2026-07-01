@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.learn_sessions (
   active_seconds integer DEFAULT 0 NOT NULL,
   correct_count integer DEFAULT 0 NOT NULL,
   wrong_count integer DEFAULT 0 NOT NULL,
+  game text,
   created_at timestamptz DEFAULT now() NOT NULL,
   PRIMARY KEY (id)
 );
