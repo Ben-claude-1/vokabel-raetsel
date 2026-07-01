@@ -3995,6 +3995,7 @@ var SCREEN_GAME = {
   crossword:'kreuzwort',
   grammar:'grammatik',
   klassenarbeit_play:'klassenarbeit',
+  wiederholung:'wiederholung',
   puzzle:'puzzle'
 };
 function screenGame(screen){ return SCREEN_GAME[screen] || null; }
@@ -4008,6 +4009,7 @@ var GAME_META = {
   kreuzwort:{icon:'🧩',label:'Kreuzworträtsel'},
   grammatik:{icon:'✏️',label:'Grammatik'},
   klassenarbeit:{icon:'📋',label:'Klassenarbeit'},
+  wiederholung:{icon:'🔁',label:'Wiederholung'},
   puzzle:{icon:'🧩',label:'Puzzle'},
   sonstiges:{icon:'⏱️',label:'Sonstiges'}
 };
@@ -4092,6 +4094,314 @@ function MeineLernuebersicht({ player }) {
     <div style={{height:12}}/>
     <GameBreakdown sessions={sessions} title="🎮 Was du gelernt hast"/>
   </div>;
+}
+
+// ── Wiederholungsmodus (Festigung) ──────────────────────────────
+// Balkendiagramm der Punkte pro Lauf ("wird es besser?")
+function RepeatRunHistory({ runs, title }){
+  var list = (runs||[]).filter(Boolean);
+  if(list.length===0) return null;
+  var ordered = list.slice().sort(function(a,b){return new Date(a.created_at||0)-new Date(b.created_at||0);});
+  var show = ordered.slice(-20);
+  var best = ordered.reduce(function(m,r){return Math.max(m,r.score||0);},0);
+  var last = ordered[ordered.length-1];
+  var prev = ordered.length>1?ordered[ordered.length-2]:null;
+  var delta = prev?((last.score||0)-(prev.score||0)):null;
+  var maxY = Math.max(200, best);
+  var W=320,H=120,PADL=24,PADB=14,PADT=10,PADR=6;
+  var cw=W-PADL-PADR, ch=H-PADT-PADB, bw=cw/show.length;
+  function y(v){return PADT+ch-(v/maxY)*ch;}
+  return <div>
+    {title&&<div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{title}</div>}
+    <div style={{background:'white',borderRadius:8,border:'1px solid '+G200,padding:'8px 10px'}}>
+      <div style={{fontSize:11,color:G600,marginBottom:4,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}>
+        <span>{ordered.length} L{ordered.length===1?'auf':'äufe'} · Bestwert <b style={{color:T}}>{best}</b></span>
+        {delta!==null && <span style={{color:delta>0?T:delta<0?RE:G400,fontWeight:'bold'}}>{delta>0?'▲ +'+delta:delta<0?'▼ '+delta:'± 0'} ggü. vorher</span>}
+      </div>
+      <svg width={W} height={H} viewBox={'0 0 '+W+' '+H} style={{maxWidth:'100%',display:'block'}}>
+        {[0.5,1].map(function(f,i){var v=Math.round(maxY*f);return <g key={i}><line x1={PADL} x2={W-PADR} y1={y(v)} y2={y(v)} stroke={G100} strokeDasharray='2 2'/><text x={PADL-3} y={y(v)+3} fontSize='7' fill={G400} textAnchor='end'>{v}</text></g>;})}
+        {show.map(function(r,i){
+          var sc=r.score||0, x=PADL+i*bw, yy=y(sc), h=ch-(yy-PADT);
+          var pct=r.max_score?sc/r.max_score:0;
+          var fill=pct>=0.8?T:pct>=0.5?'#5eead4':AM;
+          var isLast=i===show.length-1;
+          return <g key={i}>
+            <rect x={x+1} y={yy} width={Math.max(1,bw-2)} height={Math.max(0,h)} fill={isLast?TD:fill} rx='1'/>
+            {bw>13 && sc>0 && <text x={x+bw/2} y={yy-2} fontSize='7' fill={G600} textAnchor='middle'>{sc}</text>}
+          </g>;
+        })}
+      </svg>
+    </div>
+  </div>;
+}
+
+// Lädt die eigene Wiederholungs-Historie (Fortschritt-Tab)
+function RepeatHistorySelf({ player }){
+  var [runs,setRuns]=useState(null);
+  useEffect(function(){
+    if(!player) return;
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!UUID.test(player.id)){ setRuns([]); return; }
+    sbGet('repeat_runs','player_id=eq.'+player.id+'&select=*&order=created_at.desc&limit=30')
+      .then(function(rows){ setRuns(Array.isArray(rows)?rows:[]); }).catch(function(){ setRuns([]); });
+  },[player&&player.id]);
+  if(!runs||runs.length===0) return null;
+  return <div style={{marginTop:12}}>
+    <RepeatRunHistory runs={runs} title="🔁 Wiederholung — Punkte pro Lauf"/>
+  </div>;
+}
+
+function WiederholungMode({ player, chapters, onDone }){
+  var [phase,setPhase]=useState('loading'); // loading, empty, intro, q, show, done
+  var [pool,setPool]=useState([]);
+  var [poolNote,setPoolNote]=useState('');
+  var [history,setHistory]=useState([]);
+  var [items,setItems]=useState([]);
+  var [idx,setIdx]=useState(0);
+  var [input,setInput]=useState('');
+  var [hints,setHints]=useState(0);
+  var [result,setResult]=useState(null);
+  var [log,setLog]=useState([]);
+  var [score,setScore]=useState(0);
+  var [showReview,setShowReview]=useState(false);
+  var pid = player && player.id;
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var inputRef = useRef(null);
+
+  function wkey(w){ return (w.word||'').toLowerCase()+'|'+(w.clue||'').toLowerCase(); }
+
+  useEffect(function(){
+    if(!pid || !UUID.test(pid)){ setPhase('empty'); return; }
+    Promise.all([
+      sbGet('ls_progress','player_id=eq.'+pid+'&select=data'),
+      sbGet('repeat_runs','player_id=eq.'+pid+'&select=*&order=created_at.desc&limit=30')
+    ]).then(function(res){
+      var rows = Array.isArray(res[0])?res[0]:[];
+      var hist = Array.isArray(res[1])?res[1]:[];
+      setHistory(hist);
+      var map6={}, map5={};
+      function add(map,w){
+        var k=wkey(w); if(!w.word||k==='|') return;
+        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0};
+        map[k].wrong+=(w.wrong||0); map[k].correct+=(w.correct||0);
+      }
+      rows.forEach(function(row){
+        var d=parseData(row.data), pots=d.pots||{};
+        (pots[6]||[]).forEach(function(w){ add(map6,w); });
+        (pots[5]||[]).forEach(function(w){ add(map5,w); });
+      });
+      var arr6=Object.keys(map6).map(function(k){return map6[k];});
+      var finalPool=arr6, note='';
+      if(arr6.length<20){
+        var extra=Object.keys(map5).filter(function(k){return !map6[k];}).map(function(k){return map5[k];});
+        finalPool=arr6.concat(extra);
+        note='Erst '+arr6.length+' Vokabeln vollständig gelernt (Topf 6) — mit fast gelernten (Topf 5) aufgefüllt.';
+      }
+      setPool(finalPool); setPoolNote(finalPool.length>=20?'':note);
+      setPhase(finalPool.length===0?'empty':'intro');
+    }).catch(function(){ setPhase('empty'); });
+  },[pid]);
+
+  function startRun(){
+    var struggled={};
+    if(history.length>0){
+      var li=parseData(history[0].items);
+      (Array.isArray(li)?li:[]).forEach(function(it){
+        if(!it.correct || (it.hints||0)>0) struggled[(it.word||'').toLowerCase()+'|'+(it.clue||'').toLowerCase()]=1;
+      });
+    }
+    var weighted = pool.map(function(w){
+      var wt = 1 + 0.2*Math.max(0,(w.wrong||0)-(w.correct||0));
+      if(struggled[wkey(w)]) wt *= 1.6;   // zuletzt falsch/mit Tipp → häufiger (Spaced Repetition)
+      return {item:w, weight:wt};
+    });
+    var n=Math.min(20, weighted.length), picked=[], poolC=weighted.slice();
+    for(var i=0;i<n;i++){
+      var tot=poolC.reduce(function(s,x){return s+x.weight;},0);
+      var r=Math.random()*tot, cum=0, sel=0;
+      for(var j=0;j<poolC.length;j++){ cum+=poolC[j].weight; if(cum>=r){sel=j;break;} }
+      picked.push(poolC[sel].item); poolC.splice(sel,1);
+    }
+    setItems(picked); setIdx(0); setInput(''); setHints(0); setResult(null); setLog([]); setScore(0); setShowReview(false);
+    setPhase('q');
+  }
+
+  var cur = items[idx];
+  var hintData = useMemo(function(){
+    var w=(cur&&cur.word)||'';
+    var lay=buildT2Layout(w);
+    return {dash:lay, scramble:shuffleArr(lay.targetNoSpaces.split(''))};
+  },[cur&&cur.word]);
+
+  useEffect(function(){ if(phase==='q'&&inputRef.current){ try{inputRef.current.focus();}catch(e){} } },[phase,idx]);
+
+  function ptsForHints(h){ return h===0?10:h===1?5:0; }
+
+  function submit(){
+    if(!cur) return;
+    var typed=input.trim(); if(!typed) return;
+    var status=checkAnswer(typed, wordDisplay(cur));
+    var correct = status==='correct'||status==='partial';
+    var pts = correct ? ptsForHints(hints) : 0;
+    var entry={word:cur.word, clue:cur.clue, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
+    setLog(function(l){return l.concat([entry]);});
+    setScore(function(s){return s+pts;});
+    setResult({correct:correct, points:pts, answer:wordDisplay(cur), typed:typed, hints:hints, skipped:false});
+    setPhase('show');
+  }
+  function giveUp(){
+    if(!cur) return;
+    var entry={word:cur.word, clue:cur.clue, typed:'', correct:false, hints:hints, points:0, skipped:true};
+    setLog(function(l){return l.concat([entry]);});
+    setResult({correct:false, points:0, answer:wordDisplay(cur), typed:'', hints:hints, skipped:true});
+    setPhase('show');
+  }
+  function next(){
+    var ni=idx+1;
+    if(ni>=items.length){ finishRun(); return; }
+    setIdx(ni); setInput(''); setHints(0); setResult(null); setPhase('q');
+  }
+  function finishRun(){
+    setPhase('done');
+    if(!pid||!UUID.test(pid)) return;
+    var correctCount=log.filter(function(l){return l.correct;}).length;
+    var h1=log.filter(function(l){return l.hints===1;}).length;
+    var h2=log.filter(function(l){return l.hints===2;}).length;
+    var body={player_id:pid, score:score, max_score:items.length*10, word_count:items.length, correct_count:correctCount, hint1_count:h1, hint2_count:h2, items:log};
+    sbPost('repeat_runs',body).then(function(res){
+      if(res && !res._err) setHistory(function(h){ return [Object.assign({created_at:new Date().toISOString()},body,res||{})].concat(h); });
+    });
+  }
+
+  // ── Render ──
+  var Wrap=function(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; };
+  if(phase==='loading') return <Wrap><div style={{textAlign:'center',padding:40,color:G400}}>Lade Lernpool…</div></Wrap>;
+  if(phase==='empty') return <Wrap>
+    <div style={{textAlign:'center',padding:30}}>
+      <div style={{fontSize:40,marginBottom:10}}>🔁</div>
+      <div style={{fontWeight:'bold',fontSize:15,marginBottom:6}}>Noch nichts zum Wiederholen</div>
+      <div style={{fontSize:12,color:G600,marginBottom:16}}>Sobald du im Leiterspiel Vokabeln in den „Gelernt"-Topf gebracht hast, kannst du sie hier festigen.</div>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 20px'})}>Zurück</button>
+    </div>
+  </Wrap>;
+
+  if(phase==='intro') return <Wrap>
+    <div style={{textAlign:'center',marginBottom:14}}>
+      <div style={{fontSize:34}}>🔁</div>
+      <div style={{fontWeight:'bold',fontSize:17,color:T}}>Wiederholung</div>
+      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(20,pool.length)} Vokabeln pro Lauf</div>
+    </div>
+    <div style={{background:TL,borderRadius:12,padding:'12px 14px',marginBottom:12,fontSize:12,color:TD,lineHeight:1.5}}>
+      <div style={{fontWeight:'bold',marginBottom:4}}>So geht's</div>
+      Tippe das englische Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Jeder Lauf zählt neu — schau, ob du dich steigerst!
+    </div>
+    {poolNote&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:8,padding:'8px 10px',fontSize:11,marginBottom:12}}>{poolNote}</div>}
+    <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln aus deinen Leiterspielen</div>
+    {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
+    <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
+    <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
+  </Wrap>;
+
+  if(phase==='q' && cur) return <Wrap>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:G600,marginBottom:10}}>
+      <span>Vokabel {idx+1} / {items.length}</span>
+      <span style={{fontWeight:'bold',color:T}}>{score} Punkte</span>
+    </div>
+    <div style={{height:6,background:G100,borderRadius:3,overflow:'hidden',marginBottom:16}}>
+      <div style={{height:'100%',width:Math.round(idx/items.length*100)+'%',background:T,borderRadius:3,transition:'width .3s'}}/>
+    </div>
+    <div style={{background:'white',borderRadius:14,border:'1px solid '+G200,padding:'18px 16px',marginBottom:12,textAlign:'center'}}>
+      <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Übersetze ins Englische</div>
+      <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{cur.clue}</div>
+      <div style={{fontSize:11,color:hints===0?T:hints===1?'#d97706':RE,marginTop:6,fontWeight:'bold'}}>
+        {hints===0?'🏆 10 Punkte möglich':hints===1?'💡 noch 5 Punkte':'💡 0 Punkte (Buchstaben-Hilfe)'}
+      </div>
+    </div>
+
+    {hints>=1&&<div style={{background:G50,borderRadius:10,padding:'10px',marginBottom:12,textAlign:'center'}}>
+      <div style={{fontSize:9,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{hints>=2?'Tipp 2 · Buchstaben':'Tipp 1 · Länge'}</div>
+      {hints>=2
+        ? <div style={{display:'flex',flexWrap:'wrap',gap:5,justifyContent:'center'}}>
+            {hintData.scramble.map(function(l,i){return <span key={i} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:26,height:30,background:'white',border:'1px solid '+G200,borderRadius:6,fontSize:16,fontWeight:'bold',color:T}}>{l.toUpperCase()}</span>;})}
+          </div>
+        : <div style={{display:'flex',flexWrap:'wrap',gap:4,justifyContent:'center',alignItems:'flex-end'}}>
+            {hintData.dash.items.map(function(it,i){
+              if(it.type==='space') return <span key={i} style={{width:12}}/>;
+              if(it.type==='static') return <span key={i} style={{fontSize:14,color:G600,fontStyle:'italic',margin:'0 2px'}}>{it.text}</span>;
+              return <span key={i} style={{width:18,borderBottom:'2px solid '+G400,height:20}}/>;
+            })}
+          </div>}
+    </div>}
+
+    <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+      onKeyDown={function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }}
+      placeholder="Englisches Wort…" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+      style={{width:'100%',padding:'13px 14px',fontSize:17,border:'2px solid '+G200,borderRadius:10,boxSizing:'border-box',marginBottom:12,outline:'none'}}/>
+
+    <button onClick={submit} disabled={!input.trim()} style={BtnStyle(input.trim()?T:G200,'white',{width:'100%',padding:'13px',fontSize:15,marginBottom:10,cursor:input.trim()?'pointer':'default'})}>Prüfen</button>
+
+    <div style={{display:'flex',gap:8}}>
+      {hints<1&&<button onClick={function(){setHints(1);}} style={BtnStyle(G100,'#d97706',{flex:1,padding:'10px',fontSize:12})}>💡 Tipp 1: Länge</button>}
+      {hints===1&&<button onClick={function(){setHints(2);}} style={BtnStyle(G100,RE,{flex:1,padding:'10px',fontSize:12})}>💡 Tipp 2: Buchstaben</button>}
+      <button onClick={giveUp} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:12})}>Aufgeben</button>
+    </div>
+    <button onClick={onDone} style={{width:'100%',border:'none',background:'none',color:G400,fontSize:11,marginTop:14,cursor:'pointer'}}>Lauf abbrechen</button>
+  </Wrap>;
+
+  if(phase==='show' && result) return <Wrap>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:G600,marginBottom:10}}>
+      <span>Vokabel {idx+1} / {items.length}</span>
+      <span style={{fontWeight:'bold',color:T}}>{score} Punkte</span>
+    </div>
+    <div style={{background:result.correct?'#d1fae5':'#fee2e2',borderRadius:14,padding:'20px 16px',marginBottom:14,textAlign:'center'}}>
+      <div style={{fontSize:34,marginBottom:6}}>{result.correct?'✅':'❌'}</div>
+      <div style={{fontSize:14,fontWeight:'bold',color:result.correct?'#065f46':'#991b1b'}}>
+        {result.correct?('Richtig! +'+result.points+' Punkte'):(result.skipped?'Übersprungen':'Leider falsch')}
+      </div>
+      {!result.correct&&<div style={{fontSize:12,color:'#991b1b',marginTop:8}}>Richtig wäre: <b>{result.answer}</b></div>}
+      {!result.correct&&!result.skipped&&result.typed&&<div style={{fontSize:11,color:G600,marginTop:4}}>Deine Eingabe: „{result.typed}"</div>}
+      <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
+    </div>
+    <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>{idx+1>=items.length?'Ergebnis anzeigen':'Weiter →'}</button>
+  </Wrap>;
+
+  if(phase==='done'){
+    var maxScore=items.length*10;
+    var correctCount=log.filter(function(l){return l.correct;}).length;
+    var pctScore=maxScore?Math.round(score/maxScore*100):0;
+    var prevRun = history.filter(function(r){return r.items!==log;})[1]; // vorheriger echter Lauf
+    var prevScore = history.length>1 ? (history[1]&&history[1].score) : null;
+    var deltaTxt = (typeof prevScore==='number') ? (score>prevScore?('▲ +'+(score-prevScore)+' besser als letztes Mal!'):score<prevScore?('▼ '+(score-prevScore)+' ggü. letztem Lauf'):'± gleich wie letztes Mal') : null;
+    return <Wrap>
+      <div style={{textAlign:'center',marginBottom:14}}>
+        <div style={{fontSize:36}}>{pctScore>=80?'🏆':pctScore>=50?'👍':'💪'}</div>
+        <div style={{fontWeight:'bold',fontSize:15,color:T}}>Lauf beendet!</div>
+      </div>
+      <div style={{background:'white',borderRadius:14,border:'1px solid '+G200,padding:'16px',marginBottom:12,textAlign:'center'}}>
+        <div style={{fontSize:34,fontWeight:'bold',color:T}}>{score} <span style={{fontSize:16,color:G400}}>/ {maxScore}</span></div>
+        <div style={{fontSize:12,color:G600,marginTop:4}}>{correctCount} von {items.length} richtig</div>
+        {deltaTxt&&<div style={{fontSize:12,fontWeight:'bold',marginTop:8,color:(typeof prevScore==='number'&&score>=prevScore)?T:RE}}>{deltaTxt}</div>}
+      </div>
+      {history.length>0&&<div style={{marginBottom:12}}><RepeatRunHistory runs={history} title="Verlauf"/></div>}
+      <button onClick={function(){setShowReview(!showReview);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginBottom:8})}>{showReview?'▲ Antworten ausblenden':'📋 Alle Antworten ansehen'}</button>
+      {showReview&&<div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden',marginBottom:12}}>
+        {log.map(function(l,i){
+          return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderBottom:i<log.length-1?'1px solid '+G100:'none',fontSize:12}}>
+            <span>{l.correct?'✅':'❌'}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:'bold',color:G900}}>{l.word} <span style={{color:G400,fontWeight:'normal'}}>· {l.clue}</span></div>
+              {!l.correct&&!l.skipped&&l.typed&&<div style={{fontSize:10,color:RE}}>„{l.typed}"</div>}
+            </div>
+            <span style={{fontSize:10,color:l.hints>0?'#d97706':G400}}>{l.hints>0?('💡'+l.hints):''}</span>
+            <span style={{fontWeight:'bold',color:l.points>0?T:G400,width:28,textAlign:'right'}}>{l.points}</span>
+          </div>;
+        })}
+      </div>}
+      <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:14,marginBottom:8})}>🔁 Nochmal</button>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'11px',fontSize:13})}>Fertig</button>
+    </Wrap>;
+  }
+  return null;
 }
 
 function AdminLernzeitOverview({ allUsers }) {
@@ -4759,6 +5069,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
   var [userProgress, setUserProgress] = useState({});
   var [userRuns, setUserRuns] = useState({});
   var [userLearnSessions, setUserLearnSessions] = useState({});
+  var [userRepeatRuns, setUserRepeatRuns] = useState({});
   var [expandedAdminTest, setExpandedAdminTest] = useState(null);
   var [expandedLsRun, setExpandedLsRun] = useState(null);
   var [vocabSort, setVocabSort] = useState('seq');
@@ -4794,6 +5105,9 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     }).catch(function(){});
     sbGet('learn_sessions','player_id=eq.'+userId+'&select=game,run_id,active_seconds,started_at&order=started_at.desc&limit=1000').then(function(rows){
       setUserLearnSessions(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
+    }).catch(function(){});
+    sbGet('repeat_runs','player_id=eq.'+userId+'&select=*&order=created_at.desc&limit=30').then(function(rows){
+      setUserRepeatRuns(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
     }).catch(function(){});
   }
   var [showDup, setShowDup] = useState(false);
@@ -5615,7 +5929,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                 return {run_id:r.run_id,runName:(run&&run.name)||r.run_id,runIcon:(run&&run.icon)||'🎯',tests:tests};
               }).filter(Boolean);
 
-              var hasAny = chartSessions.length>0||lsStatus.length>0||runsWithTests.length>0;
+              var hasAny = chartSessions.length>0||lsStatus.length>0||runsWithTests.length>0||(userRepeatRuns[u.id]||[]).length>0;
               if(!hasAny) return <div style={{padding:'8px 12px',fontSize:11,color:G400,fontStyle:'italic'}}>Noch keine Aktivität.</div>;
 
               var SectionHead = function(p){ return <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1,marginTop:p.mt?10:0}}>{p.children}</div>; };
@@ -5632,6 +5946,12 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
                 {learnSess.length>0&&<div style={{marginTop:10}}>
                   <SectionHead>🎮 Was gelernt wurde</SectionHead>
                   <GameBreakdown sessions={learnSess}/>
+                </div>}
+
+                {/* Wiederholungs-Läufe */}
+                {(userRepeatRuns[u.id]||[]).length>0&&<div style={{marginTop:10}}>
+                  <SectionHead>🔁 Wiederholung (Punkte pro Lauf)</SectionHead>
+                  <RepeatRunHistory runs={userRepeatRuns[u.id]}/>
                 </div>}
 
                 {/* Leiterspiel-Status */}
@@ -7294,6 +7614,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
+    if(screen==='wiederholung') return <WiederholungMode player={player} chapters={childChapters} onDone={function(){go('home');}}/>;
     if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
@@ -7348,6 +7669,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
             </div>
             {[
+              {icon:'🔁',title:'Wiederholung',sub:'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
@@ -7380,6 +7702,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
           {screen==='games'&&(<div>
             {[
+              {icon:'🔁',title:'Wiederholung',sub:'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
@@ -7397,6 +7720,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
           {screen==='progress'&&(<div>
             <MeineLernuebersicht player={player}/>
+            <RepeatHistorySelf player={player}/>
             <div style={{borderTop:'1px solid '+G200,margin:'16px 0 12px'}}/>
             <div style={{display:'flex',gap:6,marginBottom:12}}>
               <button onClick={function(){go('stats');}} style={BtnStyle(T,'white',{flex:1,padding:'10px',fontSize:12})}>📊 Leiterspiel-Fortschritt</button>

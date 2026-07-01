@@ -45,6 +45,22 @@ CREATE TABLE IF NOT EXISTS public.learn_sessions (
   PRIMARY KEY (id)
 );
 
+-- Tabelle: repeat_runs (Wiederholungsmodus — je Lauf 20 gelernte Vokabeln, Punkte 10/5/0)
+-- RLS/Grants analog learn_sessions (anon+authenticated USING/CHECK true) live gepflegt.
+CREATE TABLE IF NOT EXISTS public.repeat_runs (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  player_id uuid NOT NULL,
+  score integer DEFAULT 0 NOT NULL,
+  max_score integer DEFAULT 0 NOT NULL,
+  word_count integer DEFAULT 0 NOT NULL,
+  correct_count integer DEFAULT 0 NOT NULL,
+  hint1_count integer DEFAULT 0 NOT NULL,
+  hint2_count integer DEFAULT 0 NOT NULL,
+  items jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  PRIMARY KEY (id)
+);
+
 -- Tabelle: lobbies
 CREATE TABLE IF NOT EXISTS public.lobbies (
   id uuid DEFAULT gen_random_uuid() NOT NULL,
@@ -254,6 +270,7 @@ ALTER TABLE public.word_progress ADD CONSTRAINT word_progress_player_id_fkey FOR
 CREATE UNIQUE INDEX categories_name_key ON public.categories USING btree (name);
 CREATE INDEX idx_learn_sessions_player ON public.learn_sessions USING btree (player_id, started_at DESC);
 CREATE INDEX idx_learn_sessions_run ON public.learn_sessions USING btree (run_id) WHERE (run_id IS NOT NULL);
+CREATE INDEX idx_repeat_runs_player ON public.repeat_runs USING btree (player_id, created_at DESC);
 CREATE UNIQUE INDEX lobbies_code_key ON public.lobbies USING btree (code);
 CREATE UNIQUE INDEX ls_progress_player_id_run_id_key ON public.ls_progress USING btree (player_id, run_id);
 CREATE UNIQUE INDEX players_name_key ON public.players USING btree (name);
