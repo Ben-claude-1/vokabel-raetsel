@@ -4172,6 +4172,9 @@ function RepeatHistorySelf({ player }){
   </div>;
 }
 
+// Modul-Ebene: stabile Identität, sonst würde React bei jedem Tastendruck
+// neu mounten und das Eingabefeld verlöre den Fokus.
+function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; }
 function WiederholungMode({ player, chapters, onDone }){
   var [phase,setPhase]=useState('loading'); // loading, empty, intro, q, show, done
   var [pool,setPool]=useState([]);
@@ -4318,18 +4321,17 @@ function WiederholungMode({ player, chapters, onDone }){
   }
 
   // ── Render ──
-  var Wrap=function(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; };
-  if(phase==='loading') return <Wrap><div style={{textAlign:'center',padding:40,color:G400}}>Lade Lernpool…</div></Wrap>;
-  if(phase==='empty') return <Wrap>
+  if(phase==='loading') return <WiederholungWrap><div style={{textAlign:'center',padding:40,color:G400}}>Lade Lernpool…</div></WiederholungWrap>;
+  if(phase==='empty') return <WiederholungWrap>
     <div style={{textAlign:'center',padding:30}}>
       <div style={{fontSize:40,marginBottom:10}}>🔁</div>
       <div style={{fontWeight:'bold',fontSize:15,marginBottom:6}}>Noch nichts zum Wiederholen</div>
       <div style={{fontSize:12,color:G600,marginBottom:16}}>Sobald du im Leiterspiel Vokabeln in den „Gelernt"-Topf gebracht hast, kannst du sie hier festigen.</div>
       <button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 20px'})}>Zurück</button>
     </div>
-  </Wrap>;
+  </WiederholungWrap>;
 
-  if(phase==='intro') return <Wrap>
+  if(phase==='intro') return <WiederholungWrap>
     <div style={{textAlign:'center',marginBottom:14}}>
       <div style={{fontSize:34}}>🔁</div>
       <div style={{fontWeight:'bold',fontSize:17,color:T}}>Wiederholung</div>
@@ -4344,9 +4346,9 @@ function WiederholungMode({ player, chapters, onDone }){
     {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
     <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
     <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
-  </Wrap>;
+  </WiederholungWrap>;
 
-  if(phase==='q' && cur) return <Wrap>
+  if(phase==='q' && cur) return <WiederholungWrap>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:G600,marginBottom:10}}>
       <span>Vokabel {idx+1} / {items.length}</span>
       <span style={{fontWeight:'bold',color:T}}>{score} Punkte</span>
@@ -4390,9 +4392,9 @@ function WiederholungMode({ player, chapters, onDone }){
       <button onClick={giveUp} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:12})}>Aufgeben</button>
     </div>
     <button onClick={onDone} style={{width:'100%',border:'none',background:'none',color:G400,fontSize:11,marginTop:14,cursor:'pointer'}}>Lauf abbrechen</button>
-  </Wrap>;
+  </WiederholungWrap>;
 
-  if(phase==='show' && result) return <Wrap>
+  if(phase==='show' && result) return <WiederholungWrap>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:G600,marginBottom:10}}>
       <span>Vokabel {idx+1} / {items.length}</span>
       <span style={{fontWeight:'bold',color:T}}>{score} Punkte</span>
@@ -4407,7 +4409,7 @@ function WiederholungMode({ player, chapters, onDone }){
       <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
     </div>
     <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>{idx+1>=items.length?'Ergebnis anzeigen':'Weiter →'}</button>
-  </Wrap>;
+  </WiederholungWrap>;
 
   if(phase==='done'){
     var maxScore=items.length*10;
@@ -4416,7 +4418,7 @@ function WiederholungMode({ player, chapters, onDone }){
     var prevRun = history.filter(function(r){return r.items!==log;})[1]; // vorheriger echter Lauf
     var prevScore = history.length>1 ? (history[1]&&history[1].score) : null;
     var deltaTxt = (typeof prevScore==='number') ? (score>prevScore?('▲ +'+(score-prevScore)+' besser als letztes Mal!'):score<prevScore?('▼ '+(score-prevScore)+' ggü. letztem Lauf'):'± gleich wie letztes Mal') : null;
-    return <Wrap>
+    return <WiederholungWrap>
       <div style={{textAlign:'center',marginBottom:14}}>
         <div style={{fontSize:36}}>{pctScore>=80?'🏆':pctScore>=50?'👍':'💪'}</div>
         <div style={{fontWeight:'bold',fontSize:15,color:T}}>Lauf beendet!</div>
@@ -4443,7 +4445,7 @@ function WiederholungMode({ player, chapters, onDone }){
       </div>}
       <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:14,marginBottom:8})}>🔁 Nochmal</button>
       <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'11px',fontSize:13})}>Fertig</button>
-    </Wrap>;
+    </WiederholungWrap>;
   }
   return null;
 }
