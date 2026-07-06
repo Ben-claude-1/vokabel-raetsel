@@ -4076,6 +4076,52 @@ function GameBreakdown({ sessions, title }) {
   </div>;
 }
 
+// Datum-Helfer (UTC-basiert, passend zu started_at.slice(0,10))
+function shiftDay(k, delta){ var p=k.split('-'); var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); d.setUTCDate(d.getUTCDate()+delta); return d.toISOString().slice(0,10); }
+function weekdayOf(k){ var p=k.split('-'); return new Date(Date.UTC(+p[0],+p[1]-1,+p[2])).getUTCDay(); }
+function fmtDayShort(k){ var p=k.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
+var WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+
+// Tag-für-Tag durchblättern: Minuten + was an dem Tag gelernt wurde
+function TagesDetail({ sessions }) {
+  var today = new Date().toISOString().slice(0,10);
+  var [sel,setSel] = useState(today);
+  var withTime = (sessions||[]).filter(function(s){ return s.started_at && (s.active_seconds||0)>0; });
+  var earliest = withTime.length
+    ? withTime.map(function(s){return String(s.started_at).slice(0,10);}).reduce(function(a,b){return a<b?a:b;})
+    : today;
+  if(sel>today) sel=today; if(sel<earliest) sel=earliest;
+  var daySessions = (sessions||[]).filter(function(s){ return s.started_at && String(s.started_at).slice(0,10)===sel; });
+  var daySec = daySessions.reduce(function(a,s){ return a+(s.active_seconds||0); },0);
+  var canPrev = sel>earliest, canNext = sel<today;
+  var label = sel===today ? 'Heute' : sel===shiftDay(today,-1) ? 'Gestern' : WD_LONG[weekdayOf(sel)];
+  var navBtn=function(dir,enabled){
+    // Funktionaler Updater + Clamping: auch schnelle Doppel-Taps zählen sauber weiter.
+    return <button disabled={!enabled} onClick={function(){ setSel(function(cur){ var n=shiftDay(cur,dir); return n>today?today:n<earliest?earliest:n; }); }}
+      style={{width:34,height:34,borderRadius:9,border:'1px solid '+G200,background:enabled?'white':G50,color:enabled?T:G200,fontSize:16,fontWeight:'bold',cursor:enabled?'pointer':'default',touchAction:'manipulation',flexShrink:0}}>{dir<0?'‹':'›'}</button>;
+  };
+  return <div>
+    <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Einzelne Tage durchblättern</div>
+    <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,padding:'10px 12px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+        {navBtn(-1,canPrev)}
+        <div style={{flex:1,textAlign:'center'}}>
+          <div style={{fontSize:14,fontWeight:'bold',color:G900}}>{label}</div>
+          <div style={{fontSize:10,color:G400}}>{WD_LONG[weekdayOf(sel)].slice(0,2)} · {fmtDayShort(sel)}{sel.slice(0,4)!==today.slice(0,4)?' '+sel.slice(0,4):''}</div>
+        </div>
+        {navBtn(1,canNext)}
+      </div>
+      <div style={{textAlign:'center',marginBottom:daySec>0?12:2}}>
+        <span style={{fontSize:26,fontWeight:'bold',color:daySec>=DAILY_GOAL_SEC?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
+        <span style={{fontSize:12,color:G600,marginLeft:4}}>Min gelernt</span>
+      </div>
+      {daySec>0
+        ? <GameBreakdown sessions={daySessions} title="Was an diesem Tag gelernt wurde"/>
+        : <div style={{textAlign:'center',color:G400,fontSize:12,padding:'6px 0 10px'}}>An diesem Tag wurde nicht gelernt.</div>}
+    </div>
+  </div>;
+}
+
 // Eigene Lernübersicht für den Spieler selbst
 function MeineLernuebersicht({ player }) {
   var [sessions,setSessions]=useState(null);
@@ -4113,7 +4159,9 @@ function MeineLernuebersicht({ player }) {
     <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📈 Deine Lernzeit pro Tag</div>
     <LernVerlaufChart sessions={chartSessions}/>
     <div style={{height:12}}/>
-    <GameBreakdown sessions={sessions} title="🎮 Was du gelernt hast"/>
+    <TagesDetail sessions={sessions}/>
+    <div style={{height:12}}/>
+    <GameBreakdown sessions={sessions} title="🎮 Insgesamt gelernt"/>
   </div>;
 }
 
@@ -7550,29 +7598,35 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(!game) return; // Menüs/Verwaltung nicht als Lernzeit tracken
     var runId = (lsRun&&lsRun.id&&UUID.test(lsRun.id))?lsRun.id:null;
     var sessionId = window.crypto.randomUUID();
-    var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now();
-    var IDLE_MS=60000, TICK_MS=1000, FLUSH_MS=60000;
+    var startedAt = new Date().toISOString();
+    var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now(), created=false;
+    var IDLE_MS=120000, TICK_MS=1000, FLUSH_MS=15000;
     function isActive(){ return document.visibilityState==='visible' && (Date.now()-lastActivity)<IDLE_MS; }
-    fetch(SB_URL+'/rest/v1/learn_sessions',{method:'POST',
-      headers:HW_POST,
-      body:JSON.stringify({id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:new Date().toISOString(), active_seconds:0}),
-      mode:'cors',credentials:'omit'
-    }).catch(function(){});
-    function flush(closing){
-      var body={};
-      if(localSeconds!==lastSavedSeconds){ body.active_seconds=localSeconds; lastSavedSeconds=localSeconds; }
-      if(closing) body.ended_at=new Date().toISOString();
-      if(Object.keys(body).length===0) return;
-      sbPatch('learn_sessions',body,'id=eq.'+sessionId);
+    // Jede Speicherung ist ein vollständiger Upsert (merge-duplicates auf der id).
+    // Damit ist die Reihenfolge egal — kein "PATCH vor INSERT"-Verlust mehr, und
+    // mit keepalive überlebt die letzte Speicherung auch das Schließen/Wegwischen der App.
+    function flush(closing, keepalive){
+      if(created && localSeconds===lastSavedSeconds && !closing) return;
+      created=true; lastSavedSeconds=localSeconds;
+      var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds };
+      if(closing) row.ended_at=new Date().toISOString();
+      try{
+        fetch(SB_URL+'/rest/v1/learn_sessions',{
+          method:'POST',
+          headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),
+          body:JSON.stringify(row), mode:'cors', credentials:'omit', keepalive:!!keepalive
+        }).catch(function(){});
+      }catch(e){}
     }
+    flush(false,false); // Zeile sofort anlegen (0 s), upsert-sicher
     function bump(){ lastActivity=Date.now(); }
-    var evs=['click','keydown','touchstart','mousemove','scroll'];
+    var evs=['click','keydown','touchstart','mousemove','scroll','pointerdown'];
     evs.forEach(function(ev){ document.addEventListener(ev,bump,{passive:true}); });
     var tickIv=setInterval(function(){ if(isActive()) localSeconds++; },TICK_MS);
-    var flushIv=setInterval(function(){ flush(false); },FLUSH_MS);
-    function onVis(){ if(document.visibilityState==='hidden') flush(false); }
+    var flushIv=setInterval(function(){ flush(false,false); },FLUSH_MS);
+    function onVis(){ if(document.visibilityState==='hidden') flush(false,true); }
     document.addEventListener('visibilitychange',onVis);
-    function onUnload(){ flush(true); }
+    function onUnload(){ flush(true,true); }
     window.addEventListener('beforeunload',onUnload);
     window.addEventListener('pagehide',onUnload);
     return function(){
@@ -7581,7 +7635,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       document.removeEventListener('visibilitychange',onVis);
       window.removeEventListener('beforeunload',onUnload);
       window.removeEventListener('pagehide',onUnload);
-      flush(true);
+      flush(true,true);
     };
   },[player&&player.id, lsRun&&lsRun.id, screen]);
 
