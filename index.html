@@ -6327,7 +6327,13 @@ function LoginScreen({ onLogin, onRegister }) {
     if(!name.trim()||!pw.trim()){setErr('Name und Passwort eingeben');return;}
     setLoading(true); setErr('');
     hashPw(pw).then(function(hash){
-      sbGet('players','name=ilike.'+encodeURIComponent(name.trim())+'&select=*').then(function(d){
+      // Direktes fetch statt sbGet: sbGet verschluckt jeden Fehler (Netz/TLS/HTTP)
+      // zu [] -> würde fälschlich "Nutzer nicht gefunden" zeigen, obwohl der Server
+      // nur nicht erreichbar ist (z. B. Tailscale-Funnel down). Hier trennen wir das.
+      fetch(SB_URL+'/rest/v1/players?name=ilike.'+encodeURIComponent(name.trim())+'&select=*',
+        {headers:HG, mode:'cors', credentials:'omit'})
+      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+      .then(function(d){
         var user=Array.isArray(d)&&d[0];
         if(!user){setErr('Nutzer nicht gefunden');setLoading(false);return;}
         if(user.is_active===false){setErr('Konto gesperrt. Bitte Admin kontaktieren.');setLoading(false);return;}
@@ -6336,7 +6342,7 @@ function LoginScreen({ onLogin, onRegister }) {
         } else {
           setErr('Falsches Passwort'); setLoading(false);
         }
-      }).catch(function(){ setErr('Verbindungsfehler'); setLoading(false); });
+      }).catch(function(){ setErr('Server nicht erreichbar – bitte später erneut versuchen'); setLoading(false); });
     }).catch(function(){ setErr('Fehler'); setLoading(false); });
   }
   return(
