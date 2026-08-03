@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS public.chapters (
   created_at timestamptz DEFAULT now(),
   sentences jsonb DEFAULT '[]'::jsonb,
   parent_id text,
+  -- Klasse (5, 6, …) und Sprache ('en', 'es'). Der Baum ist Klasse → Sprache →
+  -- Theme; die Spalten sind denormalisiert, damit die App ohne Traversierung
+  -- filtern kann. Der Klassen-Knoten selbst hat language IS NULL.
+  grade int,
+  language text,
   PRIMARY KEY (id)
 );
 
@@ -114,6 +119,10 @@ CREATE TABLE IF NOT EXISTS public.ls_runs (
   icon text,
   target_date date,
   target_pct integer DEFAULT 100,
+  -- Klasse/Sprache des Runs; ältere Runs ohne Werte werden in der App über die
+  -- chapterId ihrer Wörter zugeordnet.
+  grade int,
+  language text,
   PRIMARY KEY (id)
 );
 
@@ -268,6 +277,8 @@ ALTER TABLE public.word_progress ADD CONSTRAINT word_progress_player_id_fkey FOR
 
 -- Indexes
 CREATE UNIQUE INDEX categories_name_key ON public.categories USING btree (name);
+CREATE INDEX idx_chapters_scope ON public.chapters USING btree (grade, language);
+CREATE INDEX idx_ls_runs_scope ON public.ls_runs USING btree (grade, language);
 CREATE INDEX idx_learn_sessions_player ON public.learn_sessions USING btree (player_id, started_at DESC);
 CREATE INDEX idx_learn_sessions_run ON public.learn_sessions USING btree (run_id) WHERE (run_id IS NOT NULL);
 CREATE INDEX idx_repeat_runs_player ON public.repeat_runs USING btree (player_id, created_at DESC);

@@ -158,6 +158,14 @@ const BUILTIN = [
   ]},
   { id: "allgemein", title: "Allgemein", color: "#64748b", icon: "📌", is_builtin: false, parent_id: "ch_k4_legacy", sentences: [], words: [] },
 ];
+// Die eingebauten Offline-Kapitel stammen alle aus Klasse 5 / Englisch.
+// "ch_k4_legacy" war nie ein echtes Kapitel — auf "ch_kapitel4" umbiegen, damit
+// die Wörter im Kapitel-Baum (Quiz-Auswahl, Fortschritt) nicht verwaisen.
+BUILTIN.forEach(function(c){
+  if(c.parent_id === "ch_k4_legacy") c.parent_id = "ch_kapitel4";
+  if(c.grade == null) c.grade = 5;
+  if(!c.language) c.language = "en";
+});
 
 var T = "#0f766e", TL = "#ccfbf1", TD = "#134e4a", AM = "#f59e0b", RE = "#ef4444", GR = "#22c55e";
 var G50 = "#f8fafc", G100 = "#f1f5f9", G200 = "#e2e8f0", G400 = "#94a3b8", G600 = "#475569", G900 = "#0f172a";
@@ -256,6 +264,74 @@ function naturalSort(a, b) {
   var na=ka.match(/^(\D*)(\d+)/), nb=kb.match(/^(\D*)(\d+)/);
   if(na&&nb&&na[1]===nb[1]) return parseInt(na[2])-parseInt(nb[2]);
   return ka.localeCompare(kb);
+}
+
+// ── Klasse & Sprache (Scope) ─────────────────────────────────────────────
+// Der Kapitelbaum ist dreistufig: Klasse (parent_id null) → Sprache → Thema.
+// Jedes Kapitel trägt zusätzlich `grade` (5, 6, …) und `language` ('en','es'),
+// damit Filtern ohne Baum-Traversierung geht. Alt-Daten ohne Werte gelten als
+// Klasse 5 / Englisch.
+var SCOPE_KEY = 'lernapp_scope';
+var LANGS = { en:{label:'Englisch', flag:'🇬🇧'}, es:{label:'Spanisch', flag:'🇪🇸'}, fr:{label:'Französisch', flag:'🇫🇷'}, la:{label:'Latein', flag:'🏛️'} };
+function langLabel(l){ return (LANGS[l]||{}).label || (l||'').toUpperCase(); }
+function langFlag(l){ return (LANGS[l]||{}).flag || '🗣️'; }
+function chGrade(c){ return c && c.grade != null ? Number(c.grade) : 5; }
+function chLang(c){ return (c && c.language) || 'en'; }
+function inScope(c, sc){ return !!sc && chGrade(c)===sc.grade && chLang(c)===sc.language; }
+function sameScope(a, b){ return !!a && !!b && a.grade===b.grade && a.language===b.language; }
+function scopeText(sc){ return sc ? 'Klasse '+sc.grade+' · '+langFlag(sc.language)+' '+langLabel(sc.language) : ''; }
+// Alle vorhandenen Klasse/Sprache-Kombinationen — nur Kapitel mit Wörtern zählen,
+// damit ein leeres Gerüst keine tote Auswahl erzeugt.
+function listScopes(chapters){
+  var seen = {}, out = [];
+  (chapters||[]).forEach(function(c){
+    if(!c.language) return;
+    if(safeWords(c.words).length === 0) return;
+    var k = chGrade(c)+'|'+chLang(c);
+    if(seen[k]) return;
+    seen[k] = 1; out.push({grade:chGrade(c), language:chLang(c)});
+  });
+  out.sort(function(a,b){ return a.grade-b.grade || a.language.localeCompare(b.language); });
+  return out;
+}
+function defaultScope(scopes){
+  if(!scopes || !scopes.length) return {grade:6, language:'en'};
+  var byPref = scopes.filter(function(s){ return s.grade===6 && s.language==='en'; });
+  if(byPref.length) return byPref[0];
+  var en = scopes.filter(function(s){ return s.language==='en'; });
+  var pool = en.length ? en : scopes;
+  return pool[pool.length-1]; // höchste Klasse
+}
+function loadScope(){
+  try{ var s = JSON.parse(localStorage.getItem(SCOPE_KEY)||'null');
+    if(s && s.grade && s.language) return {grade:Number(s.grade), language:String(s.language)};
+  }catch(e){}
+  return null;
+}
+function saveScope(sc){ try{ localStorage.setItem(SCOPE_KEY, JSON.stringify(sc)); }catch(e){} }
+// Wurzeln innerhalb einer Teilmenge: Kapitel, deren Elternteil nicht in der Liste ist.
+function rootsOf(list){
+  var ids = {}; (list||[]).forEach(function(c){ ids[c.id]=1; });
+  return (list||[]).filter(function(c){ return !c.parent_id || !ids[c.parent_id]; });
+}
+// Zu welcher Klasse/Sprache gehört ein Leiterspiel-Run? Bevorzugt die gespeicherten
+// Spalten; ältere Runs werden über die chapterId ihrer Wörter zugeordnet.
+function runScope(run, chapters){
+  if(run && run.grade != null && run.language) return {grade:Number(run.grade), language:String(run.language)};
+  var byId = {}; (chapters||[]).forEach(function(c){ byId[c.id]=c; });
+  var counts = {}, best = null, bestN = 0;
+  safeWords(run && run.words).forEach(function(w){
+    var c = byId[w.chapterId]; if(!c) return;
+    var k = chGrade(c)+'|'+chLang(c);
+    counts[k] = (counts[k]||0)+1;
+    if(counts[k] > bestN){ bestN = counts[k]; best = k; }
+  });
+  if(best){ var p = best.split('|'); return {grade:Number(p[0]), language:p[1]}; }
+  return {grade:5, language:'en'};
+}
+function filterRunsByScope(runs, chapters, sc){
+  if(!sc) return runs||[];
+  return (runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); });
 }
 
 function getWordType(w) {
@@ -791,7 +867,7 @@ function ProgressStats({ chapters, player, allCategories }) {
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:30,color:G400}}>Lade Leiterspiel-Daten…</div>;
   function toggle(id){setExpanded(function(prev){var n=Object.assign({},prev);n[id]=!n[id];return n;});}
-  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
+  var topLevel=rootsOf(chapters).slice().sort(function(a,b){return a.id<b.id?-1:1;});
   var allWords=[]; chapters.forEach(function(ch){safeWords(ch.words).forEach(function(w){allWords.push(w);});});
   var totalWords=allWords.length;
   var totalLearned=allWords.filter(function(w){return !!learnedSet[w.word];}).length;
@@ -1120,7 +1196,7 @@ function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, 
   if(view==='playing_solo') return <QuizSolo chapters={chaptersForGame} globalWords={globalWords} onDone={function(){setView('menu');}}/>;
 
   if(view==='new') {
-    var qTopLevel = (chapters||[]).filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+    var qTopLevel = rootsOf(chapters||[]).slice().sort(naturalSort);
     var qChildMap = {};
     leafChapters.forEach(function(c){
       if(!qChildMap[c.parent_id]) qChildMap[c.parent_id]=[];
@@ -3254,7 +3330,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer,
   );
 }
 
-function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
+function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers }) {
   var [runs, setRuns] = useState([]);
   var [loading, setLoading] = useState(true);
   var [streakSettings, setStreakSettings] = useState(null);
@@ -3284,12 +3360,16 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     }
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
-  if(runs.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>Noch keine Runs. Bitte Admin fragen.</div>;
+  var scopedRuns = filterRunsByScope(runs, chapters, scope);
+  if(scopedRuns.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>
+    Noch keine Runs für {scopeText(scope)}.{runs.length>0?' In einer anderen Klasse/Sprache gibt es welche — oben in der Kopfzeile umschalten.':' Bitte Admin fragen.'}
+  </div>;
   var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
   return(
     <div style={{padding:8}}>
-      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:12}}>Leiterspiel — Run wählen</div>
-      {runs.map(function(run){
+      <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:2}}>Leiterspiel — Run wählen</div>
+      <div style={{fontSize:11,color:G400,marginBottom:12}}>{scopeText(scope)}</div>
+      {scopedRuns.map(function(run){
         var wordCount = safeWords(run.words).length || run.word_count || 0;
         var prog = progressMap[run.id];
         var pct = prog ? lsPercent(prog,gs) : 0;
@@ -3319,7 +3399,7 @@ function LeitersSpielMenu({ player, chapters, onStart, onDone, allUsers }) {
     </div>
   );
 }
-function LeitersSpielCreate({ player, chapters, onDone }) {
+function LeitersSpielCreate({ player, chapters, scope, onDone }) {
   var [name, setName] = useState('');
   var [icon, setIcon] = useState('🎯');
   var [selectedWords, setSelectedWords] = useState([]);
@@ -3475,6 +3555,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
     var wordsJson=JSON.stringify(sortedSel.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||w.chapId||'',important:!!w.important,book_page:w.book_page,pot:1};}));
     var newRun={name:name.trim(),icon:icon,player_id:UUID.test(player.id)?player.id:null,
       is_admin_run:!!(player.is_admin),word_count:sortedSel.length,sentence_count:0,
+      grade:scope?scope.grade:null, language:scope?scope.language:null,
       words:wordsJson,sentences:'[]',created_at:new Date().toISOString()};
     sbPost('ls_runs',newRun).then(function(res){
       setSaving(false);
@@ -3483,7 +3564,7 @@ function LeitersSpielCreate({ player, chapters, onDone }) {
       setTimeout(onDone,1000);
     }).catch(function(){setSaving(false);setMsg('Verbindungsfehler');});
   }
-  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(function(a,b){return a.id<b.id?-1:1;});
+  var topLevel=rootsOf(chapters).slice().sort(function(a,b){return a.id<b.id?-1:1;});
   return(
     <div style={{padding:8}}>
       <div style={{display:'flex',gap:6,marginBottom:12}}>
@@ -3805,7 +3886,7 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
       })
       .catch(function(){setSaving(false);});
   }
-  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+  var topLevel=rootsOf(chapters).slice().sort(naturalSort);
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:4}}>{run.icon} {run.name} bearbeiten</div>
@@ -4549,7 +4630,7 @@ function AdminLernzeitOverview({ allUsers }) {
   );
 }
 
-function LeitersSpielAdminOverview({ chapters, player }) {
+function LeitersSpielAdminOverview({ chapters, scope, player }) {
   var [runs, setRuns] = useState([]);
   var [allUsers, setAllUsers] = useState([]);
   var [allProgress, setAllProgress] = useState([]);
@@ -4568,14 +4649,14 @@ function LeitersSpielAdminOverview({ chapters, player }) {
       sbGet('word_disputes','status=eq.open&order=created_at.desc').then(function(d){return Array.isArray(d)?d:[];}),
       sbGet('learn_sessions','select=player_id,run_id,active_seconds,started_at').then(function(d){return Array.isArray(d)?d:[];})
     ]).then(function(res){
-      setRuns(Array.isArray(res[0])?res[0]:[]);
+      setRuns(filterRunsByScope(Array.isArray(res[0])?res[0]:[], chapters, scope));
       setAllUsers((res[1]||[]).filter(function(u){return !u.is_admin;}));
       setAllProgress(res[2]||[]);
       setAllDisputes(res[3]||[]);
       setAllSessions(res[4]||[]);
       setLoading(false);
     }).catch(function(){ setLoading(false); });
-  },[]);
+  },[scope&&scope.grade, scope&&scope.language]);
   function progressSessionsFor(playerId, runId){
     var row = allProgress.find(function(p){return p.player_id===playerId && p.run_id===runId;});
     if(!row) return [];
@@ -5138,7 +5219,7 @@ function VocabCheckAdmin({ chapters, setChapters }) {
   </div>;
 }
 
-function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onDone }) {
+function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onDone }) {
   var [tab, setTab] = useState('chapters');
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
@@ -5330,7 +5411,12 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
     var isNew = !form.id;
     if(isNew){
       var newId='ch_'+Date.now();
-      var body={id:newId,title:form.title,color:form.color,icon:form.icon,parent_id:form.parent_id||null,words:form.words||[],sentences:form.sentences||[]};
+      // Klasse/Sprache vom Elternkapitel erben, sonst die gerade gewählte Auswahl —
+      // ohne diese Felder wäre das Kapitel in keiner Ansicht sichtbar.
+      var parentCh=(chapters||[]).find(function(c){return c.id===form.parent_id;});
+      var newGrade=parentCh?chGrade(parentCh):(scope?scope.grade:5);
+      var newLang=parentCh?(parentCh.language||(scope?scope.language:'en')):(scope?scope.language:'en');
+      var body={id:newId,title:form.title,color:form.color,icon:form.icon,parent_id:form.parent_id||null,words:form.words||[],sentences:form.sentences||[],grade:newGrade,language:form.parent_id?newLang:null};
       sbPost('chapters',body).then(function(res){
         if(res && !res._err){
           var finalId=(res&&res.id)||newId;
@@ -5926,7 +6012,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
             </div>
           : <div>
               <button onClick={function(){setShowCreateRun(true);}} style={BtnStyle(T,'white',{width:'100%',padding:'10px',fontSize:13,marginBottom:10})}>➕ Neuen Run erstellen</button>
-              <LeitersSpielAdminOverview chapters={chapters} player={player}/>
+              <LeitersSpielAdminOverview chapters={chapters} scope={scope} player={player}/>
               <div style={{marginTop:10,borderTop:'1px solid '+G200,paddingTop:10}}>
                 <div style={{fontWeight:'bold',fontSize:12,color:G600,marginBottom:6}}>Einstellungen</div>
                 <LeitersSpielStreakSettings onDone={function(){}}/>
@@ -6165,7 +6251,7 @@ function AdminDash({ player, chapters, setChapters, allUsers, setAllUsers, allCa
         <VocabCheckAdmin chapters={chapters} setChapters={setChapters}/>
       </div>)}
       {tab==='klassenarbeit'&&(<div>
-        <KlassenarbeitAdmin player={player}/>
+        <KlassenarbeitAdmin player={player} chapters={chapters} scope={scope}/>
       </div>)}
     </div>
   );
@@ -6585,11 +6671,12 @@ function kaGradeFor(correct, total) {
   if(pct>=0.95) return 1; if(pct>=0.85) return 2; if(pct>=0.70) return 3;
   if(pct>=0.55) return 4; if(pct>=0.40) return 5; return 6;
 }
-function buildKaQuestions(selectedRuns, grammarPool) {
+function buildKaQuestions(selectedRuns, grammarPool, withSentences) {
   var vocabMap={};
   selectedRuns.forEach(function(run){safeWords(run.words).forEach(function(w){var k=normWordKey(w.word);if(!vocabMap[k])vocabMap[k]=w;});});
   var vocabArr=Object.values(vocabMap);
-  var sentQs=KA_SAETZE.map(function(s){return {kind:'sentence',german:s.de,answer:s.en};});
+  // KA_SAETZE sind englische Übersetzungssätze — nur für Englisch beilegen.
+  var sentQs=(withSentences===false)?[]:KA_SAETZE.map(function(s){return {kind:'sentence',german:s.de,answer:s.en};});
   var remaining=40;
   var hasV=vocabArr.length>0, hasG=grammarPool.length>0;
   var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
@@ -6598,27 +6685,30 @@ function buildKaQuestions(selectedRuns, grammarPool) {
   return shuffleArr(vocabQs.concat(grammarQs).concat(sentQs));
 }
 
-function KlassenarbeitSetup({ player, onStart, onDone }) {
-  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(['sp','pp','sa','mv'])); var [loading,setLoading]=useState(true); var [starting,setStarting]=useState(false);
-  useEffect(function(){lsGetRunsForPlayer(player.id).then(function(r){setRuns(r||[]);setLoading(false);}).catch(function(){setLoading(false);});}, []);
+function KlassenarbeitSetup({ player, chapters, scope, onStart, onDone }) {
+  // Grammatik-Pool und die festen Übersetzungssätze sind Englisch — bei einer
+  // anderen Sprache besteht die Arbeit nur aus deren Vokabeln.
+  var isEnglish = !scope || scope.language==='en';
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv']:[])); var [loading,setLoading]=useState(true); var [starting,setStarting]=useState(false);
+  useEffect(function(){lsGetRunsForPlayer(player.id).then(function(r){setRuns(filterRunsByScope(r||[],chapters,scope));setLoading(false);}).catch(function(){setLoading(false);});}, []);
   function toggleRun(id){setSelRuns(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
   function toggleTopic(t){setSelTopics(function(p){var n=new Set(p);n.has(t)?n.delete(t):n.add(t);return n;});}
   function handleStart(){
     setStarting(true);
     var topicArr=Array.from(selTopics);
     var selRunObjs=runs.filter(function(r){return selRuns.has(r.id);});
-    var gp=topicArr.length>0?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
-    gp.then(function(gPool){var qs=buildKaQuestions(selRunObjs,gPool);setStarting(false);onStart(qs);}).catch(function(){setStarting(false);});
+    var gp=(isEnglish&&topicArr.length>0)?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
+    gp.then(function(gPool){var qs=buildKaQuestions(selRunObjs,gPool,isEnglish);setStarting(false);onStart(qs);}).catch(function(){setStarting(false);});
   }
   var vocabEst=0; runs.filter(function(r){return selRuns.has(r.id);}).forEach(function(r){vocabEst+=(r.word_count||0);});
-  var hasV=selRuns.size>0, hasG=selTopics.size>0;
+  var hasV=selRuns.size>0, hasG=isEnglish&&selTopics.size>0;
   var vQ=hasV&&hasG?20:(hasV?40:0), gQ=hasG&&hasV?20:(hasG?40:0);
-  var totalEst=Math.min(vQ,vocabEst)+gQ+10;
+  var totalEst=Math.min(vQ,vocabEst)+gQ+(isEnglish?10:0);
   var canStart=hasV||hasG;
   return (
     <div style={{padding:12}}>
       <div style={{fontWeight:'bold',fontSize:16,color:'#dc2626',marginBottom:2}}>📋 Klassenarbeit</div>
-      <div style={{fontSize:12,color:G400,marginBottom:16}}>Vorbereitung — ca. {totalEst} Fragen</div>
+      <div style={{fontSize:12,color:G400,marginBottom:16}}>{scopeText(scope)} · Vorbereitung — ca. {totalEst} Fragen</div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
       {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:
         <div style={{marginBottom:16}}>
@@ -6633,8 +6723,8 @@ function KlassenarbeitSetup({ player, onStart, onDone }) {
           {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
         </div>
       }
-      <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
-      <div style={{marginBottom:16}}>
+      {isEnglish&&<div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>}
+      {isEnglish&&<div style={{marginBottom:16}}>
         {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
           <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer'}}>
             <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -6643,12 +6733,12 @@ function KlassenarbeitSetup({ player, onStart, onDone }) {
             <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
           </div>);
         })}
-      </div>
-      <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:20}}>
+      </div>}
+      {isEnglish&&<div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:20}}>
         <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
         <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
-      </div>
-      {!canStart&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
+      </div>}
+      {!canStart&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>{isEnglish?'Bitte mindestens einen Run oder ein Grammatik-Thema wählen.':'Bitte mindestens einen Run wählen.'}</div>}
       <button onClick={handleStart} disabled={!canStart||starting} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:15,fontWeight:'bold',opacity:(!canStart||starting)?0.5:1})}>{starting?'Lade Fragen…':'📋 Test starten (~'+totalEst+' Fragen)'}</button>
       <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13,marginTop:8})}>← Zurück</button>
     </div>
@@ -6818,11 +6908,12 @@ function KlassenarbeitTest({ player, questions, onDone }) {
   );
 }
 
-function KlassenarbeitAdmin({ player }) {
-  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(['sp','pp','sa','mv'])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
+function KlassenarbeitAdmin({ player, chapters, scope }) {
+  var isEnglish = !scope || scope.language==='en';
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv']:[])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
   var [results,setResults]=useState([]); var [expandedResult,setExpandedResult]=useState(null); var [resultTab,setResultTab]=useState('test');
   useEffect(function(){
-    lsGetRunsForPlayer(player.id).then(function(r){setRuns(r||[]);setLoading(false);}).catch(function(){setLoading(false);});
+    lsGetRunsForPlayer(player.id).then(function(r){setRuns(filterRunsByScope(r||[],chapters,scope));setLoading(false);}).catch(function(){setLoading(false);});
     sbGet('settings','key=eq.klassenarbeit_active_test&select=value').then(function(rows){
       if(rows&&rows[0]){try{setActiveInfo(JSON.parse(rows[0].value));}catch(e){}}
     }).catch(function(){});
@@ -6835,10 +6926,11 @@ function KlassenarbeitAdmin({ player }) {
     setSaving(true); setMsg('');
     var topicArr=Array.from(selTopics);
     var selRunObjs=runs.filter(function(r){return selRuns.has(r.id);});
-    var gp=topicArr.length>0?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
+    var gp=(isEnglish&&topicArr.length>0)?Promise.all(topicArr.map(loadGrammarPool)).then(function(pools){var all=[];pools.forEach(function(pool){(pool||[]).forEach(function(q){if(q.sentence&&q.sentence.includes('___'))all.push(q);});});return all;}):Promise.resolve([]);
     gp.then(function(gPool){
-      var qs=buildKaQuestions(selRunObjs,gPool);
-      var payload={questions:qs,created_at:new Date().toISOString(),created_by:player.name,question_count:qs.length};
+      var qs=buildKaQuestions(selRunObjs,gPool,isEnglish);
+      var payload={questions:qs,created_at:new Date().toISOString(),created_by:player.name,question_count:qs.length,
+        grade:scope?scope.grade:null, language:scope?scope.language:null};
       sbGet('settings','key=eq.klassenarbeit_active_test&select=key').then(function(rows){
         var op=(rows&&rows.length>0)?sbPatch('settings',{value:JSON.stringify(payload)},'key=eq.klassenarbeit_active_test'):sbPost('settings',{key:'klassenarbeit_active_test',value:JSON.stringify(payload)});
         Promise.resolve(op).then(function(){setSaving(false);setActiveInfo(payload);setMsg('✅ Test gespeichert – alle Spieler können ihn jetzt starten.');}).catch(function(){setSaving(false);setMsg('❌ Fehler beim Speichern.');});
@@ -6849,9 +6941,9 @@ function KlassenarbeitAdmin({ player }) {
     sbDel('settings','key=eq.klassenarbeit_active_test').then(function(){setActiveInfo(null);setMsg('Test gelöscht.');}).catch(function(){setMsg('❌ Löschen fehlgeschlagen.');});
   }
   var vocabEst=0; runs.filter(function(r){return selRuns.has(r.id);}).forEach(function(r){vocabEst+=(r.word_count||0);});
-  var hasV=selRuns.size>0,hasG=selTopics.size>0;
+  var hasV=selRuns.size>0,hasG=isEnglish&&selTopics.size>0;
   var vQ=hasV&&hasG?20:(hasV?40:0),gQ=hasG&&hasV?20:(hasG?40:0);
-  var totalEst=Math.min(vQ,vocabEst)+gQ+10;
+  var totalEst=Math.min(vQ,vocabEst)+gQ+(isEnglish?10:0);
   var canSave=hasV||hasG;
   var sortedResults=results.slice().sort(function(a,b){return (b.completed_at||'').localeCompare(a.completed_at||'');});
   return(
@@ -6871,7 +6963,8 @@ function KlassenarbeitAdmin({ player }) {
             </div>
           )}
           {msg&&<div style={{padding:'6px 10px',background:'#d1fae5',borderRadius:7,fontSize:11,color:T,marginBottom:8}}>{msg}</div>}
-          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>🪜 Leiterspiel-Runs wählen</div>
+          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:2}}>🪜 Leiterspiel-Runs wählen</div>
+          <div style={{fontSize:11,color:G400,marginBottom:8}}>{scopeText(scope)} — der Test wird für diese Klasse/Sprache aktiviert.</div>
           {loading?<div style={{color:G400,fontSize:12,marginBottom:16}}>Lade Runs…</div>:(
             <div style={{marginBottom:16}}>
               {runs.map(function(run){var ck=selRuns.has(run.id);return(
@@ -6883,20 +6976,20 @@ function KlassenarbeitAdmin({ player }) {
               {runs.length===0&&<div style={{color:G400,fontSize:12}}>Keine Runs gefunden.</div>}
             </div>
           )}
-          <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>
-          <div style={{marginBottom:16}}>
+          {isEnglish&&<div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>✏️ Grammatik-Themen wählen</div>}
+          {isEnglish&&<div style={{marginBottom:16}}>
             {Object.keys(KA_TOPIC_LABELS).map(function(t){var ck=selTopics.has(t);return(
               <div key={t} onClick={function(){toggleTopic(t);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:10,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed11':'white',cursor:'pointer',touchAction:'manipulation'}}>
                 <div style={{width:20,height:20,borderRadius:4,border:'2px solid '+(ck?'#7c3aed':G200),background:ck?'#7c3aed':'white',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{ck&&<span style={{color:'white',fontSize:12,fontWeight:'bold'}}>✓</span>}</div>
                 <div style={{fontWeight:'bold',fontSize:13,color:G900}}>{KA_TOPIC_LABELS[t]}</div>
               </div>);
             })}
-          </div>
-          <div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:16}}>
+          </div>}
+          {isEnglish&&<div style={{padding:'10px 12px',borderRadius:10,background:'#f0fdf4',border:'1px solid #86efac',marginBottom:16}}>
             <div style={{fontWeight:'bold',fontSize:12,color:'#065f46',marginBottom:2}}>🐾 10 feste Sätze (immer dabei)</div>
             <div style={{fontSize:11,color:'#065f46'}}>Deutsch → Englisch: Hundepflege &amp; Haustiere</div>
-          </div>
-          {!canSave&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>Bitte mindestens einen Run oder ein Grammatik-Thema wählen.</div>}
+          </div>}
+          {!canSave&&<div style={{color:AM,fontSize:12,marginBottom:8,textAlign:'center'}}>{isEnglish?'Bitte mindestens einen Run oder ein Grammatik-Thema wählen.':'Bitte mindestens einen Run wählen.'}</div>}
           <button onClick={handleSave} disabled={!canSave||saving} style={BtnStyle('#dc2626','white',{width:'100%',padding:'14px',fontSize:14,fontWeight:'bold',opacity:(!canSave||saving)?0.5:1,touchAction:'manipulation'})}>{saving?'Erstelle Test…':'💾 Test erstellen & aktivieren (~'+totalEst+' Fragen)'}</button>
         </div>
       )}
@@ -6944,20 +7037,25 @@ function KlassenarbeitAdmin({ player }) {
   );
 }
 
-function KlassenarbeitPlayer({ player, onStart, onDone }) {
+function KlassenarbeitPlayer({ player, chapters, scope, onStart, onDone }) {
   var [info,setInfo]=useState(null); var [loading,setLoading]=useState(true);
   useEffect(function(){
     sbGet('settings','key=eq.klassenarbeit_active_test&select=value').then(function(rows){
-      if(rows&&rows[0]){try{setInfo(JSON.parse(rows[0].value));}catch(e){}}
+      if(rows&&rows[0]){try{
+        var t=JSON.parse(rows[0].value);
+        // Tests ohne Klassen-/Sprach-Angabe stammen von vor der Umstellung und
+        // bleiben für alle sichtbar; neuere nur in ihrer eigenen Auswahl.
+        if(!t || !t.language || !scope || (Number(t.grade)===scope.grade && t.language===scope.language)) setInfo(t);
+      }catch(e){}}
       setLoading(false);
     }).catch(function(){setLoading(false);});
-  },[]);
+  },[scope&&scope.grade, scope&&scope.language]);
   if(loading) return <div style={{padding:32,textAlign:'center',color:G400,fontSize:14}}>Lade…</div>;
   if(!info) return(
     <div style={{padding:24,textAlign:'center'}}>
       <div style={{fontSize:48,marginBottom:12}}>📋</div>
       <div style={{fontWeight:'bold',fontSize:16,color:G700,marginBottom:8}}>Keine Klassenarbeit aktiv</div>
-      <div style={{fontSize:12,color:G400,marginBottom:24}}>Der Lehrer hat noch keinen Test erstellt.</div>
+      <div style={{fontSize:12,color:G400,marginBottom:24}}>Für {scopeText(scope)} hat der Lehrer noch keinen Test erstellt.</div>
       <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'12px',fontSize:13,touchAction:'manipulation'})}>← Zurück</button>
     </div>
   );
@@ -7486,7 +7584,7 @@ function CrosswordGame({ chapters, onDone }) {
   }
 
   var total=Object.values(sel).reduce(function(s,set){return s+set.size;},0);
-  var topLevel=chapters.filter(function(c){return !c.parent_id;}).slice().sort(naturalSort);
+  var topLevel=rootsOf(chapters).slice().sort(naturalSort);
   var childMap={};
   chapters.filter(function(c){return c.parent_id;}).forEach(function(c){
     if(!childMap[c.parent_id]) childMap[c.parent_id]=[];
@@ -7576,6 +7674,59 @@ function CrosswordGame({ chapters, onDone }) {
   );
 }
 
+// Kompakter Umschalter für Klasse + Sprache. Sitzt in der Kopfzeile und öffnet
+// ein Overlay; alle Lernbereiche zeigen danach nur noch Inhalte dieser Auswahl.
+function ScopeSwitcher({ scopes, scope, onChange, compact }) {
+  var [open, setOpen] = useState(false);
+  if(!scope) return null;
+  var grades = []; scopes.forEach(function(s){ if(grades.indexOf(s.grade)<0) grades.push(s.grade); });
+  grades.sort(function(a,b){return a-b;});
+  var langsForGrade = scopes.filter(function(s){ return s.grade===scope.grade; }).map(function(s){ return s.language; });
+  function pickGrade(g){
+    var langs = scopes.filter(function(s){ return s.grade===g; }).map(function(s){ return s.language; });
+    var lang = langs.indexOf(scope.language)>=0 ? scope.language : langs[0];
+    onChange({grade:g, language:lang});
+  }
+  return(
+    <React.Fragment>
+      <button onClick={function(){setOpen(true);}} title="Klasse und Sprache wechseln"
+        style={{background:'rgba(255,255,255,0.18)',border:'none',color:'white',padding:compact?'3px 8px':'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:'bold',touchAction:'manipulation',flexShrink:0,whiteSpace:'nowrap'}}>
+        {langFlag(scope.language)} Kl. {scope.grade} ▾
+      </button>
+      {open&&(
+        <div onClick={function(){setOpen(false);}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={function(e){e.stopPropagation();}} style={{background:'white',borderRadius:16,padding:18,width:'100%',maxWidth:340,boxShadow:'0 8px 30px rgba(0,0,0,0.3)'}}>
+            <div style={{fontWeight:'bold',fontSize:15,color:G900,marginBottom:3}}>Was möchtest du lernen?</div>
+            <div style={{fontSize:11,color:G400,marginBottom:14}}>Leiterspiel, Quiz, Wiederholung &amp; Co. zeigen danach nur diese Auswahl.</div>
+
+            <div style={{fontSize:11,fontWeight:'bold',color:G600,marginBottom:6}}>Klasse</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:16}}>
+              {grades.map(function(g){
+                var act = g===scope.grade;
+                return <button key={g} onClick={function(){pickGrade(g);}}
+                  style={{padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:'bold',cursor:'pointer',touchAction:'manipulation',
+                    background:act?T:'white',color:act?'white':G600,border:'2px solid '+(act?T:G200)}}>Klasse {g}</button>;
+              })}
+            </div>
+
+            <div style={{fontSize:11,fontWeight:'bold',color:G600,marginBottom:6}}>Sprache</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:16}}>
+              {langsForGrade.map(function(l){
+                var act = l===scope.language;
+                return <button key={l} onClick={function(){onChange({grade:scope.grade, language:l});}}
+                  style={{padding:'8px 16px',borderRadius:20,fontSize:13,fontWeight:'bold',cursor:'pointer',touchAction:'manipulation',
+                    background:act?T:'white',color:act?'white':G600,border:'2px solid '+(act?T:G200)}}>{langFlag(l)} {langLabel(l)}</button>;
+              })}
+            </div>
+
+            <button onClick={function(){setOpen(false);}} style={BtnStyle(T,'white',{width:'100%',padding:'10px'})}>Fertig</button>
+          </div>
+        </div>
+      )}
+    </React.Fragment>
+  );
+}
+
 function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout }) {
   var isAdmin = !!(player && player.is_admin);
   var [screen, setScreen] = useState(isAdmin ? 'admin' : 'home');
@@ -7586,8 +7737,19 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var [onlineIds, setOnlineIds] = useState([]);
   var [quizScoring, setQuizScoring] = useState({correct:10,win:50,loss:-50,draw:30});
   var [goalInfo, setGoalInfo] = useState({current:0,best:0,todaySec:0});
+  var [scope, setScopeState] = useState(loadScope());
   var allUsersRef = useRef(allUsers);
   allUsersRef.current = allUsers;
+
+  var scopes = useMemo(function(){ return listScopes(chapters); }, [chapters]);
+  // Sobald die Kapitel geladen sind: gespeicherte Auswahl prüfen, sonst Standard
+  // (Klasse 6 / Englisch, falls vorhanden — sonst höchste verfügbare Klasse).
+  useEffect(function(){
+    if(!scopes.length) return;
+    var valid = scope && scopes.some(function(s){ return sameScope(s, scope); });
+    if(!valid) setScopeState(defaultScope(scopes));
+  }, [scopes]);
+  function setScope(sc){ setScopeState(sc); saveScope(sc); }
 
   useEffect(function(){
     if(!player) return;
@@ -7702,7 +7864,17 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
         {id:'scoreboard', label:'🏆', title:'Sticker'},
       ];
 
-  var childChapters = chapters.filter(function(c){return c.parent_id;});
+  // scopeTree = alle Kapitel der gewählten Klasse/Sprache (inkl. Sprachknoten),
+  // childChapters = davon die Blätter, also die eigentlichen Themen mit Wörtern.
+  var scopeTree = useMemo(function(){
+    return chapters.filter(function(c){ return c.language && inScope(c, scope); });
+  }, [chapters, scope]);
+  var childChapters = useMemo(function(){
+    var hasKid = {};
+    chapters.forEach(function(c){ if(c.parent_id) hasKid[c.parent_id] = 1; });
+    return scopeTree.filter(function(c){ return !hasKid[c.id]; });
+  }, [chapters, scopeTree]);
+  var isEnglish = !scope || scope.language === 'en';
 
   function renderContent() {
     if(screen==='vocab_trainer'&&screenData) return <VokabelTrainer words={screenData} player={player} onDone={function(){go('learn');}} title="Vokabeln"/>;
@@ -7710,21 +7882,21 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
     if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} onDone={function(){go('quiz_duel_menu');}}/>;}
     if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} setAllUsers={setAllUsers} setPlayer={setPlayer} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} onDone={function(){go('quiz_duel_menu');}}/>;}
-    if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={chapters} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} setQuizScoring={setQuizScoring} onDone={function(){go('games');}}/>;
+    if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={scopeTree} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} setQuizScoring={setQuizScoring} onDone={function(){go('games');}}/>;
 
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
-    if(screen==='crossword') return <CrosswordGame chapters={childChapters} onDone={function(){go('games');}}/>;
-    if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} allUsers={allUsers}
+    if(screen==='crossword') return <CrosswordGame chapters={scopeTree} onDone={function(){go('games');}}/>;
+    if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} scope={scope} allUsers={allUsers}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
-    if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={chapters} onDone={function(){go('games');}}/>;
+    if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={scopeTree} scope={scope} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
     if(screen==='wiederholung') return <WiederholungMode player={player} chapters={childChapters} onDone={function(){go('home');}}/>;
-    if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
+    if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} chapters={chapters} scope={scope} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
-    if(screen==='admin') return <AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
-    if(screen==='stats') return <Stats player={player} chapters={childChapters}/>;
+    if(screen==='admin') return <AdminDash player={player} chapters={chapters} scope={scope} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
+    if(screen==='stats') return <Stats player={player} chapters={scopeTree}/>;
     if(screen==='leaderboard') return <Leaderboard allUsers={allUsers} player={player}/>;
     if(screen==='browse') return <div style={{padding:8}}>{childChapters.map(function(ch){return <BrowseChapter key={ch.id} ch={ch}/>;})}</div>;
     if(screen==='word_select_trainer') return <WordSelector chapters={childChapters} onStart={function(ws){go('vocab_trainer',ws);}} mode="trainer"/>;
@@ -7755,8 +7927,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           <span style={{fontSize:20}}>🎓</span>
           <div style={{flex:1}}>
             <div style={{fontWeight:'bold',fontSize:15,color:'white'}}>Vokabel-Rätsel</div>
-            <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name} · {player&&(player.total_score||0)} Pkt</div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name} · {player&&(player.total_score||0)} Pkt{scope?' · '+scopeText(scope):''}</div>
           </div>
+          <ScopeSwitcher scopes={scopes} scope={scope} onChange={setScope}/>
           <button onClick={onLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>Abmelden</button>
         </div>
 
@@ -7780,7 +7953,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
-              {icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}},
+              ...(isEnglish?[{icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}}]:[]),
               {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_player');}},
               {icon:'🏆',title:'Gesamtrangliste',sub:'Punkte aus allen Spielen',action:function(){go('leaderboard');}},
             ].map(function(item,i){
@@ -7812,7 +7985,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
-              {icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}},
+              ...(isEnglish?[{icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}}]:[]),
               {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_player');}},
               ...(isAdmin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
             ].map(function(item,i){
@@ -7832,12 +8005,12 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               <button onClick={function(){go('stats');}} style={BtnStyle(T,'white',{flex:1,padding:'10px',fontSize:12})}>📊 Leiterspiel-Fortschritt</button>
               <button onClick={function(){go('leaderboard');}} style={BtnStyle(G100,G600,{flex:1,padding:'10px',fontSize:12})}>🏆 Rangliste</button>
             </div>
-            <Stats player={player} chapters={childChapters}/>
+            <Stats player={player} chapters={scopeTree}/>
           </div>)}
 
           {screen==='scoreboard'&&<Scoreboard player={player}/>}
 
-          {screen==='admin'&&<AdminDash player={player} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>}
+          {screen==='admin'&&<AdminDash player={player} chapters={chapters} scope={scope} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>}
         </div>
 
         <div style={{position:'fixed',bottom:0,left:'50%',transform:'translateX(-50%)',width:'100%',maxWidth:480,background:'white',borderTop:'1px solid '+G200,display:'flex',zIndex:100}}>
@@ -7867,8 +8040,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
         }} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'white',padding:'5px 10px',borderRadius:8,cursor:'pointer',fontSize:14,touchAction:'manipulation',flexShrink:0}}>←</button>}
         <div style={{flex:1}}>
           <div style={{fontWeight:'bold',fontSize:14,color:'white'}}>{screenTitles[screen]||screen}</div>
-          <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name}</div>
+          <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name}{scope?' · '+scopeText(scope):''}</div>
         </div>
+        <ScopeSwitcher scopes={scopes} scope={scope} onChange={setScope} compact/>
         <div style={{fontSize:11,color:'rgba(255,255,255,0.8)',fontWeight:'bold'}}>{player&&(player.total_score||0)} Pkt</div>
       </div>
       <div style={{flex:1,overflowY:'auto',padding:'10px 10px 20px'}}>
@@ -7890,7 +8064,7 @@ function App() {
     setPlayer(user);
     setLoading(true);
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    var p1 = sbGet('chapters','select=id,parent_id,title,color,icon,words,sentences,is_builtin').then(function(d){
+    var p1 = sbGet('chapters','select=id,parent_id,title,color,icon,words,sentences,is_builtin,grade,language').then(function(d){
       if(Array.isArray(d)&&d.length>0){
         var merged=BUILTIN.slice();
         d.forEach(function(remote){
