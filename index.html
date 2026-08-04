@@ -636,6 +636,7 @@ function VokabelTrainer({ words, player, onDone, title }) {
     }
     var status = checkAnswer(input, answer);
     var res = {status:status, correct:answer, typed:input, word:current.word, clue:current.clue, chapId:current.chapterId};
+    tallyAnswer(status==='correct'||status==='partial');
     setResult(res); setResults(function(prev){ return prev.concat([res]); });
     if (player && player.id) PROGRESS.set(player.id, current.word, current.clue, current.chapterId, status==='correct');
   }
@@ -839,6 +840,7 @@ function SentenceLearner({ chapters, player, onDone }) {
     }
     var status=checkAnswer(input,answer);
     var res={status:status,en:current.text,de:current.translation,typed:input};
+    tallyAnswer(status==='correct'||status==='partial');
     setResult(res); setResults(function(p){return p.concat([res]);});
   }
   return(
@@ -2014,6 +2016,66 @@ var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1,5:1}, downThresholds:{1:0,2
 function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
 function lsGetRunsForPlayer(pid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)) return lsGetRuns(); return sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&order=created_at.desc'); }
 function trackPot(wObj, pot, isCorrect) { if(!wObj.ps) wObj.ps={}; if(!wObj.ps[pot]) wObj.ps[pot]={c:0,w:0}; if(isCorrect) wObj.ps[pot].c=(wObj.ps[pot].c||0)+1; else wObj.ps[pot].w=(wObj.ps[pot].w||0)+1; }
+
+// ── Antwort-Zähler pro Lern-Session ──────────────────────────────────────
+// learn_sessions speichert bisher nur Zeit. Die Spiele melden jede Antwort
+// hier an; der Session-Tracker in Shell schreibt die Differenz als
+// correct_count/wrong_count mit — damit steht „richtig/falsch pro Tag" auch
+// spielübergreifend zur Verfügung.
+var ANSWER_TALLY = {ok:0, bad:0};
+function tallyAnswer(correct){ if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++; }
+
+// ── Tages-Log im Leiterspiel ─────────────────────────────────────────────
+// data.days["2026-08-04"] = {a:Antworten, c:richtig, p0:% bei Tagesbeginn,
+//   p1:% aktuell, l:[an dem Tag gelernte Wörter], w:{Wort:{c,f,clue,p:Topf}}}
+// Damit ist pro Tag sichtbar: wie viel geübt, wie viel besser geworden,
+// welche Vokabeln dran waren und wie oft richtig/falsch.
+var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
+var DAY_WORDS_KEEP = 60;  // Tage mit Wort-Detail (spart Platz im Blob)
+function lsToday(){ return new Date().toISOString().slice(0,10); }
+function lsDayEntry(d, pctBefore){
+  var day = lsToday();
+  if(!d.days) d.days = {};
+  if(!d.days[day]) d.days[day] = {a:0, c:0, p0:Math.round(pctBefore||0), p1:Math.round(pctBefore||0), l:[], w:{}};
+  return d.days[day];
+}
+function lsLogAnswer(d, e){
+  var day = lsDayEntry(d, e.pctBefore);
+  day.a++; if(e.correct) day.c++;
+  day.p1 = Math.round(e.pctAfter||day.p1);
+  if(!day.w) day.w = {};
+  var rec = day.w[e.word];
+  if(!rec) rec = day.w[e.word] = {c:0, f:0, clue:e.clue||'', p:e.toPot};
+  if(e.correct) rec.c++; else rec.f++;
+  if(e.toPot!=null) rec.p = e.toPot;
+  if(e.toPot===6 && e.fromPot!==6){
+    if(!day.l) day.l = [];
+    if(day.l.indexOf(e.word)<0) day.l.push(e.word);
+  }
+  // Alte Tage ausdünnen, damit der Fortschritts-Datensatz nicht wächst.
+  var keys = Object.keys(d.days).sort();
+  if(keys.length > DAY_LOG_KEEP) keys.slice(0, keys.length-DAY_LOG_KEEP).forEach(function(k){ delete d.days[k]; });
+  var withWords = Object.keys(d.days).sort();
+  if(withWords.length > DAY_WORDS_KEEP){
+    withWords.slice(0, withWords.length-DAY_WORDS_KEEP).forEach(function(k){ if(d.days[k]) d.days[k].w = null; });
+  }
+}
+// Tageszahlen eines Runs — bevorzugt das Tages-Log, sonst aus den
+// Session-Einträgen (die es auch für die Zeit vor dem Log gibt).
+function lsDayStats(data, day){
+  var d = data||{};
+  var log = d.days && d.days[day];
+  if(log) return {ans:log.a||0, cor:log.c||0, p0:log.p0, p1:log.p1, learned:(log.l||[]).slice(), words:log.w||null, exact:true};
+  var sess = (d.sessions||[]).filter(function(s){ return s && s.d===day; });
+  if(!sess.length) return null;
+  var ans=0, cor=0;
+  sess.forEach(function(s){ ans+=s.ans||0; cor+=s.cor||0; });
+  // % vor dem Tag = Stand der letzten Session davor
+  var before = null;
+  (d.sessions||[]).forEach(function(s){ if(s && s.d < day && s.pct!=null) before = s.pct; });
+  var last = sess[sess.length-1];
+  return {ans:ans, cor:cor, p0:before!=null?before:null, p1:last.pct!=null?last.pct:null, learned:null, words:null, exact:false};
+}
 function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
 function lsSaveProgress(pid,rid,data,eid) {
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2538,6 +2600,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     newData.pots[moveTo].push(wObj);
     if(correct)newData.totalCorrect=(newData.totalCorrect||0)+1;
     else newData.totalWrong=(newData.totalWrong||0)+1;
+    tallyAnswer(correct);
+    lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData)});
     saveAndUpdate(newData);
     var pts=correct?5:0;
     if(pts>0&&onUpdateScore)onUpdateScore(pts);
@@ -2583,6 +2648,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     newData.pots[moveTo].push(wObj);
     if(correct) newData.totalCorrect=(newData.totalCorrect||0)+1;
     else newData.totalWrong=(newData.totalWrong||0)+1;
+    tallyAnswer(correct);
+    lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData)});
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -2658,6 +2726,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
+    tallyAnswer(correct);
     var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:entry.word,clue:entry.clue,typed:typed,skipped:false,kind:w.kind});
@@ -2680,6 +2749,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!Array.isArray(nd.tests)) nd.tests = [];
     nd.tests.push(entry);
     if(nd.tests.length>30) nd.tests = nd.tests.slice(-30);
+    // Test-Antworten zählen im Tages-Log mit (Töpfe ändern sie nicht).
+    var pctNow = lsPercent(nd);
+    finalLog.forEach(function(l){
+      if(l.kind==='sentence' || l.skipped) return;
+      lsLogAnswer(nd,{word:l.word, clue:l.clue, correct:!!l.correct, fromPot:null, toPot:null,
+        pctBefore:pctNow, pctAfter:pctNow});
+    });
     saveAndUpdate(nd);
   }
   function nextTestQuestion(){
@@ -3219,6 +3295,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlay
     var typed=input.trim(); if(!typed) return;
     var res=checkAnswer(typed,answer);
     var ok=res==='correct'||res==='partial';
+    tallyAnswer(ok);
     var pts=ok?calcPts():0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
@@ -3327,6 +3404,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer,
     setChosen(opt);
     var res=checkAnswer(opt,answer);
     var ok=res==='correct'||res==='partial';
+    tallyAnswer(ok);
     var pts=ok?10:0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
@@ -4284,6 +4362,171 @@ function GameBreakdown({ sessions, title }) {
   </div>;
 }
 
+// ── Leiterspiel-Fortschritt („wie viel besser geworden?") ────────────────
+// Prozent-Verlauf eines Runs: aus dem Tages-Log (p1) und aus den Sessions,
+// die es auch für die Zeit vor dem Tages-Log gibt.
+function lsPctSeries(data){
+  var out = [];
+  ((data||{}).sessions||[]).forEach(function(s){ if(s&&s.d&&s.pct!=null) out.push({d:s.d, pct:s.pct}); });
+  var days = (data||{}).days||{};
+  Object.keys(days).forEach(function(k){ if(days[k]&&days[k].p1!=null) out.push({d:k, pct:days[k].p1}); });
+  out.sort(function(a,b){ return a.d<b.d?-1:a.d>b.d?1:0; });
+  return out;
+}
+// Zuwachs seit `fromDay`. Ohne Aktivität in dem Zeitraum: 0 — sonst würde ein
+// alter, nicht mehr aktualisierter Session-Wert als frischer Fortschritt
+// erscheinen. Als Startwert zählt der früheste belegte Stand im Zeitraum
+// (Tages-Log: Stand bei Tagesbeginn, sonst der erste Session-Wert des Tages).
+function lsDeltaSince(data, fromDay){
+  var d = data||{};
+  var days = d.days||{};
+  var dayKeys = Object.keys(days).filter(function(k){ return k>=fromDay && days[k] && days[k].p0!=null; }).sort();
+  var sess = (d.sessions||[]).filter(function(s){ return s && s.d>=fromDay && s.pct!=null; });
+  if(!dayKeys.length && !sess.length) return 0;
+  var start = null, startDay = null;
+  if(dayKeys.length){ start = days[dayKeys[0]].p0; startDay = dayKeys[0]; }
+  if(sess.length && (startDay===null || sess[0].d < startDay)) start = sess[0].pct;
+  if(start==null) return 0;
+  return Math.round(lsPercent(d)) - Math.round(start);
+}
+function lsAnswersSince(data, fromDay){
+  var d = data||{}, n = 0, days = d.days||{}, counted = {};
+  Object.keys(days).forEach(function(k){ if(k>=fromDay){ n += (days[k]||{}).a||0; counted[k]=1; } });
+  (d.sessions||[]).forEach(function(s){ if(s && s.d>=fromDay && !counted[s.d]) n += s.ans||0; });
+  return n;
+}
+function lsLearnedInRange(data, fromDay){
+  var days = (data||{}).days||{}, n = 0;
+  Object.keys(days).forEach(function(k){ if(k>=fromDay) n += ((days[k]||{}).l||[]).length; });
+  return n;
+}
+// Fortschritt pro Leiterspiel: aktueller Stand, Zuwachs der letzten 7 Tage,
+// gelernte Vokabeln. Wird im Fortschritt-Tab und in der Admin-Ansicht genutzt.
+function LeiterspielFortschritt({ progressRows, runs, title }){
+  var today = new Date().toISOString().slice(0,10);
+  var cutoff = shiftDay(today,-6);
+  var list = (progressRows||[]).map(function(r){
+    var run = (runs||[]).find(function(x){ return x.id===r.run_id; });
+    if(!run) return null;
+    var d = parseData(r.data);
+    var pots = d.pots||{};
+    var total = [1,2,3,4,5,6].reduce(function(s,p){ return s+((pots[p]||[]).length); },0);
+    if(total===0) return null;
+    var pct = Math.round(lsPercent(d));
+    return {run:run, pct:pct, delta:lsDeltaSince(d, cutoff), total:total,
+      learned:(pots[6]||[]).length, almost:(pots[5]||[]).length,
+      answers:lsAnswersSince(d, cutoff), newLearned:lsLearnedInRange(d, cutoff)};
+  }).filter(Boolean);
+  if(list.length===0) return null;
+  list.sort(function(a,b){ return b.pct-a.pct; });
+  var sumLearned = list.reduce(function(s,x){ return s+x.learned; },0);
+  var sumTotal = list.reduce(function(s,x){ return s+x.total; },0);
+  var avg = Math.round(list.reduce(function(s,x){ return s+x.pct; },0)/list.length);
+  // Zuwachs nur über die Runs mitteln, an denen in der Woche gearbeitet wurde.
+  var active = list.filter(function(x){ return x.answers>0; });
+  var avgDelta = active.length ? Math.round(active.reduce(function(s,x){ return s+x.delta; },0)/active.length) : 0;
+  var weekAnswers = list.reduce(function(s,x){ return s+x.answers; },0);
+  var newLearned = list.reduce(function(s,x){ return s+x.newLearned; },0);
+  var Kpi = function(p){ return <div style={{flex:1,background:'white',borderRadius:10,border:'1px solid '+G200,padding:'10px 6px',textAlign:'center'}}>
+    <div style={{fontSize:16,fontWeight:'bold',color:p.color||T}}>{p.value}</div>
+    <div style={{fontSize:9,color:G400,marginTop:2}}>{p.label}</div>
+  </div>; };
+  return <div>
+    {title&&<div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{title}</div>}
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      <Kpi value={sumLearned+'/'+sumTotal} label="Vokabeln gelernt"/>
+      <Kpi value={avg+'%'} label="Ø Fortschritt"/>
+      <Kpi value={(avgDelta>0?'+':'')+avgDelta+'%'} label="7 Tage" color={avgDelta>0?T:avgDelta<0?RE:G400}/>
+      <Kpi value={weekAnswers} label="Antw. (7 T.)" color={weekAnswers>0?T:G400}/>
+    </div>
+    <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,padding:'8px 10px'}}>
+      {list.map(function(x){
+        var col = x.pct>=80?T:x.pct>=40?AM:RE;
+        return <div key={x.run.id} style={{marginBottom:9}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,marginBottom:3}}>
+            <span style={{fontSize:14}}>{x.run.icon||'🪜'}</span>
+            <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.run.name}</span>
+            {x.delta!==0&&<span style={{color:x.delta>0?T:RE,fontWeight:'bold',fontSize:10}}>{x.delta>0?'▲ +':'▼ '}{x.delta}%</span>}
+            <span style={{color:col,fontWeight:'bold'}}>{x.pct}%</span>
+          </div>
+          <div style={{height:7,background:G100,borderRadius:4,overflow:'hidden',position:'relative'}}>
+            <div style={{height:'100%',width:Math.max(0,x.pct-Math.max(0,x.delta))+'%',background:col,borderRadius:4,position:'absolute',left:0,top:0}}/>
+            {x.delta>0&&<div style={{height:'100%',width:x.delta+'%',background:'#5eead4',position:'absolute',left:Math.max(0,x.pct-x.delta)+'%',top:0}}/>}
+          </div>
+          <div style={{fontSize:9,color:G400,marginTop:2}}>✅ {x.learned} gelernt · fast geschafft {x.almost} · von {x.total} Vokabeln
+            {x.answers>0&&<span> · diese Woche {x.answers} Antworten{x.newLearned>0?', '+x.newLearned+' neu gelernt':''}</span>}</div>
+        </div>;
+      })}
+      <div style={{fontSize:9,color:G400,borderTop:'1px solid '+G100,paddingTop:6}}>Heller Balken = Zuwachs der letzten 7 Tage.</div>
+    </div>
+  </div>;
+}
+
+// Was an einem bestimmten Tag im Leiterspiel passiert ist: Antworten,
+// Verbesserung und die einzelnen Vokabeln mit richtig/falsch.
+function TagesLeiterspiel({ progressRows, runs, day }){
+  var [openRun,setOpenRun] = useState(null);
+  var list = (progressRows||[]).map(function(r){
+    var run = (runs||[]).find(function(x){ return x.id===r.run_id; });
+    var d = parseData(r.data);
+    var st = lsDayStats(d, day);
+    if(!st || (!st.ans && !(st.learned&&st.learned.length))) return null;
+    return {run:run, id:r.run_id, st:st};
+  }).filter(Boolean);
+  if(list.length===0) return null;
+  var totAns = list.reduce(function(s,x){ return s+(x.st.ans||0); },0);
+  var totCor = list.reduce(function(s,x){ return s+(x.st.cor||0); },0);
+  var totLearned = list.reduce(function(s,x){ return s+((x.st.learned||[]).length); },0);
+  var anyExact = list.some(function(x){ return x.st.exact; });
+  return <div style={{marginTop:10}}>
+    <div style={{fontSize:11,fontWeight:'bold',color:G600,marginBottom:6}}>🪜 Leiterspiel an diesem Tag</div>
+    <div style={{display:'flex',gap:6,marginBottom:8}}>
+      {[[totAns,'Antworten',T],[totCor,'richtig ✓',T],[totAns-totCor,'falsch ✗',RE],[totLearned,'neu gelernt',AM]].map(function(k,i){
+        return <div key={i} style={{flex:1,background:'white',borderRadius:8,border:'1px solid '+G200,padding:'7px 4px',textAlign:'center'}}>
+          <div style={{fontSize:15,fontWeight:'bold',color:k[2]}}>{k[0]}</div>
+          <div style={{fontSize:9,color:G400}}>{k[1]}</div>
+        </div>;
+      })}
+    </div>
+    {list.map(function(x){
+      var st = x.st;
+      var delta = (st.p0!=null&&st.p1!=null) ? Math.round(st.p1-st.p0) : null;
+      var words = st.words ? Object.keys(st.words).map(function(w){ return Object.assign({word:w}, st.words[w]); }) : [];
+      words.sort(function(a,b){ return (b.f-b.c)-(a.f-a.c) || (b.c+b.f)-(a.c+a.f); });
+      var isOpen = openRun===x.id;
+      return <div key={x.id} style={{background:'white',borderRadius:8,border:'1px solid '+G200,padding:'8px 10px',marginBottom:6}}>
+        <div onClick={words.length?function(){setOpenRun(isOpen?null:x.id);}:undefined}
+          style={{display:'flex',alignItems:'center',gap:6,fontSize:11,cursor:words.length?'pointer':'default'}}>
+          <span style={{fontSize:14}}>{(x.run&&x.run.icon)||'🪜'}</span>
+          <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(x.run&&x.run.name)||'Leiterspiel'}</span>
+          {delta!=null&&<span style={{color:delta>0?T:delta<0?RE:G400,fontWeight:'bold'}}>{delta>0?'+':''}{delta}%</span>}
+          {words.length>0&&<span style={{color:G400,fontSize:11}}>{isOpen?'▲':'▼'}</span>}
+        </div>
+        <div style={{fontSize:10,color:G400,marginTop:3}}>
+          {st.ans} Antworten · ✓ {st.cor} · ✗ {st.ans-st.cor}
+          {st.p1!=null&&<span> · Stand {Math.round(st.p1)}%</span>}
+          {(st.learned&&st.learned.length>0)&&<span style={{color:AM,fontWeight:'bold'}}> · 🏆 {st.learned.length} neu gelernt</span>}
+        </div>
+        {(st.learned&&st.learned.length>0)&&<div style={{fontSize:10,color:G600,marginTop:3}}>
+          {st.learned.map(function(w,i){ return <span key={i} style={{display:'inline-block',background:TL,color:TD,borderRadius:5,padding:'1px 5px',marginRight:4,marginTop:3}}>{w}</span>; })}
+        </div>}
+        {isOpen&&words.length>0&&<div style={{marginTop:7,borderTop:'1px solid '+G100,paddingTop:6}}>
+          {words.map(function(w,i){
+            return <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontSize:11,padding:'3px 0',borderBottom:i<words.length-1?'1px solid '+G100:'none'}}>
+              <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+              <span style={{color:G400,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>
+              {w.c>0&&<span style={{color:T,fontWeight:'bold'}}>✓{w.c}</span>}
+              {w.f>0&&<span style={{color:RE,fontWeight:'bold'}}>✗{w.f}</span>}
+              {w.p!=null&&<span style={{color:G400,fontSize:9}}>{w.p===6?'gelernt':'Topf '+w.p}</span>}
+            </div>;
+          })}
+        </div>}
+      </div>;
+    })}
+    {!anyExact&&<div style={{fontSize:9,color:G400}}>Für diesen Tag liegen nur Tageszahlen vor — die einzelnen Vokabeln werden seit dem 4.8.2026 mitgeschrieben.</div>}
+  </div>;
+}
+
 // Datum-Helfer (UTC-basiert, passend zu started_at.slice(0,10))
 function shiftDay(k, delta){ var p=k.split('-'); var d=new Date(Date.UTC(+p[0],+p[1]-1,+p[2])); d.setUTCDate(d.getUTCDate()+delta); return d.toISOString().slice(0,10); }
 function weekdayOf(k){ var p=k.split('-'); return new Date(Date.UTC(+p[0],+p[1]-1,+p[2])).getUTCDay(); }
@@ -4291,7 +4534,7 @@ function fmtDayShort(k){ var p=k.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 var WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
 // Tag-für-Tag durchblättern: Minuten + was an dem Tag gelernt wurde
-function TagesDetail({ sessions }) {
+function TagesDetail({ sessions, progressRows, runs }) {
   var today = new Date().toISOString().slice(0,10);
   var [sel,setSel] = useState(today);
   var withTime = (sessions||[]).filter(function(s){ return s.started_at && (s.active_seconds||0)>0; });
@@ -4301,6 +4544,10 @@ function TagesDetail({ sessions }) {
   if(sel>today) sel=today; if(sel<earliest) sel=earliest;
   var daySessions = (sessions||[]).filter(function(s){ return s.started_at && String(s.started_at).slice(0,10)===sel; });
   var daySec = daySessions.reduce(function(a,s){ return a+(s.active_seconds||0); },0);
+  // Antworten des Tages: aus learn_sessions (alle Spiele). Für ältere Tage
+  // ohne diese Zähler springt der Leiterspiel-Block darunter ein.
+  var dayAns = daySessions.reduce(function(a,s){ return a+(s.correct_count||0)+(s.wrong_count||0); },0);
+  var dayCor = daySessions.reduce(function(a,s){ return a+(s.correct_count||0); },0);
   var canPrev = sel>earliest, canNext = sel<today;
   var label = sel===today ? 'Heute' : sel===shiftDay(today,-1) ? 'Gestern' : WD_LONG[weekdayOf(sel)];
   var navBtn=function(dir,enabled){
@@ -4319,28 +4566,46 @@ function TagesDetail({ sessions }) {
         </div>
         {navBtn(1,canNext)}
       </div>
-      <div style={{textAlign:'center',marginBottom:daySec>0?12:2}}>
-        <span style={{fontSize:26,fontWeight:'bold',color:daySec>=DAILY_GOAL_SEC?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
-        <span style={{fontSize:12,color:G600,marginLeft:4}}>Min gelernt</span>
+      <div style={{display:'flex',gap:6,marginBottom:dayAns>0||daySec>0?12:2}}>
+        <div style={{flex:1,textAlign:'center'}}>
+          <span style={{fontSize:26,fontWeight:'bold',color:daySec>=DAILY_GOAL_SEC?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
+          <span style={{fontSize:12,color:G600,marginLeft:4}}>Min</span>
+        </div>
+        {dayAns>0&&<div style={{flex:1,textAlign:'center'}}>
+          <span style={{fontSize:26,fontWeight:'bold',color:T}}>{dayAns}</span>
+          <span style={{fontSize:12,color:G600,marginLeft:4}}>Antworten</span>
+          <div style={{fontSize:10,color:G400}}>✓ {dayCor} · ✗ {dayAns-dayCor}</div>
+        </div>}
       </div>
       {daySec>0
         ? <GameBreakdown sessions={daySessions} title="Was an diesem Tag gelernt wurde"/>
         : <div style={{textAlign:'center',color:G400,fontSize:12,padding:'6px 0 10px'}}>An diesem Tag wurde nicht gelernt.</div>}
+      <TagesLeiterspiel progressRows={progressRows} runs={runs} day={sel}/>
     </div>
   </div>;
 }
 
 // Eigene Lernübersicht für den Spieler selbst
-function MeineLernuebersicht({ player }) {
+function MeineLernuebersicht({ player, chapters, scope }) {
   var [sessions,setSessions]=useState(null);
+  var [progressRows,setProgressRows]=useState([]);
+  var [runs,setRuns]=useState([]);
   useEffect(function(){
     if(!player) return;
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!UUID.test(player.id)){ setSessions([]); return; }
-    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,active_seconds,started_at&order=started_at.desc&limit=1000')
+    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,active_seconds,correct_count,wrong_count,started_at&order=started_at.desc&limit=1000')
       .then(function(rows){ setSessions(Array.isArray(rows)?rows:[]); })
       .catch(function(){ setSessions([]); });
-  },[player&&player.id]);
+    sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data')
+      .then(function(rows){ setProgressRows(Array.isArray(rows)?rows:[]); })
+      .catch(function(){});
+    lsGetRunsForPlayer(player.id)
+      .then(function(rows){ setRuns(filterRunsByScope(rows||[], chapters||[], scope)); })
+      .catch(function(){});
+  },[player&&player.id, scope&&scope.grade, scope&&scope.language]);
+  var runIds = {}; (runs||[]).forEach(function(r){ runIds[r.id]=1; });
+  var scopedProgress = (progressRows||[]).filter(function(r){ return runIds[r.run_id]; });
   if(sessions===null) return <div style={{textAlign:'center',padding:20,color:G400,fontSize:12}}>Lade…</div>;
   var today=new Date().toISOString().slice(0,10);
   var totalSec=0, todaySec=0, days={};
@@ -4364,10 +4629,12 @@ function MeineLernuebersicht({ player }) {
       <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={todaySec>=DAILY_GOAL_SEC?T:'#d97706'}/>
       <Stat value={activeDays} label="Aktive Tage"/>
     </div>
+    <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} title="🪜 Dein Leiterspiel-Fortschritt"/>
+    <div style={{height:12}}/>
     <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📈 Deine Lernzeit pro Tag</div>
     <LernVerlaufChart sessions={chartSessions}/>
     <div style={{height:12}}/>
-    <TagesDetail sessions={sessions}/>
+    <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs}/>
     <div style={{height:12}}/>
     <GameBreakdown sessions={sessions} title="🎮 Insgesamt gelernt"/>
   </div>;
@@ -4545,6 +4812,7 @@ function WiederholungMode({ player, chapters, onDone }){
     var typed=input.trim(); if(!typed) return;
     var status=checkAnswer(typed, wordDisplay(cur));
     var correct = status==='correct'||status==='partial';
+    tallyAnswer(correct);
     var pts = correct ? ptsForHints(hints) : 0;
     var entry={word:cur.word, clue:cur.clue, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
@@ -5426,7 +5694,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
     sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+userId+')&select=*').then(function(rows){
       setUserRuns(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
     }).catch(function(){});
-    sbGet('learn_sessions','player_id=eq.'+userId+'&select=game,run_id,active_seconds,started_at&order=started_at.desc&limit=1000').then(function(rows){
+    sbGet('learn_sessions','player_id=eq.'+userId+'&select=game,run_id,active_seconds,correct_count,wrong_count,started_at&order=started_at.desc&limit=1000').then(function(rows){
       setUserLearnSessions(function(prev){var n=Object.assign({},prev);n[userId]=Array.isArray(rows)?rows:[];return n;});
     }).catch(function(){});
     sbGet('repeat_runs','player_id=eq.'+userId+'&select=*&order=created_at.desc&limit=30').then(function(rows){
@@ -6270,6 +6538,17 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
                   <LernVerlaufChart sessions={chartSessions} requiredMinPerDay={totalSollMin||null} targetDate={nearestTarget}/>
                 </div>}
 
+                {/* Fortschritt je Leiterspiel inkl. Zuwachs der letzten 7 Tage */}
+                {rows.length>0&&<div style={{marginTop:10}}>
+                  <SectionHead>🪜 Fortschritt je Leiterspiel</SectionHead>
+                  <LeiterspielFortschritt progressRows={rows} runs={runs}/>
+                </div>}
+
+                {/* Tag für Tag: Zeit, Antworten, gelernte Vokabeln */}
+                {learnSess.length>0&&<div style={{marginTop:10}}>
+                  <TagesDetail sessions={learnSess} progressRows={rows} runs={runs}/>
+                </div>}
+
                 {/* Aufschlüsselung nach Spiel */}
                 {learnSess.length>0&&<div style={{marginTop:10}}>
                   <SectionHead>🎮 Was gelernt wurde</SectionHead>
@@ -6917,6 +7196,7 @@ function KlassenarbeitTest({ player, questions, onDone }) {
       else if(q.kind==='grammar') correct=isCorrectAnswer(q,inp);
       else if(q.kind==='sentence') correct=kaSentenceMatch(inp,q.answer);
     }
+    tallyAnswer(correct);
     setLastCorrect(correct); setLastExpected(q.answer); setPhase('feedback');
   }
   function commitAnswer(correct){
@@ -7502,6 +7782,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
     var q=questions[qIdx];
     if(!q||result) return;
     var correct=isCorrectAnswer(q,opt);
+    tallyAnswer(correct);
     var newRes={q:q,input:opt,correct:correct};
     setChosen(opt);
     setResults(function(r){return r.concat([newRes]);});
@@ -7917,6 +8198,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     var startedAt = new Date().toISOString();
     var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now(), created=false;
     var IDLE_MS=120000, TICK_MS=1000, FLUSH_MS=15000;
+    // Antworten dieser Session = Zuwachs des globalen Zählers seit Sessionstart.
+    var baseOk=ANSWER_TALLY.ok, baseBad=ANSWER_TALLY.bad;
     function isActive(){ return document.visibilityState==='visible' && (Date.now()-lastActivity)<IDLE_MS; }
     // Jede Speicherung ist ein vollständiger Upsert (merge-duplicates auf der id).
     // Damit ist die Reihenfolge egal — kein "PATCH vor INSERT"-Verlust mehr, und
@@ -7924,7 +8207,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     function flush(closing, keepalive){
       if(created && localSeconds===lastSavedSeconds && !closing) return;
       created=true; lastSavedSeconds=localSeconds;
-      var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds };
+      var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds,
+        correct_count:Math.max(0,ANSWER_TALLY.ok-baseOk), wrong_count:Math.max(0,ANSWER_TALLY.bad-baseBad) };
       if(closing) row.ended_at=new Date().toISOString();
       try{
         fetch(SB_URL+'/rest/v1/learn_sessions',{
@@ -8146,7 +8430,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           </div>)}
 
           {screen==='progress'&&(<div>
-            <MeineLernuebersicht player={player}/>
+            <MeineLernuebersicht player={player} chapters={chapters} scope={scope}/>
             <RepeatHistorySelf player={player}/>
             <div style={{borderTop:'1px solid '+G200,margin:'16px 0 12px'}}/>
             <div style={{display:'flex',gap:6,marginBottom:12}}>
