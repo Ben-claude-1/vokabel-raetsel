@@ -123,6 +123,10 @@ CREATE TABLE IF NOT EXISTS public.ls_runs (
   -- chapterId ihrer Wörter zugeordnet.
   grade int,
   language text,
+  -- Gesetzt bei automatisch gepflegten Kapitel-Leiterspielen: die Kapitel-ID,
+  -- deren ⭐-Wörter dieser Run spiegelt. Wird beim Speichern von Kapitelwörtern
+  -- automatisch nachgezogen (Wort hinzugefügt/entfernt).
+  auto_chapter_id text,
   PRIMARY KEY (id)
 );
 
@@ -279,6 +283,7 @@ ALTER TABLE public.word_progress ADD CONSTRAINT word_progress_player_id_fkey FOR
 CREATE UNIQUE INDEX categories_name_key ON public.categories USING btree (name);
 CREATE INDEX idx_chapters_scope ON public.chapters USING btree (grade, language);
 CREATE INDEX idx_ls_runs_scope ON public.ls_runs USING btree (grade, language);
+CREATE UNIQUE INDEX idx_ls_runs_auto_chapter ON public.ls_runs USING btree (auto_chapter_id) WHERE (auto_chapter_id IS NOT NULL);
 CREATE INDEX idx_learn_sessions_player ON public.learn_sessions USING btree (player_id, started_at DESC);
 CREATE INDEX idx_learn_sessions_run ON public.learn_sessions USING btree (run_id) WHERE (run_id IS NOT NULL);
 CREATE INDEX idx_repeat_runs_player ON public.repeat_runs USING btree (player_id, created_at DESC);

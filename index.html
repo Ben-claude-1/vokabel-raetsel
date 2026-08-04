@@ -3799,6 +3799,89 @@ function LeitersSpielGradeSettings({ onDone }) {
 
 
 function sortWords(words){ return words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}); }
+// ── Kapitel-Leiterspiele (automatisch gepflegt) ──────────────────────────
+// Zu jedem Themenkapitel gehört ein Leiterspiel-Run, der genau die ⭐-Wörter
+// des Kapitels enthält (`ls_runs.auto_chapter_id` = Kapitel-ID). Ändert der
+// Admin die ⭐-Markierung, zieht der Run automatisch nach: neue Wörter kommen
+// dazu, entfernte fliegen raus. Der Lernfortschritt bleibt erhalten — das
+// Leiterspiel gleicht seine Töpfe beim Öffnen mit den Run-Wörtern ab.
+var AUTO_RUN_MIN_WORDS = 2; // darunter lohnt sich kein Run (Leiterspiel braucht ≥2)
+function autoRunWordsFor(chapter){
+  return safeWords(chapter && chapter.words)
+    .filter(function(w){ return w && w.important && w.word; })
+    .slice()
+    .sort(function(a,b){
+      var pa=(a.book_page!=null?a.book_page:99999), pb=(b.book_page!=null?b.book_page:99999);
+      if(pa!==pb) return pa-pb;
+      var sa=(typeof a.seq==='number'?a.seq:99999), sb=(typeof b.seq==='number'?b.seq:99999);
+      if(sa!==sb) return sa-sb;
+      return (a.word||'').localeCompare(b.word||'');
+    })
+    .map(function(w){
+      return {word:w.word, clue:w.clue, type:w.type||'noun', chapterId:chapter.id,
+        important:true, book_page:w.book_page, pot:1};
+    });
+}
+function autoRunName(chapter){ return chapter.title || 'Kapitel'; }
+// Hält den Run eines Kapitels aktuell. `allowCreate` legt fehlende Runs an —
+// beim normalen Speichern nur dann, wenn die Sprache dieses Kapitels schon
+// Kapitel-Leiterspiele nutzt (sonst würden ungewollt überall Runs entstehen).
+function syncAutoRun(chapter, opts){
+  opts = opts || {};
+  if(!chapter || !chapter.id || !chapter.parent_id) return Promise.resolve(null);
+  var words = autoRunWordsFor(chapter);
+  return sbGet('ls_runs','auto_chapter_id=eq.'+encodeURIComponent(chapter.id)+'&select=id,name,word_count')
+    .then(function(rows){
+      var existing = Array.isArray(rows) && rows[0];
+      if(existing){
+        if(words.length < AUTO_RUN_MIN_WORDS){
+          // Kapitel hat keine ⭐-Wörter mehr: Run leeren statt löschen, damit
+          // der Fortschritt der Kinder nicht verloren geht.
+          if((existing.word_count||0)===0) return {action:'none', run:existing};
+        }
+        return sbPatch('ls_runs',{name:autoRunName(chapter), words:JSON.stringify(words),
+          word_count:words.length, grade:chGrade(chapter), language:chLang(chapter)},
+          'id=eq.'+existing.id)
+          .then(function(ok){ return {action:ok?'updated':'error', run:existing, count:words.length}; });
+      }
+      if(!opts.allowCreate || words.length < AUTO_RUN_MIN_WORDS) return {action:'none'};
+      var run = {name:autoRunName(chapter), icon:chapter.icon||'🪜', player_id:null,
+        is_admin_run:true, word_count:words.length, sentence_count:0,
+        grade:chGrade(chapter), language:chLang(chapter), auto_chapter_id:chapter.id,
+        words:JSON.stringify(words), sentences:'[]', created_at:new Date().toISOString()};
+      return sbPost('ls_runs',run).then(function(res){
+        if(res&&res._err) return {action:'error', msg:res.msg};
+        return {action:'created', run:res, count:words.length};
+      });
+    })
+    .catch(function(){ return {action:'error'}; });
+}
+// Existiert in dieser Klasse/Sprache schon mindestens ein Kapitel-Leiterspiel?
+function scopeUsesAutoRuns(chapter, allChapters){
+  var siblings = (allChapters||[]).filter(function(c){
+    return c.parent_id && chGrade(c)===chGrade(chapter) && chLang(c)===chLang(chapter);
+  }).map(function(c){ return c.id; });
+  if(!siblings.length) return Promise.resolve(false);
+  return sbGet('ls_runs','auto_chapter_id=in.('+siblings.map(encodeURIComponent).join(',')+')&select=id&limit=1')
+    .then(function(rows){ return Array.isArray(rows) && rows.length>0; })
+    .catch(function(){ return false; });
+}
+// Alle Themenkapitel einer Klasse/Sprache: Runs anlegen bzw. aktualisieren.
+function syncAutoRunsForScope(allChapters, sc){
+  var list = (allChapters||[]).filter(function(c){
+    return c.parent_id && inScope(c, sc) && safeWords(c.words).length>0;
+  }).sort(naturalSort);
+  return list.reduce(function(p, ch){
+    return p.then(function(acc){
+      return syncAutoRun(ch, {allowCreate:true}).then(function(r){
+        if(r&&r.action==='created') acc.created++;
+        else if(r&&r.action==='updated') acc.updated++;
+        return acc;
+      });
+    });
+  }, Promise.resolve({created:0, updated:0}));
+}
+
 function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving, setMsg) {
   setSaving(true);
   if(!chapter.id){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
@@ -3806,6 +3889,16 @@ function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving
     if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('✓ Gespeichert'); }
     else setMsg('Fehler!');
     setSaving(false);
+    if(!ok) return;
+    // ⭐-Änderungen ins Kapitel-Leiterspiel durchreichen.
+    var updated = Object.assign({}, chapter, {words:newWords});
+    scopeUsesAutoRuns(updated, allChapters).then(function(uses){
+      return syncAutoRun(updated, {allowCreate:uses});
+    }).then(function(r){
+      if(r && (r.action==='updated'||r.action==='created')){
+        setMsg('✓ Gespeichert · Leiterspiel „'+autoRunName(updated)+'": '+r.count+' ⭐-Wörter');
+      }
+    }).catch(function(){});
   });
 }
 function saveChapterSentences(chapter, newSentences, allChapters, setChapters, setSaving, setMsg) {
@@ -4640,6 +4733,8 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
   var [editRun, setEditRun] = useState(null);
   var [tab, setTab] = useState('runs');
   var [expanded, setExpanded] = useState({});
+  var [syncing, setSyncing] = useState(false);
+  var [syncMsg, setSyncMsg] = useState('');
   function toggle(key){ setExpanded(function(prev){var n=Object.assign({},prev);n[key]=!n[key];return n;}); }
   useEffect(function(){
     Promise.all([
@@ -4719,6 +4814,25 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
         {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['time','⏱️ Zeit'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:11,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
+        <div style={{marginBottom:10,padding:'8px 10px',background:'#f0fdfa',border:'1px solid #99f6e4',borderRadius:8,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{flex:1,minWidth:170}}>
+            <div style={{fontSize:11,fontWeight:'bold',color:'#0f766e'}}>🪜 Kapitel-Leiterspiele</div>
+            <div style={{fontSize:10,color:G400}}>Pro Kapitel ein Run mit allen ⭐-Wörtern ({scopeText(scope)}). Wird beim Ändern der ⭐-Markierung automatisch nachgezogen.</div>
+          </div>
+          <button disabled={syncing} onClick={function(){
+            setSyncing(true);
+            syncAutoRunsForScope(chapters, scope).then(function(r){
+              return lsGetRuns().then(function(rows){
+                setRuns(filterRunsByScope(Array.isArray(rows)?rows:[], chapters, scope));
+                setSyncMsg('✓ '+r.created+' angelegt, '+r.updated+' aktualisiert');
+              });
+            }).catch(function(){ setSyncMsg('Fehler beim Anlegen'); })
+              .then(function(){ setSyncing(false); setTimeout(function(){setSyncMsg('');},4000); });
+          }} style={BtnStyle(T,'white',{padding:'6px 11px',fontSize:11,opacity:syncing?0.6:1})}>
+            {syncing?'…':'↻ Anlegen / aktualisieren'}
+          </button>
+          {syncMsg&&<span style={{fontSize:11,color:'#0f766e',fontWeight:'bold'}}>{syncMsg}</span>}
+        </div>
         {runs.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Noch keine Runs vorhanden.</div>}
         {runs.map(function(run){
           function updateGoal(field, value){
@@ -4732,7 +4846,7 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
               <span style={{fontSize:20}}>{run.icon||'🎯'}</span>
               <div style={{flex:1}}>
                 <div style={{fontWeight:'bold',fontSize:13}}>{run.name}</div>
-                <div style={{fontSize:10,color:G400}}>{getWordCount(run)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}</div>
+                <div style={{fontSize:10,color:G400}}>{getWordCount(run)} Vokabeln{run.is_admin_run?' · 📋 Klassen-Run':''}{run.auto_chapter_id?' · 🪜 folgt ⭐-Markierung':''}</div>
               </div>
               <button onClick={function(){setEditRun(run);}} style={BtnStyle(T,'white',{padding:'5px 10px',fontSize:11})}>✏️</button>
               <button onClick={function(){deleteRun(run.id);}} style={BtnStyle(RE,'white',{padding:'5px 10px',fontSize:11})}>🗑</button>
