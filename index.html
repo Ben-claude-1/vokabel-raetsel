@@ -2026,27 +2026,56 @@ var ANSWER_TALLY = {ok:0, bad:0};
 function tallyAnswer(correct){ if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++; }
 
 // ── Tages-Log im Leiterspiel ─────────────────────────────────────────────
-// data.days["2026-08-04"] = {a:Antworten, c:richtig, p0:% bei Tagesbeginn,
-//   p1:% aktuell, l:[an dem Tag gelernte Wörter], w:{Wort:{c,f,clue,p:Topf}}}
-// Damit ist pro Tag sichtbar: wie viel geübt, wie viel besser geworden,
-// welche Vokabeln dran waren und wie oft richtig/falsch.
+// data.days["2026-08-04"] = {a:Antworten, c:richtig, a1/c1:Erstversuche des
+//   Tages (nur die zeigen echtes Behalten — Wiederholungen kurz danach nicht),
+//   n:Wörter im Run an dem Tag (trennt „verwässert" von „vergessen"),
+//   p0/p1:% bei Tagesbeginn/-ende, l:[an dem Tag gelernte Wörter],
+//   w:{Wort:{c,f,s:übersprungen,clue,p:Topf,g:Tage seit letztem Mal,
+//            f1:Erstversuch richtig,t:Antwortzeit ms}}}
+// Am Wort selbst (in den Töpfen): ls = zuletzt gefragt, lc = zuletzt gekonnt.
 var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
 var DAY_WORDS_KEEP = 60;  // Tage mit Wort-Detail (spart Platz im Blob)
 function lsToday(){ return new Date().toISOString().slice(0,10); }
+function daysBetween(a, b){
+  if(!a||!b) return null;
+  var pa=a.split('-'), pb=b.split('-');
+  return Math.round((Date.UTC(+pb[0],+pb[1]-1,+pb[2]) - Date.UTC(+pa[0],+pa[1]-1,+pa[2]))/86400000);
+}
+function lsWordCount(d){
+  return [1,2,3,4,5,6].reduce(function(s,p){ return s + (((d.pots||{})[p]||[]).length); },0);
+}
 function lsDayEntry(d, pctBefore){
   var day = lsToday();
   if(!d.days) d.days = {};
-  if(!d.days[day]) d.days[day] = {a:0, c:0, p0:Math.round(pctBefore||0), p1:Math.round(pctBefore||0), l:[], w:{}};
+  if(!d.days[day]) d.days[day] = {a:0, c:0, a1:0, c1:0, p0:Math.round(pctBefore||0), p1:Math.round(pctBefore||0), l:[], w:{}};
   return d.days[day];
 }
 function lsLogAnswer(d, e){
+  var today = lsToday();
   var day = lsDayEntry(d, e.pctBefore);
   day.a++; if(e.correct) day.c++;
   day.p1 = Math.round(e.pctAfter||day.p1);
+  day.n = lsWordCount(d);
   if(!day.w) day.w = {};
   var rec = day.w[e.word];
+  var first = !rec;
   if(!rec) rec = day.w[e.word] = {c:0, f:0, clue:e.clue||'', p:e.toPot};
+  if(first){
+    // Erstversuch des Tages: der zählt für „hat sie es wirklich behalten?".
+    day.a1 = (day.a1||0)+1; if(e.correct) day.c1 = (day.c1||0)+1;
+    rec.f1 = e.correct?1:0;
+    var prevSeen = e.wObj && e.wObj.ls;
+    var gap = daysBetween(prevSeen, today);
+    if(gap!=null && gap>0) rec.g = gap;
+    // Antwortzeiten über 2 Min sind Pausen, keine Denkzeit — nicht verwerten.
+    if(e.rt!=null && e.rt>0 && e.rt<120000) rec.t = Math.round(e.rt);
+  }
+  if(e.skipped) rec.s = (rec.s||0)+1;
   if(e.correct) rec.c++; else rec.f++;
+  if(e.wObj){
+    e.wObj.ls = today;
+    if(e.correct) e.wObj.lc = today;
+  }
   if(e.toPot!=null) rec.p = e.toPot;
   if(e.toPot===6 && e.fromPot!==6){
     if(!day.l) day.l = [];
@@ -2065,7 +2094,8 @@ function lsLogAnswer(d, e){
 function lsDayStats(data, day){
   var d = data||{};
   var log = d.days && d.days[day];
-  if(log) return {ans:log.a||0, cor:log.c||0, p0:log.p0, p1:log.p1, learned:(log.l||[]).slice(), words:log.w||null, exact:true};
+  if(log) return {ans:log.a||0, cor:log.c||0, first:log.a1||0, firstCor:log.c1||0, count:log.n||null,
+    p0:log.p0, p1:log.p1, learned:(log.l||[]).slice(), words:log.w||null, exact:true};
   var sess = (d.sessions||[]).filter(function(s){ return s && s.d===day; });
   if(!sess.length) return null;
   var ans=0, cor=0;
@@ -2463,6 +2493,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var sesLastActive = useRef(null);
   var sesActiveSec = useRef(0);
   var inputRef = useRef();
+  var qShownAt = useRef(null); // Zeitpunkt, an dem die Frage erschien → Antwortzeit
+  function answerMs(){ var t=qShownAt.current; qShownAt.current=null; return t?Date.now()-t:null; }
 
   useEffect(function(){
     if(!player||!run) return;
@@ -2549,6 +2581,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var w = lsPickWord(data, current ? current.word : null);
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
+    qShownAt.current = Date.now();
     if(w.pot===1){
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
@@ -2602,7 +2635,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     else newData.totalWrong=(newData.totalWrong||0)+1;
     tallyAnswer(correct);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
-      pctBefore:lsPercent(data), pctAfter:lsPercent(newData)});
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
     saveAndUpdate(newData);
     var pts=correct?5:0;
     if(pts>0&&onUpdateScore)onUpdateScore(pts);
@@ -2616,13 +2649,44 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     }, correct?800:1500);
   }
 
-  function submitAnswer(){
+  // „Nicht gewusst" in Topf 1 (Multiple Choice): zählt als falsche Antwort,
+  // das Wort bleibt in Topf 1 und der Streak wird zurückgesetzt.
+  function skipQuiz(){
+    if(!current || quizChosen) return;
+    setQuizChosen({word:''});
+    var rt = answerMs();
+    setSesAns(function(n){return n+1;}); trackActiveTime();
+    var newData = JSON.parse(JSON.stringify(data));
+    var potArr = (newData.pots[1]||[]);
+    var wIdx = potArr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(current.word); });
+    var wObj = wIdx>=0 ? potArr.splice(wIdx,1)[0] : {word:current.word,clue:current.clue,streak:0};
+    wObj.streak = 0;
+    wObj.wrong = (wObj.wrong||0)+1;
+    trackPot(wObj,1,false);
+    if(!newData.pots[1]) newData.pots[1]=[];
+    newData.pots[1].push(wObj);
+    newData.totalWrong = (newData.totalWrong||0)+1;
+    tallyAnswer(false);
+    lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:1,toPot:1,
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:true});
+    saveAndUpdate(newData);
+    setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:'',correct:false,partial:false,skipped:true,fromPot:1,toPot:1,pts:0}]);});
+    setStreakCount(0);
+    setResult({skipped:true,correct:false,word:current.word,clue:current.clue,answer:current.word,typed:'',fromPot:1,toPot:1,pts:0});
+    setPhase('showResult');
+  }
+
+  // Eine getippte Antwort verbuchen. `skipped` = „Nicht gewusst": zählt wie
+  // eine falsche Antwort (das ist es ja auch) und wird zusätzlich als
+  // übersprungen vermerkt — vorher verschwanden genau diese Wörter spurlos.
+  function submitAnswer(skipped){
     if(!current) return;
-    var typed = input.trim();
+    var rt = answerMs();
+    var typed = skipped ? '' : input.trim();
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
-    var status = checkAnswer(typed, correctAnswer);
+    var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     var newData = JSON.parse(JSON.stringify(data));
@@ -2650,7 +2714,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     else newData.totalWrong=(newData.totalWrong||0)+1;
     tallyAnswer(correct);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
-      pctBefore:lsPercent(data), pctAfter:lsPercent(newData)});
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -2659,9 +2723,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
     var newSc = correct ? streakCount+1 : 0;
     setStreakCount(newSc);
-    var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',fromPot:fromPot,toPot:moveTo,pts:pts};
+    var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',skipped:!!skipped,fromPot:fromPot,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
-    setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+    setResult({correct:correct,partial:status==='partial',skipped:!!skipped,answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
     setPhase('showResult');
     if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
@@ -2714,6 +2778,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!sesStart) setSesStart(Date.now());
     setTestWords(picked); setTestIdx(0); setTestLog([]);
     setInput(''); setResult(null); setCurrent(picked[0]);
+    qShownAt.current = Date.now();
     setPhase('test_q');
   }
   function testItemPrompt(it){ return it.kind==='sentence' ? it.translation : it.clue; }
@@ -2727,7 +2792,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     tallyAnswer(correct);
-    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null};
+    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null, rt:answerMs()};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:entry.word,clue:entry.clue,typed:typed,skipped:false,kind:w.kind});
     setPhase('test_show');
@@ -2735,7 +2800,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   function skipTestAnswer(){
     var w = testWords[testIdx]; if(!w) return;
     setSesAns(function(n){return n+1;}); trackActiveTime();
-    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:'', correct:false, partial:false, skipped:true, wordRef:w.wordRef||null};
+    tallyAnswer(false);
+    var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:'', correct:false, partial:false, skipped:true, wordRef:w.wordRef||null, rt:answerMs()};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({skipped:true,correct:false,answer:testItemAnswer(w),word:entry.word,clue:entry.clue,typed:'',kind:w.kind});
     setPhase('test_show');
@@ -2752,9 +2818,16 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     // Test-Antworten zählen im Tages-Log mit (Töpfe ändern sie nicht).
     var pctNow = lsPercent(nd);
     finalLog.forEach(function(l){
-      if(l.kind==='sentence' || l.skipped) return;
+      if(l.kind==='sentence') return;
+      // Wort-Objekt im Topf suchen, damit „zuletzt gefragt/gekonnt" auch nach
+      // einem Test stimmt und der Abstand richtig gemessen wird.
+      var wObj = null;
+      [1,2,3,4,5,6].forEach(function(p){
+        if(wObj) return;
+        wObj = (nd.pots[p]||[]).find(function(x){ return normWordKey(x.word)===normWordKey(l.word); }) || null;
+      });
       lsLogAnswer(nd,{word:l.word, clue:l.clue, correct:!!l.correct, fromPot:null, toPot:null,
-        pctBefore:pctNow, pctAfter:pctNow});
+        pctBefore:pctNow, pctAfter:pctNow, rt:l.rt, wObj:wObj, skipped:!!l.skipped});
     });
     saveAndUpdate(nd);
   }
@@ -2766,7 +2839,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       setPhase('test_done');
       return;
     }
-    setTestIdx(nextI); setCurrent(testWords[nextI]); setPhase('test_q');
+    setTestIdx(nextI); setCurrent(testWords[nextI]); qShownAt.current = Date.now(); setPhase('test_q');
   }
   function exitTest(){
     setTestWords([]); setTestIdx(0); setTestLog([]);
@@ -2901,7 +2974,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             </button>;
           })}
         </div>
-        <button onClick={function(){setResult({skipped:true,word:current?current.word:'',clue:current?current.clue:'',answer:current?current.word:'',fromPot:1,toPot:1,pts:0});setPhase('showResult');}}
+        <button onClick={function(){ skipQuiz(); }}
           style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
@@ -2956,7 +3029,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
           setPhase('showResult');
         }}/>}
-        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:2,toPot:2,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
+        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
       </div>
     );
   }
@@ -2995,7 +3068,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
           <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){setResult({skipped:true,answer:current?current.word:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:3,toPot:3,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
   }
@@ -3017,7 +3090,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
           <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){setResult({skipped:true,answer:current?current.clue:'',word:current?current.word:'',clue:current?current.clue:'',fromPot:current?current.pot:1,toPot:current?current.pot:1,pts:0});setPhase('showResult');}} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
     );
     return(
@@ -4477,6 +4550,8 @@ function TagesLeiterspiel({ progressRows, runs, day }){
   var totAns = list.reduce(function(s,x){ return s+(x.st.ans||0); },0);
   var totCor = list.reduce(function(s,x){ return s+(x.st.cor||0); },0);
   var totLearned = list.reduce(function(s,x){ return s+((x.st.learned||[]).length); },0);
+  var totFirst = list.reduce(function(s,x){ return s+(x.st.first||0); },0);
+  var totFirstCor = list.reduce(function(s,x){ return s+(x.st.firstCor||0); },0);
   var anyExact = list.some(function(x){ return x.st.exact; });
   return <div style={{marginTop:10}}>
     <div style={{fontSize:11,fontWeight:'bold',color:G600,marginBottom:6}}>🪜 Leiterspiel an diesem Tag</div>
@@ -4488,6 +4563,10 @@ function TagesLeiterspiel({ progressRows, runs, day }){
         </div>;
       })}
     </div>
+    {totFirst>0&&<div style={{fontSize:10,color:G400,marginTop:-2,marginBottom:8}}>
+      Beim <b style={{color:G600}}>ersten Versuch</b> des Tages (das zeigt, was wirklich hängengeblieben ist):
+      <b style={{color:totFirstCor/totFirst>=0.7?T:AM}}> {totFirstCor}/{totFirst} richtig</b> = {Math.round(100*totFirstCor/totFirst)} %
+    </div>}
     {list.map(function(x){
       var st = x.st;
       var delta = (st.p0!=null&&st.p1!=null) ? Math.round(st.p1-st.p0) : null;
@@ -4504,7 +4583,9 @@ function TagesLeiterspiel({ progressRows, runs, day }){
         </div>
         <div style={{fontSize:10,color:G400,marginTop:3}}>
           {st.ans} Antworten · ✓ {st.cor} · ✗ {st.ans-st.cor}
+          {st.first>0&&<span> · Erstversuch {st.firstCor}/{st.first}</span>}
           {st.p1!=null&&<span> · Stand {Math.round(st.p1)}%</span>}
+          {st.count&&<span> von {st.count} Wörtern</span>}
           {(st.learned&&st.learned.length>0)&&<span style={{color:AM,fontWeight:'bold'}}> · 🏆 {st.learned.length} neu gelernt</span>}
         </div>
         {(st.learned&&st.learned.length>0)&&<div style={{fontSize:10,color:G600,marginTop:3}}>
@@ -4512,12 +4593,20 @@ function TagesLeiterspiel({ progressRows, runs, day }){
         </div>}
         {isOpen&&words.length>0&&<div style={{marginTop:7,borderTop:'1px solid '+G100,paddingTop:6}}>
           {words.map(function(w,i){
-            return <div key={i} style={{display:'flex',alignItems:'center',gap:6,fontSize:11,padding:'3px 0',borderBottom:i<words.length-1?'1px solid '+G100:'none'}}>
-              <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
-              <span style={{color:G400,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>
-              {w.c>0&&<span style={{color:T,fontWeight:'bold'}}>✓{w.c}</span>}
-              {w.f>0&&<span style={{color:RE,fontWeight:'bold'}}>✗{w.f}</span>}
-              {w.p!=null&&<span style={{color:G400,fontSize:9}}>{w.p===6?'gelernt':'Topf '+w.p}</span>}
+            return <div key={i} style={{padding:'3px 0',borderBottom:i<words.length-1?'1px solid '+G100:'none'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11}}>
+                <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+                <span style={{color:G400,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>
+                {w.c>0&&<span style={{color:T,fontWeight:'bold'}}>✓{w.c}</span>}
+                {w.f>0&&<span style={{color:RE,fontWeight:'bold'}}>✗{w.f}</span>}
+                {w.p!=null&&<span style={{color:G400,fontSize:9}}>{w.p===6?'gelernt':'Topf '+w.p}</span>}
+              </div>
+              {(w.f1!=null||w.g||w.t||w.s)&&<div style={{fontSize:9,color:G400,marginTop:1}}>
+                {w.f1!=null&&<span style={{color:w.f1?T:RE}}>1. Versuch {w.f1?'richtig':'falsch'}</span>}
+                {w.g?<span> · nach {w.g} Tag{w.g===1?'':'en'}</span>:null}
+                {w.t?<span> · {(w.t/1000).toFixed(1)} s</span>:null}
+                {w.s?<span> · {w.s}× „nicht gewusst"</span>:null}
+              </div>}
             </div>;
           })}
         </div>}
