@@ -2089,6 +2089,66 @@ function lsLogAnswer(d, e){
     withWords.slice(0, withWords.length-DAY_WORDS_KEEP).forEach(function(k){ if(d.days[k]) d.days[k].w = null; });
   }
 }
+// ── Pflicht-Wiederholung ─────────────────────────────────────────────────
+// Alle X Tage ist das Leiterspiel gesperrt, bis ein Wiederholungslauf gemacht
+// wurde. Abgefragt wird aus den bereits gelernten Vokabeln — und zwar die,
+// die nach ihrem persönlichen Wiederholungsabstand am weitesten überfällig
+// sind. Der Abstand wächst mit jedem Erfolg (Leitner): 1 → 3 → 7 → 14 → 30 →
+// 60 Tage. Ein Fehler setzt ihn zurück.
+var REVIEW_DEFAULT = {enabled:true, days:7, count:20, minPool:20};
+var REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60];
+var DAY_MS = 86400000;
+function reviewKey(w){ return normWordKey(w && w.word); }
+// Aus der Lauf-Historie je Vokabel: wann zuletzt abgefragt, wie viele Erfolge
+// in Folge seither, wann zuletzt gekonnt.
+function reviewHistoryStats(history){
+  var m = {};
+  // älteste zuerst, damit die Serie in der richtigen Richtung wächst
+  var runs = (history||[]).slice().sort(function(a,b){
+    return (Date.parse(a.created_at||'')||0) - (Date.parse(b.created_at||'')||0);
+  });
+  runs.forEach(function(run){
+    var ts = Date.parse(run.created_at||'') || 0;
+    var items = parseData(run.items);
+    (Array.isArray(items)?items:[]).forEach(function(it){
+      var k = reviewKey(it); if(!k) return;
+      var e = m[k] || (m[k] = {last:0, level:0, lastOk:0});
+      e.last = ts;
+      // „Gekonnt" zählt nur ohne Tipp — mit Tipp ist es kein Beleg für Können.
+      if(it.correct && !it.hints){ e.level = Math.min(REVIEW_INTERVALS.length-1, e.level+1); e.lastOk = ts; }
+      else e.level = 0;
+    });
+  });
+  return m;
+}
+// Überfälligkeit: 1 = genau fällig, 2 = doppelt so lange her wie erlaubt.
+// Als „zuletzt gekonnt" zählt auch der letzte richtige Treffer im Leiterspiel.
+function reviewOverdue(entry, stats, nowMs){
+  var st = stats[reviewKey(entry)];
+  var level = st ? st.level : 0;
+  var interval = REVIEW_INTERVALS[Math.min(level, REVIEW_INTERVALS.length-1)];
+  var lastOk = Math.max(st?st.lastOk:0, entry.lcMs||0);
+  if(!lastOk) return 99; // nie belegt gekonnt (Altbestand) → höchste Priorität
+  return ((nowMs - lastOk) / DAY_MS) / interval;
+}
+function reviewPolicyOf(raw){
+  var p = Object.assign({}, REVIEW_DEFAULT);
+  try{ var v = typeof raw==='string' ? JSON.parse(raw) : raw; if(v) Object.assign(p, v); }catch(e){}
+  p.days = Math.max(1, Number(p.days)||REVIEW_DEFAULT.days);
+  p.count = Math.max(5, Number(p.count)||REVIEW_DEFAULT.count);
+  p.minPool = Math.max(1, Number(p.minPool)||REVIEW_DEFAULT.minPool);
+  return p;
+}
+// Ist das Leiterspiel gesperrt? Erst wenn genug Gelerntes da ist und der
+// letzte Lauf länger als das Intervall her ist.
+function reviewLockState(policy, lastReviewIso, poolSize){
+  var p = reviewPolicyOf(policy);
+  if(!p.enabled || poolSize < p.minPool) return {locked:false, policy:p, daysSince:null};
+  var last = lastReviewIso ? Date.parse(lastReviewIso) : 0;
+  var daysSince = last ? Math.floor((Date.now()-last)/DAY_MS) : null;
+  return {locked: !last || daysSince >= p.days, policy:p, daysSince:daysSince};
+}
+
 // Tageszahlen eines Runs — bevorzugt das Tages-Log, sonst aus den
 // Session-Einträgen (die es auch für die Zeit vor dem Log gibt).
 function lsDayStats(data, day){
@@ -3515,7 +3575,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer,
   );
 }
 
-function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers }) {
+function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, reviewInfo, onReview }) {
   var [runs, setRuns] = useState([]);
   var [loading, setLoading] = useState(true);
   var [streakSettings, setStreakSettings] = useState(null);
@@ -3545,6 +3605,24 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers }
     }
   },[]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
+  // Pflicht-Wiederholung: solange sie offen ist, bleibt das Leiterspiel zu.
+  if(reviewInfo && reviewInfo.locked) return(
+    <div style={{padding:16}}>
+      <div style={{background:'white',border:'2px solid '+AM,borderRadius:16,padding:'22px 18px',textAlign:'center'}}>
+        <div style={{fontSize:44,marginBottom:8}}>🔒</div>
+        <div style={{fontWeight:'bold',fontSize:17,color:G900,marginBottom:6}}>Erst die Wiederholung!</div>
+        <div style={{fontSize:13,color:G600,lineHeight:1.55,marginBottom:4}}>
+          Alle {reviewInfo.policy.days} Tage prüfen wir, ob die gelernten Vokabeln noch sitzen.
+          {reviewInfo.daysSince!=null
+            ? ' Deine letzte Wiederholung war vor '+reviewInfo.daysSince+' Tag'+(reviewInfo.daysSince===1?'':'en')+'.'
+            : ' Du hast noch keine gemacht.'}
+        </div>
+        <div style={{fontSize:12,color:G400,marginBottom:16}}>{reviewInfo.poolSize} gelernte Vokabeln im Pool · abgefragt wird, was am längsten her ist.</div>
+        <button onClick={onReview} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>🔁 Wiederholung starten</button>
+        <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
+      </div>
+    </div>
+  );
   var scopedRuns = filterRunsByScope(runs, chapters, scope);
   if(scopedRuns.length===0) return <div style={{padding:16,textAlign:'center',color:G400,fontSize:13}}>
     Noch keine Runs für {scopeText(scope)}.{runs.length>0?' In einer anderen Klasse/Sprache gibt es welche — oben in der Kopfzeile umschalten.':' Bitte Admin fragen.'}
@@ -3896,6 +3974,59 @@ function KapitelProgress({ player, chapters, onDone }) {
   return <ProgressStats chapters={chapters} player={player} allCategories={[]} />;
 }
 
+// Regel für die Pflicht-Wiederholung: Takt, Umfang und ab wann sie greift.
+function ReviewPolicySettings(){
+  var [pol,setPol]=useState(REVIEW_DEFAULT);
+  var [saving,setSaving]=useState(false);
+  var [msg,setMsg]=useState('');
+  useEffect(function(){
+    sbGet('settings','key=eq.review_policy&select=value').then(function(d){
+      if(d&&d[0]) setPol(reviewPolicyOf(d[0].value));
+    }).catch(function(){});
+  },[]);
+  function save(){
+    setSaving(true);
+    var val=JSON.stringify(reviewPolicyOf(pol));
+    sbGet('settings','key=eq.review_policy').then(function(d){
+      var p = d&&d[0] ? sbPatch('settings',{value:val},'key=eq.review_policy') : sbPost('settings',{key:'review_policy',value:val});
+      return Promise.resolve(p);
+    }).then(function(){ setSaving(false); setMsg('✓ Gespeichert'); setTimeout(function(){setMsg('');},2500); })
+      .catch(function(){ setSaving(false); setMsg('Fehler'); });
+  }
+  function Row(props){
+    return <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:'1px solid '+G100}}>
+      <div style={{flex:1}}>
+        <div style={{fontSize:12,color:G600,fontWeight:'bold'}}>{props.label}</div>
+        <div style={{fontSize:10,color:G400}}>{props.hint}</div>
+      </div>
+      <input type='number' min={props.min} max={props.max} value={props.value}
+        onChange={function(e){ props.onChange(parseInt(e.target.value,10)||props.value); }}
+        style={{width:62,padding:'6px 8px',fontSize:13,border:'1px solid '+G200,borderRadius:6,textAlign:'center'}}/>
+    </div>;
+  }
+  return <div style={{marginTop:22,paddingTop:14,borderTop:'2px solid '+G100}}>
+    <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:2}}>🔁 Pflicht-Wiederholung</div>
+    <p style={{fontSize:11,color:G400,marginBottom:10,lineHeight:1.5}}>
+      Nach dem eingestellten Takt ist das Leiterspiel gesperrt, bis ein Wiederholungslauf gemacht wurde.
+      Abgefragt werden gelernte Vokabeln — die am längsten überfälligen zuerst (Abstand wächst 1→3→7→14→30→60 Tage).
+      Falsch beantwortete wandern zurück in Topf 4.
+    </p>
+    <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'1px solid '+G100}}>
+      <div style={{flex:1,fontSize:12,color:G600,fontWeight:'bold'}}>Aktiv</div>
+      <button onClick={function(){ setPol(Object.assign({},pol,{enabled:!pol.enabled})); }}
+        style={BtnStyle(pol.enabled?T:G100, pol.enabled?'white':G600, {padding:'6px 14px',fontSize:12})}>{pol.enabled?'An':'Aus'}</button>
+    </div>
+    <Row label="Takt in Tagen" hint="Sperre, wenn die letzte Wiederholung so lange her ist" min={1} max={60}
+      value={pol.days} onChange={function(v){ setPol(Object.assign({},pol,{days:v})); }}/>
+    <Row label="Vokabeln pro Lauf" hint="Umfang des Wiederholungslaufs" min={5} max={50}
+      value={pol.count} onChange={function(v){ setPol(Object.assign({},pol,{count:v})); }}/>
+    <Row label="Erst ab … gelernten Vokabeln" hint="Vorher wird nicht gesperrt" min={1} max={500}
+      value={pol.minPool} onChange={function(v){ setPol(Object.assign({},pol,{minPool:v})); }}/>
+    {msg&&<div style={{padding:'8px 0',color:T,fontSize:12}}>{msg}</div>}
+    <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:10})}>{saving?'…':'💾 Wiederholungs-Regel speichern'}</button>
+  </div>;
+}
+
 function LeitersSpielStreakSettings({ onDone }) {
   var [settings, setSettings] = useState({required:[2,1,1,1,1]});
   var [saving, setSaving] = useState(false);
@@ -3943,6 +4074,7 @@ function LeitersSpielStreakSettings({ onDone }) {
       })}
       {msg&&<div style={{padding:'8px',color:T,fontSize:12,marginTop:8}}>{msg}</div>}
       <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:12})}>{saving?'…':'💾 Speichern'}</button>
+      <ReviewPolicySettings/>
     </div>
   );
 }
@@ -4787,7 +4919,7 @@ function RepeatHistorySelf({ player }){
 // Modul-Ebene: stabile Identität, sonst würde React bei jedem Tastendruck
 // neu mounten und das Eingabefeld verlöre den Fokus.
 function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; }
-function WiederholungMode({ player, chapters, onDone }){
+function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, onCompleted }){
   var [phase,setPhase]=useState('loading'); // loading, empty, intro, q, show, done
   var [pool,setPool]=useState([]);
   var [poolNote,setPoolNote]=useState('');
@@ -4800,6 +4932,10 @@ function WiederholungMode({ player, chapters, onDone }){
   var [log,setLog]=useState([]);
   var [score,setScore]=useState(0);
   var [showReview,setShowReview]=useState(false);
+  var [demoted,setDemoted]=useState(0);
+  // Beim Öffnen festhalten: nach dem Lauf ist die Sperre weg, die Ansicht soll
+  // aber weiter zeigen, dass es ein Pflichtlauf war (und danach ins Leiterspiel).
+  var [wasMandatory] = useState(!!mandatory);
   var pid = player && player.id;
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var inputRef = useRef(null);
@@ -4809,22 +4945,33 @@ function WiederholungMode({ player, chapters, onDone }){
   useEffect(function(){
     if(!pid || !UUID.test(pid)){ setPhase('empty'); return; }
     Promise.all([
-      sbGet('ls_progress','player_id=eq.'+pid+'&select=data'),
-      sbGet('repeat_runs','player_id=eq.'+pid+'&select=*&order=created_at.desc&limit=30')
+      sbGet('ls_progress','player_id=eq.'+pid+'&select=run_id,data'),
+      sbGet('repeat_runs','player_id=eq.'+pid+'&select=*&order=created_at.desc&limit=30'),
+      lsGetRunsForPlayer(pid)
     ]).then(function(res){
       var rows = Array.isArray(res[0])?res[0]:[];
       var hist = Array.isArray(res[1])?res[1]:[];
+      var allRuns = Array.isArray(res[2])?res[2]:[];
       setHistory(hist);
+      // Nur die Runs der gewählten Klasse/Sprache — sonst käme im Spanisch-
+      // Modus Englisch dran.
+      var inScopeRun = {};
+      filterRunsByScope(allRuns, chapters||[], scope).forEach(function(r){ inScopeRun[r.id]=1; });
       var map6={}, map5={};
-      function add(map,w){
+      function add(map,w,runId,pot){
         var k=wkey(w); if(!w.word||k==='|') return;
-        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0};
+        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0,src:[],lcMs:0};
         map[k].wrong+=(w.wrong||0); map[k].correct+=(w.correct||0);
+        map[k].src.push({runId:runId, pot:pot});
+        // zuletzt im Leiterspiel gekonnt zählt als Beleg mit
+        var lc = w.lc ? Date.parse(w.lc+'T12:00:00Z') : 0;
+        if(lc > map[k].lcMs) map[k].lcMs = lc;
       }
       rows.forEach(function(row){
+        if(!inScopeRun[row.run_id]) return;
         var d=parseData(row.data), pots=d.pots||{};
-        (pots[6]||[]).forEach(function(w){ add(map6,w); });
-        (pots[5]||[]).forEach(function(w){ add(map5,w); });
+        (pots[6]||[]).forEach(function(w){ add(map6,w,row.run_id,6); });
+        (pots[5]||[]).forEach(function(w){ add(map5,w,row.run_id,5); });
       });
       var arr6=Object.keys(map6).map(function(k){return map6[k];});
       var finalPool=arr6, note='';
@@ -4836,51 +4983,31 @@ function WiederholungMode({ player, chapters, onDone }){
       setPool(finalPool); setPoolNote(finalPool.length>=20?'':note);
       setPhase(finalPool.length===0?'empty':'intro');
     }).catch(function(){ setPhase('empty'); });
-  },[pid]);
+  },[pid, scope&&scope.grade, scope&&scope.language]);
 
-  // Pro Wort: wann & mit welchem Ergebnis zuletzt im Wiederholungsmodus gesehen.
-  // history ist newest-first → erster Treffer je Wort ist der aktuellste.
-  var wordStats = useMemo(function(){
-    var m={};
-    (history||[]).forEach(function(run){
-      var ts=Date.parse(run.created_at||'')||0;
-      var li=parseData(run.items);
-      (Array.isArray(li)?li:[]).forEach(function(it){
-        var k=(it.word||'').toLowerCase()+'|'+(it.clue||'').toLowerCase();
-        if(!m[k]) m[k]={ts:ts, correct:!!it.correct, hints:it.hints||0};
-      });
-    });
-    return m;
-  },[history]);
-
-  // Leitner/FSRS-artiger Aktualitäts-Faktor: verdientes Intervall wächst bei "richtig
-  // ohne Tipp" (4 Tage), schrumpft bei Tipp (2) bzw. Fehler (1). Fällig = lange überfällig.
-  var DAY_MS=86400000;
-  function recencyFactor(k){
-    var st=wordStats[k];
-    if(!st) return 2.2;                                   // nie im Wiederholungsmodus → dran
-    var interval = st.correct ? (st.hints===0?4:2) : 1;   // Tage bis nächste Fälligkeit
-    var overdue = ((Date.now()-st.ts)/DAY_MS) / interval;
-    return Math.max(0.35, Math.min(3, overdue));          // frisch gekonnt → selten, überfällig → oft
-  }
-  // Wie viele Vokabeln sind "dran"? (nie geübt oder überfällig)
+  // Wiederholungsabstand je Vokabel aus der Lauf-Historie (1→3→7→14→30→60 Tage).
+  var revStats = useMemo(function(){ return reviewHistoryStats(history); },[history]);
+  var pol = reviewPolicyOf(policy);
+  // Überfälligkeit je Vokabel: >= 1 heißt „jetzt dran".
+  var ranked = useMemo(function(){
+    var now = Date.now();
+    return (pool||[]).map(function(w){
+      return {item:w, over:reviewOverdue(w, revStats, now),
+              hard:1 + 0.2*Math.max(0,(w.wrong||0)-(w.correct||0))};
+    }).sort(function(a,b){ return (b.over*b.hard) - (a.over*a.hard); });
+  },[pool, revStats]);
   var dueCount = useMemo(function(){
-    return (pool||[]).filter(function(w){ return recencyFactor(wkey(w))>=1.5; }).length;
-  },[pool,wordStats]);
+    return ranked.filter(function(x){ return x.over>=1; }).length;
+  },[ranked]);
 
   function startRun(){
-    // Gewicht = Fehler-Gewichtung × Aktualität (echtes Spaced Repetition).
-    var weighted = pool.map(function(w){
-      var base = 1 + 0.2*Math.max(0,(w.wrong||0)-(w.correct||0));
-      return {item:w, weight: base * recencyFactor(wkey(w))};
-    });
-    var n=Math.min(20, weighted.length), picked=[], poolC=weighted.slice();
-    for(var i=0;i<n;i++){
-      var tot=poolC.reduce(function(s,x){return s+x.weight;},0);
-      var r=Math.random()*tot, cum=0, sel=0;
-      for(var j=0;j<poolC.length;j++){ cum+=poolC[j].weight; if(cum>=r){sel=j;break;} }
-      picked.push(poolC[sel].item); poolC.splice(sel,1);
-    }
+    // Die am längsten überfälligen zuerst — genau die zeigen, ob es sitzt.
+    // Aus den doppelt so vielen Kandidaten wird gemischt, damit nicht jeder
+    // Lauf identisch ist.
+    var n = Math.min(pol.count, ranked.length);
+    var head = ranked.slice(0, Math.min(ranked.length, Math.max(n, n*2)));
+    var picked = shuffleArr(head).slice(0, n).map(function(x){ return x.item; });
+    picked.sort(function(a,b){ return 0; });
     setItems(picked); setIdx(0); setInput(''); setHints(0); setResult(null); setLog([]); setScore(0); setShowReview(false);
     setPhase('q');
   }
@@ -4921,16 +5048,66 @@ function WiederholungMode({ player, chapters, onDone }){
     if(ni>=items.length){ finishRun(); return; }
     setIdx(ni); setInput(''); setHints(0); setResult(null); setPhase('q');
   }
+  // Vokabeln, die in der Wiederholung durchgefallen sind, gehen im Leiterspiel
+  // zurück: falsch/aufgegeben → Topf 4, nur mit 2 Tipps gekonnt → Topf 5.
+  // Sie müssen also neu erarbeitet werden — genau darum geht es beim Prüfen,
+  // ob sie die Vokabel wirklich kann.
+  function demoteFailures(finalLog){
+    var target = {};
+    finalLog.forEach(function(l){
+      var t = (!l.correct) ? 4 : (l.hints>=2 ? 5 : null);
+      if(t==null) return;
+      var src = (pool.find(function(w){ return wkey(w)===wkey(l); })||{}).src || [];
+      src.forEach(function(ref){
+        if(ref.pot<=t) return;                       // steht schon tiefer
+        if(!target[ref.runId]) target[ref.runId] = [];
+        target[ref.runId].push({word:l.word, to:t});
+      });
+    });
+    var runIds = Object.keys(target);
+    if(!runIds.length) return Promise.resolve(0);
+    var moved = 0;
+    return Promise.all(runIds.map(function(runId){
+      return lsGetProgress(pid, runId).then(function(rows){
+        if(!Array.isArray(rows)||!rows.length) return;
+        var row = rows[0], d = parseData(row.data);
+        if(!d || !d.pots) return;
+        target[runId].forEach(function(m){
+          [5,6].forEach(function(p){
+            var arr = d.pots[p]||[];
+            var i = arr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(m.word); });
+            if(i<0 || p<=m.to) return;
+            var w = arr.splice(i,1)[0];
+            w.streak = 0;
+            if(!d.pots[m.to]) d.pots[m.to] = [];
+            d.pots[m.to].push(w);
+            moved++;
+          });
+        });
+        // Im Tages-Log vermerken, damit der Prozent-Rückgang erklärbar bleibt.
+        var day = lsDayEntry(d, lsPercent(d));
+        day.rv = (day.rv||0) + target[runId].length;
+        day.p1 = Math.round(lsPercent(d));
+        return lsSaveProgress(pid, runId, d, row.id);
+      }).catch(function(){});
+    })).then(function(){ return moved; });
+  }
+
   function finishRun(){
     setPhase('done');
     if(!pid||!UUID.test(pid)) return;
-    var correctCount=log.filter(function(l){return l.correct;}).length;
-    var h1=log.filter(function(l){return l.hints===1;}).length;
-    var h2=log.filter(function(l){return l.hints===2;}).length;
-    var body={player_id:pid, score:score, max_score:items.length*10, word_count:items.length, correct_count:correctCount, hint1_count:h1, hint2_count:h2, items:log};
+    var finalLog = log;
+    var correctCount=finalLog.filter(function(l){return l.correct;}).length;
+    var h1=finalLog.filter(function(l){return l.hints===1;}).length;
+    var h2=finalLog.filter(function(l){return l.hints===2;}).length;
+    var body={player_id:pid, score:score, max_score:items.length*10, word_count:items.length, correct_count:correctCount, hint1_count:h1, hint2_count:h2, items:finalLog};
     sbPost('repeat_runs',body).then(function(res){
       if(res && !res._err) setHistory(function(h){ return [Object.assign({created_at:new Date().toISOString()},body,res||{})].concat(h); });
-    });
+      return demoteFailures(finalLog);
+    }).then(function(moved){
+      setDemoted(moved||0);
+      if(onCompleted) onCompleted();
+    }).catch(function(){ if(onCompleted) onCompleted(); });
   }
 
   // ── Render ──
@@ -4940,25 +5117,28 @@ function WiederholungMode({ player, chapters, onDone }){
       <div style={{fontSize:40,marginBottom:10}}>🔁</div>
       <div style={{fontWeight:'bold',fontSize:15,marginBottom:6}}>Noch nichts zum Wiederholen</div>
       <div style={{fontSize:12,color:G600,marginBottom:16}}>Sobald du im Leiterspiel Vokabeln in den „Gelernt"-Topf gebracht hast, kannst du sie hier festigen.</div>
-      <button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 20px'})}>Zurück</button>
+      <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{padding:'10px 20px'})}>Zurück</button>
     </div>
   </WiederholungWrap>;
 
   if(phase==='intro') return <WiederholungWrap>
     <div style={{textAlign:'center',marginBottom:14}}>
       <div style={{fontSize:34}}>🔁</div>
-      <div style={{fontWeight:'bold',fontSize:17,color:T}}>Wiederholung</div>
-      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(20,pool.length)} Vokabeln pro Lauf</div>
+      <div style={{fontWeight:'bold',fontSize:17,color:T}}>{wasMandatory?'Wiederholung fällig':'Wiederholung'}</div>
+      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(pol.count,pool.length)} Vokabeln pro Lauf</div>
     </div>
+    {wasMandatory&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:10,padding:'10px 12px',marginBottom:12,fontSize:12,lineHeight:1.5}}>
+      🔒 Das Leiterspiel ist gesperrt, bis du diesen Lauf gemacht hast. Danach geht es sofort weiter.
+    </div>}
     <div style={{background:TL,borderRadius:12,padding:'12px 14px',marginBottom:12,fontSize:12,color:TD,lineHeight:1.5}}>
       <div style={{fontWeight:'bold',marginBottom:4}}>So geht's</div>
-      Tippe das englische Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Vokabeln, die du länger nicht geübt oder oft falsch hattest, kommen häufiger dran. Jeder Lauf zählt neu — schau, ob du dich steigerst!
+      Tippe das gesuchte Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Dran sind die Vokabeln, die du am längsten nicht mehr sicher konntest. Was du hier <b>nicht</b> kannst, wandert im Leiterspiel zurück und wird nochmal geübt.
     </div>
     {poolNote&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:8,padding:'8px 10px',fontSize:11,marginBottom:12}}>{poolNote}</div>}
     <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln{dueCount>0&&<span> · <b style={{color:T}}>{dueCount}</b> sind dran 🔔</span>}</div>
     {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
     <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
-    <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
+    <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
   </WiederholungWrap>;
 
   if(phase==='q' && cur) return <WiederholungWrap>
@@ -5041,6 +5221,12 @@ function WiederholungMode({ player, chapters, onDone }){
         <div style={{fontSize:12,color:G600,marginTop:4}}>{correctCount} von {items.length} richtig</div>
         {deltaTxt&&<div style={{fontSize:12,fontWeight:'bold',marginTop:8,color:(typeof prevScore==='number'&&score>=prevScore)?T:RE}}>{deltaTxt}</div>}
       </div>
+      {wasMandatory&&<div style={{background:TL,color:TD,borderRadius:10,padding:'10px 12px',marginBottom:12,fontSize:12,fontWeight:'bold',textAlign:'center'}}>
+        🔓 Leiterspiel ist wieder frei!
+      </div>}
+      {demoted>0&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:10,padding:'10px 12px',marginBottom:12,fontSize:11,lineHeight:1.5}}>
+        {demoted} Vokabel{demoted===1?' ist':'n sind'} zurück ins Leiterspiel gewandert — die übst du dort nochmal, bis sie wieder sitzen.
+      </div>}
       {history.length>0&&<div style={{marginBottom:12}}><RepeatRunHistory runs={history} title="Verlauf"/></div>}
       <button onClick={function(){setShowReview(!showReview);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginBottom:8})}>{showReview?'▲ Antworten ausblenden':'📋 Alle Antworten ansehen'}</button>
       {showReview&&<div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden',marginBottom:12}}>
@@ -5057,7 +5243,7 @@ function WiederholungMode({ player, chapters, onDone }){
         })}
       </div>}
       <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'13px',fontSize:14,marginBottom:8})}>🔁 Nochmal</button>
-      <button onClick={onDone} style={BtnStyle(G100,G600,{width:'100%',padding:'11px',fontSize:13})}>Fertig</button>
+      <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'11px',fontSize:13})}>Fertig</button>
     </WiederholungWrap>;
   }
   return null;
@@ -8259,6 +8445,34 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   var allUsersRef = useRef(allUsers);
   allUsersRef.current = allUsers;
 
+  // Pflicht-Wiederholung: Regel aus den Einstellungen + Stand des Kindes.
+  var [reviewInfo, setReviewInfo] = useState({locked:false, policy:REVIEW_DEFAULT, poolSize:0, daysSince:null});
+  var loadReview = useCallback(function(){
+    var UUIDre=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!player || !UUIDre.test(player.id) || player.is_admin) return;
+    Promise.all([
+      sbGet('settings','key=eq.review_policy&select=value'),
+      sbGet('repeat_runs','player_id=eq.'+player.id+'&select=created_at&order=created_at.desc&limit=1'),
+      sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data'),
+      lsGetRunsForPlayer(player.id)
+    ]).then(function(res){
+      var policy = (res[0]&&res[0][0]&&res[0][0].value) || null;
+      var last = (res[1]&&res[1][0]&&res[1][0].created_at) || null;
+      var inScopeRun = {};
+      filterRunsByScope(Array.isArray(res[3])?res[3]:[], chapters, scope).forEach(function(r){ inScopeRun[r.id]=1; });
+      var learned = {};
+      (Array.isArray(res[2])?res[2]:[]).forEach(function(row){
+        if(!inScopeRun[row.run_id]) return;
+        var d=parseData(row.data), pots=d.pots||{};
+        (pots[6]||[]).forEach(function(w){ if(w.word) learned[normWordKey(w.word)]=1; });
+      });
+      var poolSize = Object.keys(learned).length;
+      var st = reviewLockState(policy, last, poolSize);
+      setReviewInfo({locked:st.locked, policy:st.policy, poolSize:poolSize, daysSince:st.daysSince});
+    }).catch(function(){});
+  }, [player&&player.id, chapters, scope&&scope.grade, scope&&scope.language]);
+  useEffect(function(){ loadReview(); }, [loadReview]);
+
   var scopes = useMemo(function(){ return listScopes(chapters); }, [chapters]);
   // Sobald die Kapitel geladen sind: gespeicherte Auswahl prüfen, sonst Standard
   // (Klasse 6 / Englisch, falls vorhanden — sonst höchste verfügbare Klasse).
@@ -8408,12 +8622,15 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
     if(screen==='crossword') return <CrosswordGame chapters={scopeTree} onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} scope={scope} allUsers={allUsers}
+      reviewInfo={reviewInfo} onReview={function(){go('wiederholung');}}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={scopeTree} scope={scope} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
-    if(screen==='wiederholung') return <WiederholungMode player={player} chapters={childChapters} onDone={function(){go('home');}}/>;
+    if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters} scope={scope}
+      mandatory={reviewInfo.locked} policy={reviewInfo.policy}
+      onCompleted={loadReview} onDone={function(fromLock){ loadReview(); go(fromLock===true?'leiterspiel_menu':'home'); }}/>;
     if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} chapters={chapters} scope={scope} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} scope={scope} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
@@ -8433,7 +8650,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
-    scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit'
+    scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit',
+    wiederholung:'🔁 Wiederholung'
   };
 
   var mainScreens = isAdmin
@@ -8469,9 +8687,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
             </div>
             {[
-              {icon:'🔁',title:'Wiederholung',sub:'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
+              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
-              {icon:'🪜',title:'Leiterspiel',sub:'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
+              {icon:'🪜',title:'Leiterspiel'+(reviewInfo.locked?' 🔒':''),sub:reviewInfo.locked?'Gesperrt — erst die Wiederholung machen':'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               ...(isEnglish?[{icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}}]:[]),
@@ -8502,7 +8720,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
           {screen==='games'&&(<div>
             {[
-              {icon:'🔁',title:'Wiederholung',sub:'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
+              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
