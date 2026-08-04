@@ -1,0 +1,391 @@
+import { sbGet, sbPatch, sbPost } from './api.js';
+import { HW_POST, SB_URL } from './config.js';
+import { chGrade, chLang, inScope } from './scope.js';
+import { naturalSort, shuffleArr } from './util.js';
+import { normWordKey, parseData, safeWords } from './words.js';
+
+var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1,5:1}, downThresholds:{1:0,2:1,3:1,4:1,5:1},
+  testSize:20, grades:[{maxErrors:0,grade:1},{maxErrors:2,grade:2},{maxErrors:5,grade:3},{maxErrors:9,grade:4},{maxErrors:13,grade:5}] };
+
+function lsGetRuns() { return sbGet('ls_runs','select=*&order=created_at.desc'); }
+
+function lsGetRunsForPlayer(pid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)) return lsGetRuns(); return sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&order=created_at.desc'); }
+
+function trackPot(wObj, pot, isCorrect) { if(!wObj.ps) wObj.ps={}; if(!wObj.ps[pot]) wObj.ps[pot]={c:0,w:0}; if(isCorrect) wObj.ps[pot].c=(wObj.ps[pot].c||0)+1; else wObj.ps[pot].w=(wObj.ps[pot].w||0)+1; }
+
+var ANSWER_TALLY = {ok:0, bad:0};
+
+function tallyAnswer(correct){ if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++; }
+
+var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
+
+var DAY_WORDS_KEEP = 60;  // Tage mit Wort-Detail (spart Platz im Blob)
+
+function lsToday(){ return new Date().toISOString().slice(0,10); }
+
+function daysBetween(a, b){
+  if(!a||!b) return null;
+  var pa=a.split('-'), pb=b.split('-');
+  return Math.round((Date.UTC(+pb[0],+pb[1]-1,+pb[2]) - Date.UTC(+pa[0],+pa[1]-1,+pa[2]))/86400000);
+}
+
+function lsWordCount(d){
+  return [1,2,3,4,5,6].reduce(function(s,p){ return s + (((d.pots||{})[p]||[]).length); },0);
+}
+
+function lsDayEntry(d, pctBefore){
+  var day = lsToday();
+  if(!d.days) d.days = {};
+  if(!d.days[day]) d.days[day] = {a:0, c:0, a1:0, c1:0, p0:Math.round(pctBefore||0), p1:Math.round(pctBefore||0), l:[], w:{}};
+  return d.days[day];
+}
+
+function lsLogAnswer(d, e){
+  var today = lsToday();
+  var day = lsDayEntry(d, e.pctBefore);
+  day.a++; if(e.correct) day.c++;
+  day.p1 = Math.round(e.pctAfter||day.p1);
+  day.n = lsWordCount(d);
+  if(!day.w) day.w = {};
+  var rec = day.w[e.word];
+  var first = !rec;
+  if(!rec) rec = day.w[e.word] = {c:0, f:0, clue:e.clue||'', p:e.toPot};
+  if(first){
+    // Erstversuch des Tages: der zählt für „hat sie es wirklich behalten?".
+    day.a1 = (day.a1||0)+1; if(e.correct) day.c1 = (day.c1||0)+1;
+    rec.f1 = e.correct?1:0;
+    var prevSeen = e.wObj && e.wObj.ls;
+    var gap = daysBetween(prevSeen, today);
+    if(gap!=null && gap>0) rec.g = gap;
+    // Antwortzeiten über 2 Min sind Pausen, keine Denkzeit — nicht verwerten.
+    if(e.rt!=null && e.rt>0 && e.rt<120000) rec.t = Math.round(e.rt);
+  }
+  if(e.skipped) rec.s = (rec.s||0)+1;
+  if(e.correct) rec.c++; else rec.f++;
+  if(e.wObj){
+    e.wObj.ls = today;
+    if(e.correct) e.wObj.lc = today;
+  }
+  if(e.toPot!=null) rec.p = e.toPot;
+  if(e.toPot===6 && e.fromPot!==6){
+    if(!day.l) day.l = [];
+    if(day.l.indexOf(e.word)<0) day.l.push(e.word);
+  }
+  // Alte Tage ausdünnen, damit der Fortschritts-Datensatz nicht wächst.
+  var keys = Object.keys(d.days).sort();
+  if(keys.length > DAY_LOG_KEEP) keys.slice(0, keys.length-DAY_LOG_KEEP).forEach(function(k){ delete d.days[k]; });
+  var withWords = Object.keys(d.days).sort();
+  if(withWords.length > DAY_WORDS_KEEP){
+    withWords.slice(0, withWords.length-DAY_WORDS_KEEP).forEach(function(k){ if(d.days[k]) d.days[k].w = null; });
+  }
+}
+
+var REVIEW_DEFAULT = {enabled:true, days:7, count:20, minPool:20};
+
+var REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60];
+
+var DAY_MS = 86400000;
+
+function reviewKey(w){ return normWordKey(w && w.word); }
+
+function reviewHistoryStats(history){
+  var m = {};
+  // älteste zuerst, damit die Serie in der richtigen Richtung wächst
+  var runs = (history||[]).slice().sort(function(a,b){
+    return (Date.parse(a.created_at||'')||0) - (Date.parse(b.created_at||'')||0);
+  });
+  runs.forEach(function(run){
+    var ts = Date.parse(run.created_at||'') || 0;
+    var items = parseData(run.items);
+    (Array.isArray(items)?items:[]).forEach(function(it){
+      var k = reviewKey(it); if(!k) return;
+      var e = m[k] || (m[k] = {last:0, level:0, lastOk:0});
+      e.last = ts;
+      // „Gekonnt" zählt nur ohne Tipp — mit Tipp ist es kein Beleg für Können.
+      if(it.correct && !it.hints){ e.level = Math.min(REVIEW_INTERVALS.length-1, e.level+1); e.lastOk = ts; }
+      else e.level = 0;
+    });
+  });
+  return m;
+}
+
+function reviewOverdue(entry, stats, nowMs){
+  var st = stats[reviewKey(entry)];
+  var level = st ? st.level : 0;
+  var interval = REVIEW_INTERVALS[Math.min(level, REVIEW_INTERVALS.length-1)];
+  var lastOk = Math.max(st?st.lastOk:0, entry.lcMs||0);
+  if(!lastOk) return 99; // nie belegt gekonnt (Altbestand) → höchste Priorität
+  return ((nowMs - lastOk) / DAY_MS) / interval;
+}
+
+function reviewPolicyOf(raw){
+  var p = Object.assign({}, REVIEW_DEFAULT);
+  try{ var v = typeof raw==='string' ? JSON.parse(raw) : raw; if(v) Object.assign(p, v); }catch(e){}
+  p.days = Math.max(1, Number(p.days)||REVIEW_DEFAULT.days);
+  p.count = Math.max(5, Number(p.count)||REVIEW_DEFAULT.count);
+  p.minPool = Math.max(1, Number(p.minPool)||REVIEW_DEFAULT.minPool);
+  return p;
+}
+
+function reviewLockState(policy, lastReviewIso, poolSize){
+  var p = reviewPolicyOf(policy);
+  if(!p.enabled || poolSize < p.minPool) return {locked:false, policy:p, daysSince:null};
+  var last = lastReviewIso ? Date.parse(lastReviewIso) : 0;
+  var daysSince = last ? Math.floor((Date.now()-last)/DAY_MS) : null;
+  return {locked: !last || daysSince >= p.days, policy:p, daysSince:daysSince};
+}
+
+function lsDayStats(data, day){
+  var d = data||{};
+  var log = d.days && d.days[day];
+  if(log) return {ans:log.a||0, cor:log.c||0, first:log.a1||0, firstCor:log.c1||0, count:log.n||null,
+    p0:log.p0, p1:log.p1, learned:(log.l||[]).slice(), words:log.w||null, exact:true};
+  var sess = (d.sessions||[]).filter(function(s){ return s && s.d===day; });
+  if(!sess.length) return null;
+  var ans=0, cor=0;
+  sess.forEach(function(s){ ans+=s.ans||0; cor+=s.cor||0; });
+  // % vor dem Tag = Stand der letzten Session davor
+  var before = null;
+  (d.sessions||[]).forEach(function(s){ if(s && s.d < day && s.pct!=null) before = s.pct; });
+  var last = sess[sess.length-1];
+  return {ans:ans, cor:cor, p0:before!=null?before:null, p1:last.pct!=null?last.pct:null, learned:null, words:null, exact:false};
+}
+
+function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
+
+function lsSaveProgress(pid,rid,data,eid) {
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve({_ok:true});
+  var payload={data:JSON.stringify(data),updated_at:new Date().toISOString()};
+  if(eid) return sbPatch('ls_progress',payload,'id=eq.'+eid);
+  var full=Object.assign({player_id:pid,run_id:rid},payload);
+  return fetch(SB_URL+'/rest/v1/ls_progress?on_conflict=player_id,run_id',{
+    method:'POST',
+    headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=representation'}),
+    body:JSON.stringify(full),mode:'cors',credentials:'omit'
+  }).then(function(r){return r.json();}).catch(function(){return {_ok:true};});
+}
+
+function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[],6:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
+
+function lsPercent(progress,gs) { var p=progress.pots||{}; var t=(p[1]||[]).length+(p[2]||[]).length+(p[3]||[]).length+(p[4]||[]).length+(p[5]||[]).length+(p[6]||[]).length; if(t===0) return 0; var score=(p[2]||[]).length*17+(p[3]||[]).length*34+(p[4]||[]).length*50+(p[5]||[]).length*67+(p[6]||[]).length*100; var base=Math.round(score/t); if(progress.bonusStarted&&(progress.sentences||[]).length>0){var sl=progress.sentences.filter(function(s){return s.streak>=2;}).length;return Math.min(100,base+Math.round(sl/progress.sentences.length*10));}return base; }
+
+function lsGrade(pct,gs) { if(!gs||!gs.grades) return null; var correct=Math.round(pct/100*(gs.testSize||20)); var errors=(gs.testSize||20)-correct; var sorted=(gs.grades||[]).slice().sort(function(a,b){return a.maxErrors-b.maxErrors;}); for(var i=0;i<sorted.length;i++) if(errors<=sorted[i].maxErrors) return sorted[i].grade; return sorted.length?sorted[sorted.length-1].grade+1:null; }
+
+function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
+  if(!targetDate) return null;
+  var tgt = Math.max(1, Math.min(100, targetPct||100));
+  var gap = Math.max(0, tgt - (currentPct||0));
+  var today = new Date(); today.setHours(0,0,0,0);
+  var d = new Date(targetDate+'T00:00:00');
+  var daysLeft = Math.ceil((d - today) / 86400000);
+  var spentMin = Math.round((sessionsSecondsForRun||0)/60);
+  var status, requiredMinPerDay=null, etaMessage='';
+  if(gap===0){ status='done'; etaMessage='✅ Ziel erreicht'; }
+  else if(daysLeft<=0){ status='overdue'; etaMessage='⚠️ Stichtag verstrichen — '+gap+'% offen'; }
+  else if(currentPct<=0 || spentMin<2){
+    status='no-data';
+    etaMessage='Noch keine Lernzeit gemessen — Schätzung ab nächster Sitzung';
+    requiredMinPerDay = Math.ceil((gap * 5) / daysLeft);
+  } else {
+    var minPerPct = spentMin / currentPct;
+    var totalNeeded = gap * minPerPct;
+    requiredMinPerDay = Math.ceil(totalNeeded / daysLeft);
+    if(requiredMinPerDay<=15) status='easy';
+    else if(requiredMinPerDay<=45) status='ok';
+    else if(requiredMinPerDay<=90) status='hard';
+    else status='unrealistic';
+  }
+  return { targetPct:tgt, currentPct:currentPct||0, gap:gap, daysLeft:daysLeft, spentMin:spentMin, requiredMinPerDay:requiredMinPerDay, status:status, etaMessage:etaMessage, targetDate:targetDate };
+}
+
+function lsPickWord(progress,lastWord) {
+  function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
+  var cands=[];
+  [1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(w.disputeId) return; if(!lastWord||w.word!==lastWord) cands.push(flat(w,pot));});});
+  if(cands.length===0&&lastWord){[1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(!w.disputeId) cands.push(flat(w,pot));});});}
+  if(cands.length===0){[1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push(flat(w,pot));});});}
+  return cands.length?shuffleArr(cands)[0]:null;
+}
+
+function generateSentences(words, runName, forceNew) {
+  var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
+  var wordList = picked.map(function(w){return '"'+w.word+'" ('+w.clue+')';}).join(', ');
+  var prompt = 'Erstelle für jede dieser englischen Vokabeln genau einen kurzen einfachen englischen Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"englisches Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
+  var cacheKey = 'satz_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
+  function callApi(key) {
+    return fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.error) throw new Error(d.error.message||'API Fehler');
+      var text=d.content&&d.content[0]&&d.content[0].text||'';
+      var m=text.match(/\[[\s\S]*\]/);
+      if(!m) throw new Error('Kein JSON in Antwort');
+      var sents=JSON.parse(m[0]);
+      fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
+      return sents;
+    });
+  }
+  function generate() {
+    return fetch(SB_URL+'/rest/v1/rpc/get_claude_key',{method:'POST',headers:HW_POST,body:'{}',mode:'cors',credentials:'omit'})
+      .then(function(r){return r.json();})
+      .then(function(key){
+        if(!key) key=localStorage.getItem('claude_api_key')||'';
+        if(!key) return Promise.reject(new Error('Kein API-Key hinterlegt'));
+        return callApi(key);
+      });
+  }
+  if(forceNew) return generate();
+  return sbGet('settings','key=eq.'+encodeURIComponent(cacheKey)).then(function(cached){
+    if(cached&&cached[0]&&cached[0].value){
+      try{var p=JSON.parse(cached[0].value);if(Array.isArray(p)&&p.length>0)return p;}catch(e){}
+    }
+    return generate();
+  });
+}
+
+var AUTO_RUN_MIN_WORDS = 2; // darunter lohnt sich kein Run (Leiterspiel braucht ≥2)
+
+function autoRunWordsFor(chapter){
+  return safeWords(chapter && chapter.words)
+    .filter(function(w){ return w && w.important && w.word; })
+    .slice()
+    .sort(function(a,b){
+      var pa=(a.book_page!=null?a.book_page:99999), pb=(b.book_page!=null?b.book_page:99999);
+      if(pa!==pb) return pa-pb;
+      var sa=(typeof a.seq==='number'?a.seq:99999), sb=(typeof b.seq==='number'?b.seq:99999);
+      if(sa!==sb) return sa-sb;
+      return (a.word||'').localeCompare(b.word||'');
+    })
+    .map(function(w){
+      return {word:w.word, clue:w.clue, type:w.type||'noun', chapterId:chapter.id,
+        important:true, book_page:w.book_page, pot:1};
+    });
+}
+
+function autoRunName(chapter){ return chapter.title || 'Kapitel'; }
+
+function syncAutoRun(chapter, opts){
+  opts = opts || {};
+  if(!chapter || !chapter.id || !chapter.parent_id) return Promise.resolve(null);
+  var words = autoRunWordsFor(chapter);
+  return sbGet('ls_runs','auto_chapter_id=eq.'+encodeURIComponent(chapter.id)+'&select=id,name,word_count')
+    .then(function(rows){
+      var existing = Array.isArray(rows) && rows[0];
+      if(existing){
+        if(words.length < AUTO_RUN_MIN_WORDS){
+          // Kapitel hat keine ⭐-Wörter mehr: Run leeren statt löschen, damit
+          // der Fortschritt der Kinder nicht verloren geht.
+          if((existing.word_count||0)===0) return {action:'none', run:existing};
+        }
+        return sbPatch('ls_runs',{name:autoRunName(chapter), words:JSON.stringify(words),
+          word_count:words.length, grade:chGrade(chapter), language:chLang(chapter)},
+          'id=eq.'+existing.id)
+          .then(function(ok){ return {action:ok?'updated':'error', run:existing, count:words.length}; });
+      }
+      if(!opts.allowCreate || words.length < AUTO_RUN_MIN_WORDS) return {action:'none'};
+      var run = {name:autoRunName(chapter), icon:chapter.icon||'🪜', player_id:null,
+        is_admin_run:true, word_count:words.length, sentence_count:0,
+        grade:chGrade(chapter), language:chLang(chapter), auto_chapter_id:chapter.id,
+        words:JSON.stringify(words), sentences:'[]', created_at:new Date().toISOString()};
+      return sbPost('ls_runs',run).then(function(res){
+        if(res&&res._err) return {action:'error', msg:res.msg};
+        return {action:'created', run:res, count:words.length};
+      });
+    })
+    .catch(function(){ return {action:'error'}; });
+}
+
+function scopeUsesAutoRuns(chapter, allChapters){
+  var siblings = (allChapters||[]).filter(function(c){
+    return c.parent_id && chGrade(c)===chGrade(chapter) && chLang(c)===chLang(chapter);
+  }).map(function(c){ return c.id; });
+  if(!siblings.length) return Promise.resolve(false);
+  return sbGet('ls_runs','auto_chapter_id=in.('+siblings.map(encodeURIComponent).join(',')+')&select=id&limit=1')
+    .then(function(rows){ return Array.isArray(rows) && rows.length>0; })
+    .catch(function(){ return false; });
+}
+
+function syncAutoRunsForScope(allChapters, sc){
+  var list = (allChapters||[]).filter(function(c){
+    return c.parent_id && inScope(c, sc) && safeWords(c.words).length>0;
+  }).sort(naturalSort);
+  return list.reduce(function(p, ch){
+    return p.then(function(acc){
+      return syncAutoRun(ch, {allowCreate:true}).then(function(r){
+        if(r&&r.action==='created') acc.created++;
+        else if(r&&r.action==='updated') acc.updated++;
+        return acc;
+      });
+    });
+  }, Promise.resolve({created:0, updated:0}));
+}
+
+function saveChapterWords(chapter, newWords, allChapters, setChapters, setSaving, setMsg) {
+  setSaving(true);
+  if(!chapter.id){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
+  sbPatch('chapters',{words:newWords},'id=eq.'+chapter.id).then(function(ok){
+    if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{words:newWords}):c;}); }); setMsg('✓ Gespeichert'); }
+    else setMsg('Fehler!');
+    setSaving(false);
+    if(!ok) return;
+    // ⭐-Änderungen ins Kapitel-Leiterspiel durchreichen.
+    var updated = Object.assign({}, chapter, {words:newWords});
+    scopeUsesAutoRuns(updated, allChapters).then(function(uses){
+      return syncAutoRun(updated, {allowCreate:uses});
+    }).then(function(r){
+      if(r && (r.action==='updated'||r.action==='created')){
+        setMsg('✓ Gespeichert · Leiterspiel „'+autoRunName(updated)+'": '+r.count+' ⭐-Wörter');
+      }
+    }).catch(function(){});
+  });
+}
+
+function saveChapterSentences(chapter, newSentences, allChapters, setChapters, setSaving, setMsg) {
+  setSaving(true);
+  if(!chapter.id){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{sentences:newSentences}):c;}); }); setSaving(false); setMsg('✓ (lokal)'); return; }
+  sbPatch('chapters',{sentences:newSentences},'id=eq.'+chapter.id).then(function(ok){
+    if(ok){ setChapters(function(prev){ return prev.map(function(c){return c.id===chapter.id?Object.assign({},c,{sentences:newSentences}):c;}); }); setMsg('✓ Gespeichert'); }
+    else setMsg('Fehler!');
+    setSaving(false);
+  });
+}
+
+function lsPctSeries(data){
+  var out = [];
+  ((data||{}).sessions||[]).forEach(function(s){ if(s&&s.d&&s.pct!=null) out.push({d:s.d, pct:s.pct}); });
+  var days = (data||{}).days||{};
+  Object.keys(days).forEach(function(k){ if(days[k]&&days[k].p1!=null) out.push({d:k, pct:days[k].p1}); });
+  out.sort(function(a,b){ return a.d<b.d?-1:a.d>b.d?1:0; });
+  return out;
+}
+
+function lsDeltaSince(data, fromDay){
+  var d = data||{};
+  var days = d.days||{};
+  var dayKeys = Object.keys(days).filter(function(k){ return k>=fromDay && days[k] && days[k].p0!=null; }).sort();
+  var sess = (d.sessions||[]).filter(function(s){ return s && s.d>=fromDay && s.pct!=null; });
+  if(!dayKeys.length && !sess.length) return 0;
+  var start = null, startDay = null;
+  if(dayKeys.length){ start = days[dayKeys[0]].p0; startDay = dayKeys[0]; }
+  if(sess.length && (startDay===null || sess[0].d < startDay)) start = sess[0].pct;
+  if(start==null) return 0;
+  return Math.round(lsPercent(d)) - Math.round(start);
+}
+
+function lsAnswersSince(data, fromDay){
+  var d = data||{}, n = 0, days = d.days||{}, counted = {};
+  Object.keys(days).forEach(function(k){ if(k>=fromDay){ n += (days[k]||{}).a||0; counted[k]=1; } });
+  (d.sessions||[]).forEach(function(s){ if(s && s.d>=fromDay && !counted[s.d]) n += s.ans||0; });
+  return n;
+}
+
+function lsLearnedInRange(data, fromDay){
+  var days = (data||{}).days||{}, n = 0;
+  Object.keys(days).forEach(function(k){ if(k>=fromDay) n += ((days[k]||{}).l||[]).length; });
+  return n;
+}
+
+export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
