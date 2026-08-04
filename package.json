@@ -12,7 +12,8 @@
     "test:report": "playwright show-report",
     "build": "esbuild src/main.jsx --bundle --format=esm --splitting --outdir=dist --target=es2020 --loader:.jsx=jsx --minify",
     "watch": "esbuild src/main.jsx --bundle --format=esm --splitting --outdir=dist --target=es2020 --loader:.jsx=jsx --sourcemap --watch",
-    "build:dev": "esbuild src/main.jsx --bundle --format=esm --splitting --outdir=dist --target=es2020 --loader:.jsx=jsx --sourcemap"
+    "build:dev": "esbuild src/main.jsx --bundle --format=esm --splitting --outdir=dist --target=es2020 --loader:.jsx=jsx --sourcemap",
+    "test:leiterspiel": "playwright test tests/leiterspiel.spec.js"
   },
   "repository": {
     "type": "git",
@@ -28,7 +29,6 @@
   "homepage": "https://github.com/Ben-claude-1/vokabel-raetsel#readme",
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "http-server": "^14.1.1",
     "esbuild": "^0.28.1"
   }
 }

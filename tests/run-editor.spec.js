@@ -10,7 +10,7 @@ test.describe('RunEditor', () => {
     const errors = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
 
-    await page.click('button:has-text("🎯 LS")');
+    await page.click('button:has-text("🪜 LS")');
     await page.waitForTimeout(1000);
 
     const critical = errors.filter(e => !e.includes('kwift.CHROME'));
@@ -21,7 +21,7 @@ test.describe('RunEditor', () => {
     const errors = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
 
-    await page.click('button:has-text("🎯 LS")');
+    await page.click('button:has-text("🪜 LS")');
     await page.waitForTimeout(500);
 
     // Runs-Tab (erster Sub-Tab)

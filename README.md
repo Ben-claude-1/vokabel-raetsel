@@ -45,6 +45,26 @@ Admin, Quiz, Klassenarbeit, Grammatik, Kreuzworträtsel und die Vokabelliste
 werden erst beim Öffnen nachgeladen (eigene Pakete). Der Start lädt rund
 300 KB statt vorher 565 KB Quelltext plus 3 MB Babel-Compiler im Browser.
 
+## Tests
+
+```bash
+npm install        # einmalig — node_modules ist nicht im Repo
+npm test           # alle Playwright-Tests (headless)
+npm run test:headed  # sichtbar im Browser, verlangsamt
+```
+
+`tests/dev-server.js` liefert die App auf Port 3333 aus **und** leitet
+`/rest/v1/*` an die echte API weiter. Der Umweg ist nötig, weil die API seit
+dem Security-Lockdown nur die GitHub-Pages-Herkunft als CORS-Origin erlaubt —
+ein Browser auf `http://localhost` bekommt sonst schon den Preflight verweigert
+und die App meldet „Server nicht erreichbar". Über den Proxy laufen App und API
+unter derselben Herkunft, damit entfällt der Preflight. `tests/storage-state.json`
+setzt dazu `sb_url` im localStorage auf den Proxy.
+
+Die Tests laufen gegen die **echte Datenbank** — deshalb nur lesende Abläufe
+(Login, Tabs öffnen, Editor öffnen). Passwörter über `TEST_ADMIN_PW` /
+`TEST_EMMA_PW` überschreibbar.
+
 ## Datenbank
 
 Schema und Migrationen unter `migration/`, Hilfsskripte unter `scripts/`

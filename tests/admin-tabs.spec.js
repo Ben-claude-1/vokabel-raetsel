@@ -10,7 +10,7 @@ test.describe('Admin-Tabs', () => {
     const errors = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
 
-    const tabs = ['📚 Kap.', '📝 Vok.', '🎯 LS', '👥 User', '✏️ Gram.'];
+    const tabs = ['📚 Kap.', '📝 Vok.', '🪜 LS', '👥 User', '✏️ Gram.'];
     for (const tab of tabs) {
       const btn = page.locator('button', { hasText: tab });
       if (await btn.count() > 0) {
@@ -24,7 +24,7 @@ test.describe('Admin-Tabs', () => {
   });
 
   test('LS Fortschritt-Tab zeigt expanded/toggle', async ({ page }) => {
-    await page.click('button:has-text("🎯 LS")');
+    await page.click('button:has-text("🪜 LS")');
     await page.waitForTimeout(500);
 
     const fortschrittBtn = page.locator('button:has-text("📊"), button:has-text("Fortschritt")').first();

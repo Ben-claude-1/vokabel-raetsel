@@ -1,0 +1,11 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3333",
+      "localStorage": [
+        { "name": "sb_url", "value": "http://localhost:3333" }
+      ]
+    }
+  ]
+}
