@@ -329,9 +329,43 @@ function runScope(run, chapters){
   if(best){ var p = best.split('|'); return {grade:Number(p[0]), language:p[1]}; }
   return {grade:5, language:'en'};
 }
+// Zahlen in IDs numerisch vergleichen: …_t2 kommt vor …_t10.
+function naturalIdCmp(a, b){
+  var pa = String(a||'').toLowerCase().match(/(\d+|\D+)/g) || [];
+  var pb = String(b||'').toLowerCase().match(/(\d+|\D+)/g) || [];
+  for(var i=0; i<Math.max(pa.length, pb.length); i++){
+    var xa = pa[i], xb = pb[i];
+    if(xa===undefined) return -1;
+    if(xb===undefined) return 1;
+    if(/^\d/.test(xa) && /^\d/.test(xb)){
+      var d = parseInt(xa,10) - parseInt(xb,10);
+      if(d) return d;
+    } else if(xa !== xb) return xa < xb ? -1 : 1;
+  }
+  return 0;
+}
+// Anzeige-Reihenfolge der Runs: zuerst die Kapitel-Leiterspiele in Kapitel-
+// reihenfolge (Kapitel-IDs tragen die Buchreihenfolge: …_t1 … _t6), danach
+// die frei angelegten Runs wie bisher neueste zuerst.
+function sortRunsForDisplay(runs, chapters){
+  var order = {};
+  (chapters||[]).slice().sort(function(a,b){ return naturalIdCmp(a.id, b.id); })
+    .forEach(function(c, i){ order[c.id] = i; });
+  function idx(r){
+    var k = r && r.auto_chapter_id;
+    return (k && order[k]!=null) ? order[k] : null;
+  }
+  return (runs||[]).slice().sort(function(a,b){
+    var ia = idx(a), ib = idx(b);
+    if(ia!=null && ib!=null) return ia - ib;
+    if(ia!=null) return -1;
+    if(ib!=null) return 1;
+    return String(b.created_at||'').localeCompare(String(a.created_at||''));
+  });
+}
 function filterRunsByScope(runs, chapters, sc){
-  if(!sc) return runs||[];
-  return (runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); });
+  if(!sc) return sortRunsForDisplay(runs, chapters);
+  return sortRunsForDisplay((runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); }), chapters);
 }
 
 function getWordType(w) {
