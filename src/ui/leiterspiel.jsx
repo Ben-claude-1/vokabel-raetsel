@@ -9,7 +9,7 @@ import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordK
 import { ProgressStats } from './trainer.jsx';
 import { CelebrationPopup, LernVerlaufChart, T2LetterField } from './widgets.jsx';
 
-function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp, setPlayer }) {
+function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var [data, setData] = useState(null);
   var [dataLoading, setDataLoading] = useState(true);
@@ -176,9 +176,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
     saveAndUpdate(newData);
-    var pts=correct?5:0;
+    var pts=correct?10:0;
     if(pts>0&&onUpdateScore)onUpdateScore(pts);
-    if(pts>0&&setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
     var log={word:current.word,clue:current.clue,typed:opt.word,correct:correct,partial:false,fromPot:1,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
     if(correct&&moveTo===6)setCelebration('🏆 "'+current.word+'" gelernt!');
@@ -258,7 +257,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
     if(pts>0 && onUpdateScore) onUpdateScore(pts);
-    if(pts>0 && setPlayer) setPlayer(function(p){ return Object.assign({},p,{total_score:(p.total_score||0)+pts}); });
 
     var newSc = correct ? streakCount+1 : 0;
     setStreakCount(newSc);
@@ -547,7 +545,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           saveAndUpdate(newData);
           var pts=10;
           if(onUpdateScore)onUpdateScore(pts);
-          if(setPlayer)setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
           if(moveTo===6)setCelebration('🏆 "'+current.word+'" gelernt!');
           setResult({correct:true,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:current.word,fromPot:2,toPot:moveTo,pts:pts,newStreak:wObj.streak,reqStreak:reqStreak});
           setPhase('showResult');
@@ -779,7 +776,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   if(phase==='satzquiz'){
     var sqW=(function(){
@@ -788,12 +785,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} setPlayer={setPlayer} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   return null;
 }
 
-function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlayer, onDone }) {
+function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [loadErr, setLoadErr] = useState('');
   var [idx, setIdx] = useState(0);
@@ -872,7 +869,6 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlay
     tallyAnswer(ok);
     var pts=ok?calcPts():0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
-    if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
     setTotal(function(t){return t+pts;});
     setLastOk(ok); setLastPts(pts); setLastSkip(false); setGPhase('a');
   }
@@ -933,7 +929,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, setPlay
   );
 }
 
-function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer, onDone }) {
+function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [allOpts, setAllOpts] = useState(null);
   var [loadErr, setLoadErr] = useState('');
@@ -981,7 +977,6 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, setPlayer,
     tallyAnswer(ok);
     var pts=ok?10:0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
-    if(pts>0&&setPlayer) setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
     setTotal(function(t){return t+pts;});
     setTimeout(function(){setIdx(function(i){return i+1;});setChosen(null);},1500);
   }

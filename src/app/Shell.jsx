@@ -221,16 +221,22 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
   function go(s, data) { setScreen(s); setScreenData(data||null); }
 
+  // Einzige Stelle, die Punkte gutschreibt — die Spiele rufen nur noch hier an.
+  // Der Zwischenstand liegt in scoreRef, weil `player` bei zwei Antworten kurz
+  // hintereinander noch den alten Wert hätte: beide Schreibvorgänge würden dann
+  // von derselben Basis rechnen und der erste ginge verloren.
+  var scoreRef = useRef(0);
+  useEffect(function(){ scoreRef.current = (player&&player.total_score)||0; },[player&&player.id]);
+
   function handleUpdateScore(pts) {
     if(!player||!pts) return;
+    var next = (scoreRef.current||0) + pts;
+    scoreRef.current = next;
+    setPlayer(function(p){return Object.assign({},p,{total_score:next});});
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(UUID.test(player.id)){
-      sbPatch('players',{total_score:(player.total_score||0)+pts},'id=eq.'+player.id).then(function(){
-        setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
-        setAllUsers(function(prev){return prev.map(function(u){return u.id===player.id?Object.assign({},u,{total_score:(u.total_score||0)+pts}):u;});});
-      });
-    } else {
-      setPlayer(function(p){return Object.assign({},p,{total_score:(p.total_score||0)+pts});});
+      sbPatch('players',{total_score:next},'id=eq.'+player.id);
+      setAllUsers(function(prev){return prev.map(function(u){return u.id===player.id?Object.assign({},u,{total_score:next}):u;});});
     }
   }
 
@@ -270,7 +276,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       reviewInfo={reviewInfo} onReview={function(){go('wiederholung');}}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;
-    if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} setPlayer={setPlayer} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
+    if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={scopeTree} scope={scope} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
     if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters} scope={scope}
