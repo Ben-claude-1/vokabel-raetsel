@@ -3,7 +3,7 @@ import { lsAnswersSince, lsDayStats, lsDeltaSince, lsGetRunsForPlayer, lsLearned
 import { useEffect, useState } from '../core/react.js';
 import { filterRunsByScope } from '../core/scope.js';
 import { AM, DAILY_GOAL_SEC, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, gameOf } from '../core/theme.js';
-import { fmtDayShort, fmtDuration, shiftDay, weekdayOf } from '../core/util.js';
+import { dayKey, fmtDayShort, fmtDuration, shiftDay, weekdayOf } from '../core/util.js';
 import { parseData } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
 import { LernVerlaufChart } from './widgets.jsx';
@@ -39,7 +39,7 @@ function DailyLearnChart({ sessions, run, pacing }) {
   var rows = [];
   for(var i=nDays-1; i>=0; i--){
     var d = new Date(endDate); d.setDate(d.getDate()-i);
-    var key = d.toISOString().slice(0,10);
+    var key = dayKey(d);
     var dayMs = d.getTime();
     rows.push({ key:key, label:d.getDate()+'.'+(d.getMonth()+1), min:Math.round((byDay[key]||0)/60), isToday:dayMs===today.getTime(), isFuture:dayMs>today.getTime() });
   }
@@ -142,7 +142,7 @@ function GameBreakdown({ sessions, title }) {
 }
 
 function LeiterspielFortschritt({ progressRows, runs, title }){
-  var today = new Date().toISOString().slice(0,10);
+  var today = dayKey();
   var cutoff = shiftDay(today,-6);
   var list = (progressRows||[]).map(function(r){
     var run = (runs||[]).find(function(x){ return x.id===r.run_id; });
@@ -281,7 +281,7 @@ function TagesLeiterspiel({ progressRows, runs, day }){
 }
 
 function TagesDetail({ sessions, progressRows, runs }) {
-  var today = new Date().toISOString().slice(0,10);
+  var today = dayKey();
   var [sel,setSel] = useState(today);
   var withTime = (sessions||[]).filter(function(s){ return s.started_at && (s.active_seconds||0)>0; });
   var earliest = withTime.length
@@ -352,7 +352,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
   var runIds = {}; (runs||[]).forEach(function(r){ runIds[r.id]=1; });
   var scopedProgress = (progressRows||[]).filter(function(r){ return runIds[r.run_id]; });
   if(sessions===null) return <div style={{textAlign:'center',padding:20,color:G400,fontSize:12}}>Lade…</div>;
-  var today=new Date().toISOString().slice(0,10);
+  var today=dayKey();
   var totalSec=0, todaySec=0, days={};
   sessions.forEach(function(s){
     var sec=s.active_seconds||0; totalSec+=sec;
@@ -500,8 +500,8 @@ function Scoreboard({ player }) {
         var days = {};
         rows.forEach(function(r) { if (r.started_at) days[r.started_at.slice(0,10)] = true; });
         var sorted = Object.keys(days).sort().reverse();
-        var today = new Date().toISOString().slice(0,10);
-        var yest  = new Date(Date.now()-86400000).toISOString().slice(0,10);
+        var today = dayKey();
+        var yest  = dayKey(Date.now()-86400000);
         if (sorted[0]!==today && sorted[0]!==yest) { setStreak(0); return; }
         var n = 1;
         for (var i = 1; i < sorted.length; i++) {

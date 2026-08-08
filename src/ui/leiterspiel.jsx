@@ -4,7 +4,7 @@ import { DEFAULT_STREAK, REVIEW_DEFAULT, generateSentences, lsGetProgress, lsGet
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
-import { fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
+import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
 import { CelebrationPopup, LernVerlaufChart, T2LetterField } from './widgets.jsx';
@@ -105,7 +105,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var dur = Math.round(sesActiveSec.current);
     if(dur < 10) return currentData;
     var pct = lsPercent(currentData);
-    var today = new Date().toISOString().slice(0,10);
+    var today = dayKey();
     var session = {d:today, ts:sesStart, dur:dur, ans:sesAns, cor:sesCor, pct:pct};
     var nd = JSON.parse(JSON.stringify(currentData));
     if(!nd.sessions) nd.sessions=[];
@@ -347,7 +347,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var tCorr = finalLog.filter(function(l){return l.correct;}).length;
     var tErr = finalLog.length - tCorr;
     var tGrade = testGradeFor(tErr);
-    var entry = {ts:Date.now(), date:new Date().toISOString().slice(0,10), total:finalLog.length, correct:tCorr, errors:tErr, grade:tGrade, items:finalLog};
+    var entry = {ts:Date.now(), date:dayKey(), total:finalLog.length, correct:tCorr, errors:tErr, grade:tGrade, items:finalLog};
     var nd = JSON.parse(JSON.stringify(data));
     if(!Array.isArray(nd.tests)) nd.tests = [];
     nd.tests.push(entry);

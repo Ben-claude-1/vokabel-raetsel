@@ -4,7 +4,7 @@ import { DEFAULT_STREAK, lsGetRuns, lsPercent, lsRunPacing, saveChapterSentences
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { chGrade, filterRunsByScope, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, DAILY_GOAL_SEC, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL } from '../core/theme.js';
-import { calcStreakFromByDay, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
+import { calcStreakFromByDay, dayKey, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
 import { aiCategorizeWords, normWordKey, parseData, quickDetectType, safeWords, translateSentenceEN2DE } from '../core/words.js';
 import { GrammarAdmin } from './grammar.jsx';
 import { KlassenarbeitAdmin } from './klassenarbeit.jsx';
@@ -18,7 +18,7 @@ function AdminLernzeitOverview({ allUsers }) {
     sbGet('learn_sessions','select=player_id,active_seconds,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
   },[]);
   var weekDays = getWeekDays();
-  var today = new Date().toISOString().slice(0,10);
+  var today = dayKey();
   var DAY_LABELS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
   var playerByDay = {};
   sessions.forEach(function(s){

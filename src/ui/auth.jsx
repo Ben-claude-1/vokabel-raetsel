@@ -2,7 +2,7 @@ import { hashPw, sbGet, sbPost } from '../core/api.js';
 import { HG, SB_URL } from '../core/config.js';
 import { useEffect, useState } from '../core/react.js';
 import { BtnStyle, DAILY_GOAL_SEC, G200, G400, G600, G900, RE, T } from '../core/theme.js';
-import { buildByDay, calcStreakFromByDay, getWeekDays, getWeekKey } from '../core/util.js';
+import { buildByDay, calcStreakFromByDay, dayKey, getWeekDays, getWeekKey } from '../core/util.js';
 
 function LoginScreen({ onLogin, onRegister }) {
   var [name, setName] = useState('');
@@ -131,7 +131,7 @@ function GoalTracker({ player, onInfo }) {
     sbGet('learn_sessions','player_id=eq.'+player.id+'&select=active_seconds,started_at').then(function(sessions){
       if(!Array.isArray(sessions)) return;
       var byDay = buildByDay(sessions);
-      var today = new Date().toISOString().slice(0,10);
+      var today = dayKey();
       var todaySec = byDay[today]||0;
       var weekDays = getWeekDays();
       var weekGoalDays = weekDays.filter(function(k){return (byDay[k]||0)>=DAILY_GOAL_SEC;}).length;

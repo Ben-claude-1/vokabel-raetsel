@@ -13,6 +13,16 @@ function naturalSort(a, b) {
 
 function fmtTestStamp(t){ if(!t) return ''; if(t.ts){ var d=new Date(t.ts); var pad=function(n){return String(n).padStart(2,'0');}; return (t.date||d.toISOString().slice(0,10))+' '+pad(d.getHours())+':'+pad(d.getMinutes()); } return t.date||''; }
 
+// Tagesschlüssel in Ortszeit. Wichtig: new Date().toISOString() rechnet nach UTC —
+// aus lokaler Mitternacht wird in Berlin dadurch der Vortag, und der Tag stimmt
+// dann nirgends mehr mit den Zeitstempeln aus der Datenbank überein (die kommen
+// mit +02:00 zurück, also bereits in Ortszeit).
+function dayKey(d) {
+  var x = d ? new Date(d) : new Date();
+  var pad = function(n){ return String(n).padStart(2,'0'); };
+  return x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());
+}
+
 function buildByDay(sessions) {
   var byDay = {};
   (sessions||[]).forEach(function(s){
@@ -25,11 +35,11 @@ function buildByDay(sessions) {
 
 function calcStreakFromByDay(byDay) {
   var today = new Date(); today.setHours(0,0,0,0);
-  var todayKey = today.toISOString().slice(0,10);
+  var todayKey = dayKey(today);
   var streak = (byDay[todayKey]||0) >= DAILY_GOAL_SEC ? 1 : 0;
   var d = new Date(today); d.setDate(d.getDate()-1);
   for(var i=0; i<365; i++){
-    var k = d.toISOString().slice(0,10);
+    var k = dayKey(d);
     if((byDay[k]||0) >= DAILY_GOAL_SEC){ streak++; d.setDate(d.getDate()-1); }
     else break;
   }
@@ -40,7 +50,7 @@ function getWeekDays() {
   var d = new Date(); d.setHours(0,0,0,0);
   var mon = new Date(d); mon.setDate(d.getDate()-((d.getDay()+6)%7));
   var days = [];
-  for(var i=0; i<7; i++){ var day=new Date(mon); day.setDate(mon.getDate()+i); days.push(day.toISOString().slice(0,10)); }
+  for(var i=0; i<7; i++){ var day=new Date(mon); day.setDate(mon.getDate()+i); days.push(dayKey(day)); }
   return days;
 }
 
@@ -54,4 +64,4 @@ function weekdayOf(k){ var p=k.split('-'); return new Date(Date.UTC(+p[0],+p[1]-
 
 function fmtDayShort(k){ var p=k.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 
-export { shuffleArr, shuffle, naturalSort, fmtTestStamp, buildByDay, calcStreakFromByDay, getWeekDays, getWeekKey, fmtDuration, shiftDay, weekdayOf, fmtDayShort };
+export { shuffleArr, shuffle, naturalSort, fmtTestStamp, dayKey, buildByDay, calcStreakFromByDay, getWeekDays, getWeekKey, fmtDuration, shiftDay, weekdayOf, fmtDayShort };

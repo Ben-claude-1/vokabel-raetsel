@@ -1,7 +1,7 @@
 import { sbGet, sbPatch, sbPost } from './api.js';
 import { HW_POST, SB_URL } from './config.js';
 import { chGrade, chLang, inScope } from './scope.js';
-import { naturalSort, shuffleArr } from './util.js';
+import { dayKey, naturalSort, shuffleArr } from './util.js';
 import { normWordKey, parseData, safeWords } from './words.js';
 
 var DEFAULT_STREAK = { upThresholds:{1:2,2:1,3:1,4:1,5:1}, downThresholds:{1:0,2:1,3:1,4:1,5:1},
@@ -21,7 +21,7 @@ var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
 
 var DAY_WORDS_KEEP = 60;  // Tage mit Wort-Detail (spart Platz im Blob)
 
-function lsToday(){ return new Date().toISOString().slice(0,10); }
+function lsToday(){ return dayKey(); }
 
 function daysBetween(a, b){
   if(!a||!b) return null;

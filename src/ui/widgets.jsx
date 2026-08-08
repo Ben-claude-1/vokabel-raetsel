@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T } from '../core/theme.js';
-import { shuffleArr } from '../core/util.js';
+import { dayKey, shuffleArr } from '../core/util.js';
 import { buildT2Layout } from '../core/words.js';
 
 function T2LetterField({ word, onCorrect, onWrong }) {
@@ -91,7 +91,7 @@ function CelebrationPopup({ msg, onClose }) {
 }
 
 function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDate, title }) {
-  var today = new Date().toISOString().slice(0,10);
+  var today = dayKey();
   var byDate = {};
   (sessions||[]).forEach(function(s){
     if(!byDate[s.d]) byDate[s.d]={dur:0};
@@ -100,7 +100,7 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
   var days = [];
   for(var i=29;i>=0;i--){
     var dt=new Date(); dt.setDate(dt.getDate()-i);
-    var k=dt.toISOString().slice(0,10);
+    var k=dayKey(dt);
     days.push({k:k, dur:byDate[k]?byDate[k].dur:0, isToday:i===0});
   }
   var todayDur=(byDate[today]?byDate[today].dur:0)+(todayExtraSec||0);
