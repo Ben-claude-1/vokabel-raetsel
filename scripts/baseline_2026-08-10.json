@@ -1,0 +1,884 @@
+{
+  "generated": "2026-08-09T23:36:24.000Z",
+  "players": [
+    {
+      "name": "Levi",
+      "score": 3635,
+      "runs": [
+        {
+          "run": "Kapitel 4",
+          "grade": 5,
+          "language": "en",
+          "words": 91,
+          "pots": {
+            "1": 45,
+            "2": 18,
+            "3": 10,
+            "4": 11,
+            "5": 5,
+            "6": 2
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-04-24"
+        }
+      ],
+      "potTotals": {
+        "1": 45,
+        "2": 18,
+        "3": 10,
+        "4": 11,
+        "5": 5,
+        "6": 2
+      },
+      "answersAll": 0,
+      "firstAttemptPctAll": null,
+      "firstAttemptsAll": 0,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Hannah",
+      "score": 22853,
+      "runs": [
+        {
+          "run": "Theme 1: Back to Camden Town",
+          "grade": 6,
+          "language": "en",
+          "words": 114,
+          "pots": {
+            "1": 103,
+            "2": 10,
+            "3": 1,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 73,
+          "firstAttempts": 60,
+          "firstAttemptPct": 70,
+          "updated": "2026-08-06"
+        },
+        {
+          "run": "Theme 2: Celebrations",
+          "grade": 6,
+          "language": "en",
+          "words": 101,
+          "pots": {
+            "1": 97,
+            "2": 4,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 41,
+          "firstAttempts": 33,
+          "firstAttemptPct": 79,
+          "updated": "2026-08-04"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 5",
+          "grade": 5,
+          "language": "en",
+          "words": 14,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 1,
+            "5": 0,
+            "6": 13
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-01"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 4",
+          "grade": 5,
+          "language": "en",
+          "words": 24,
+          "pots": {
+            "1": 1,
+            "2": 2,
+            "3": 0,
+            "4": 1,
+            "5": 0,
+            "6": 20
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-07-29"
+        }
+      ],
+      "potTotals": {
+        "1": 201,
+        "2": 16,
+        "3": 1,
+        "4": 2,
+        "5": 0,
+        "6": 33
+      },
+      "answersAll": 114,
+      "firstAttemptPctAll": 73,
+      "firstAttemptsAll": 93,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 5,
+          "pct": 80
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Ben",
+      "score": 4307,
+      "runs": [
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 2",
+          "grade": 5,
+          "language": "en",
+          "words": 15,
+          "pots": {
+            "1": 15,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-25"
+        },
+        {
+          "run": "Kapitel 4",
+          "grade": 5,
+          "language": "en",
+          "words": 91,
+          "pots": {
+            "1": 30,
+            "2": 15,
+            "3": 17,
+            "4": 12,
+            "5": 15,
+            "6": 2
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-04-25"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 1",
+          "grade": 5,
+          "language": "en",
+          "words": 26,
+          "pots": {
+            "1": 0,
+            "2": 1,
+            "3": 10,
+            "4": 10,
+            "5": 5,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-04-26"
+        }
+      ],
+      "potTotals": {
+        "1": 45,
+        "2": 16,
+        "3": 27,
+        "4": 22,
+        "5": 20,
+        "6": 2
+      },
+      "answersAll": 0,
+      "firstAttemptPctAll": null,
+      "firstAttemptsAll": 0,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Emma",
+      "score": 71247,
+      "runs": [
+        {
+          "run": "Theme 1: Back to Camden Town",
+          "grade": 6,
+          "language": "en",
+          "words": 114,
+          "pots": {
+            "1": 65,
+            "2": 28,
+            "3": 13,
+            "4": 6,
+            "5": 2,
+            "6": 0
+          },
+          "answers": 414,
+          "firstAttempts": 259,
+          "firstAttemptPct": 55,
+          "updated": "2026-08-09"
+        },
+        {
+          "run": "Kapitel 5",
+          "grade": 5,
+          "language": "en",
+          "words": 109,
+          "pots": {
+            "1": 108,
+            "2": 1,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-22"
+        },
+        {
+          "run": "Kapitel 4",
+          "grade": 5,
+          "language": "en",
+          "words": 116,
+          "pots": {
+            "1": 0,
+            "2": 4,
+            "3": 1,
+            "4": 4,
+            "5": 11,
+            "6": 96
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-08-04"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 5",
+          "grade": 5,
+          "language": "en",
+          "words": 14,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 1,
+            "6": 13
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-30"
+        },
+        {
+          "run": "Unidad 1: En el barrio",
+          "grade": 6,
+          "language": "es",
+          "words": 105,
+          "pots": {
+            "1": 92,
+            "2": 13,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-08-04"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 4",
+          "grade": 5,
+          "language": "en",
+          "words": 24,
+          "pots": {
+            "1": 0,
+            "2": 9,
+            "3": 1,
+            "4": 2,
+            "5": 1,
+            "6": 11
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-11"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 2",
+          "grade": 5,
+          "language": "en",
+          "words": 15,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 15
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-05"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 3",
+          "grade": 5,
+          "language": "en",
+          "words": 32,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 32
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-19"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 1",
+          "grade": 5,
+          "language": "en",
+          "words": 26,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 26
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-18"
+        }
+      ],
+      "potTotals": {
+        "1": 265,
+        "2": 55,
+        "3": 15,
+        "4": 12,
+        "5": 15,
+        "6": 193
+      },
+      "answersAll": 414,
+      "firstAttemptPctAll": 55,
+      "firstAttemptsAll": 259,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 71,
+          "pct": 48
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 66,
+          "pct": 44
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 9,
+          "pct": 33
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Doris",
+      "score": 41353,
+      "runs": [
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 3",
+          "grade": 5,
+          "language": "en",
+          "words": 32,
+          "pots": {
+            "1": 32,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-15"
+        },
+        {
+          "run": "Kapitel 4",
+          "grade": 5,
+          "language": "en",
+          "words": 118,
+          "pots": {
+            "1": 3,
+            "2": 13,
+            "3": 24,
+            "4": 7,
+            "5": 21,
+            "6": 50
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-14"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 2",
+          "grade": 5,
+          "language": "en",
+          "words": 15,
+          "pots": {
+            "1": 15,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-14"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 1",
+          "grade": 5,
+          "language": "en",
+          "words": 26,
+          "pots": {
+            "1": 0,
+            "2": 4,
+            "3": 10,
+            "4": 8,
+            "5": 3,
+            "6": 1
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-04-30"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 5",
+          "grade": 5,
+          "language": "en",
+          "words": 14,
+          "pots": {
+            "1": 0,
+            "2": 1,
+            "3": 5,
+            "4": 4,
+            "5": 2,
+            "6": 2
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-15"
+        },
+        {
+          "run": "Kapitel 5",
+          "grade": 5,
+          "language": "en",
+          "words": 109,
+          "pots": {
+            "1": 4,
+            "2": 17,
+            "3": 17,
+            "4": 18,
+            "5": 36,
+            "6": 17
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-29"
+        }
+      ],
+      "potTotals": {
+        "1": 54,
+        "2": 35,
+        "3": 56,
+        "4": 37,
+        "5": 62,
+        "6": 70
+      },
+      "answersAll": 0,
+      "firstAttemptPctAll": null,
+      "firstAttemptsAll": 0,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Sarah",
+      "score": 475,
+      "runs": [
+        {
+          "run": "Kapitel 5",
+          "grade": 5,
+          "language": "en",
+          "words": 111,
+          "pots": {
+            "1": 110,
+            "2": 1,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-04-26"
+        }
+      ],
+      "potTotals": {
+        "1": 110,
+        "2": 1,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+        "6": 0
+      },
+      "answersAll": 0,
+      "firstAttemptPctAll": null,
+      "firstAttemptsAll": 0,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    },
+    {
+      "name": "Nino",
+      "score": 8454,
+      "runs": [
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 5",
+          "grade": 5,
+          "language": "en",
+          "words": 14,
+          "pots": {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 3,
+            "6": 11
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-18"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 2",
+          "grade": 5,
+          "language": "en",
+          "words": 15,
+          "pots": {
+            "1": 3,
+            "2": 2,
+            "3": 3,
+            "4": 3,
+            "5": 1,
+            "6": 3
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-18"
+        },
+        {
+          "run": "Vokabeltest - Kap. 5 - Test 4",
+          "grade": 5,
+          "language": "en",
+          "words": 24,
+          "pots": {
+            "1": 22,
+            "2": 2,
+            "3": 0,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-10"
+        },
+        {
+          "run": "Kapitel 5",
+          "grade": 5,
+          "language": "en",
+          "words": 111,
+          "pots": {
+            "1": 106,
+            "2": 4,
+            "3": 1,
+            "4": 0,
+            "5": 0,
+            "6": 0
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-06-10"
+        },
+        {
+          "run": "Kapitel 4",
+          "grade": 5,
+          "language": "en",
+          "words": 118,
+          "pots": {
+            "1": 76,
+            "2": 25,
+            "3": 12,
+            "4": 2,
+            "5": 2,
+            "6": 1
+          },
+          "answers": 0,
+          "firstAttempts": 0,
+          "firstAttemptPct": null,
+          "updated": "2026-05-21"
+        }
+      ],
+      "potTotals": {
+        "1": 207,
+        "2": 33,
+        "3": 16,
+        "4": 5,
+        "5": 6,
+        "6": 15
+      },
+      "answersAll": 0,
+      "firstAttemptPctAll": null,
+      "firstAttemptsAll": 0,
+      "retentionCurve": [
+        {
+          "gap": "1 Tag",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "2-3 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "4-7 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "8-14 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "15-30 Tage",
+          "n": 0,
+          "pct": null
+        },
+        {
+          "gap": "> 30 Tage",
+          "n": 0,
+          "pct": null
+        }
+      ],
+      "learnedTotal": 0,
+      "learnedSameDayAsFirstContact": 0
+    }
+  ]
+}

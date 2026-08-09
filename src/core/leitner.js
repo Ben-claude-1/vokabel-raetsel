@@ -199,14 +199,116 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
   return { targetPct:tgt, currentPct:currentPct||0, gap:gap, daysLeft:daysLeft, spentMin:spentMin, requiredMinPerDay:requiredMinPerDay, status:status, etaMessage:etaMessage, targetDate:targetDate };
 }
 
-function lsPickWord(progress,lastWord) {
-  function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
-  var cands=[];
-  [1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(w.disputeId) return; if(!lastWord||w.word!==lastWord) cands.push(flat(w,pot));});});
-  if(cands.length===0&&lastWord){[1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){if(!w.disputeId) cands.push(flat(w,pot));});});}
-  if(cands.length===0){[1,2,3,4,5].forEach(function(pot){(progress.pots[pot]||[]).forEach(function(w){cands.push(flat(w,pot));});});}
-  return cands.length?shuffleArr(cands)[0]:null;
+// ── Wortauswahl ──────────────────────────────────────────────────────────────
+// Vorher: shuffleArr über alle Wörter aus den Töpfen 1–5. Das verteilt die
+// Arbeit gleichmäßig über den ganzen Run — gemessen an Emmas Theme 1: 414
+// Antworten auf 113 Wörter (Median 4 je Wort), kein einziges Wort in „gelernt",
+// weil dafür 6 richtige Antworten in Folge nötig sind. Gleichverteilung ist
+// genau die falsche Zuteilung.
+//
+// Jetzt: ein begrenztes Arbeitsset (Standard 12 Wörter), das erst abgearbeitet
+// wird, bevor neue Wörter nachrücken, plus Gewichtung nach Dringlichkeit und
+// eingestreute fällige Wiederholungen aus Topf 6.
+
+var WORKING_SET = 12;   // so viele Wörter sind gleichzeitig „in Arbeit"
+
+var REVIEW_EVERY = 5;   // jede N-te Frage ist eine fällige Wiederholung (Topf 6)
+
+var REVIEW6_INTERVALS = [1, 3, 7, 14, 30, 60];
+
+function wordSeen(w){ return ((w.correct||0)+(w.wrong||0)) > 0; }
+
+// Ein Wort, das heute schon eine Stufe aufgestiegen ist, ruht bis morgen.
+function retiredToday(w, today){ return (w.pd||'') === (today||lsToday()); }
+
+// Überfälligkeit eines gelernten Worts in Tagen (>=0 = fällig).
+function due6(w, today){
+  var last = w.lc || w.ls || null;
+  if(!last) return 999;  // nie belegt gekonnt (Altbestand) → höchste Priorität
+  var lvl = Math.min(w.rl||0, REVIEW6_INTERVALS.length-1);
+  var gap = daysBetween(last, today||lsToday());
+  if(gap==null) return -1;
+  return gap - REVIEW6_INTERVALS[lvl];
 }
+
+// Dringlichkeit innerhalb des Arbeitssets: niedriger Topf, zuletzt falsch und
+// lange nicht gesehen ziehen nach oben.
+function urgency(w, pot, today){
+  var base = ({1:5, 2:4, 3:3, 4:2.5, 5:2})[pot] || 1;
+  var failing = ((w.streak||0)===0 && (w.wrong||0)>0) ? 2 : 1;
+  var gap = w.ls ? daysBetween(w.ls, today) : null;
+  var age = gap==null ? 1.5 : Math.min(3, 1 + gap*0.3);
+  var resting = retiredToday(w, today) ? 0.15 : 1;
+  return base * failing * age * resting;
+}
+
+function weightedPick(list, weightFn){
+  var total = 0;
+  var ws = list.map(function(x){ var v = Math.max(0.01, weightFn(x)); total += v; return v; });
+  var r = Math.random() * total;
+  for(var i=0;i<list.length;i++){ r -= ws[i]; if(r<=0) return list[i]; }
+  return list[list.length-1];
+}
+
+function lsPickWord(progress, lastWord, opts) {
+  opts = opts || {};
+  var today = lsToday();
+  var setSize = Math.max(4, opts.workingSet || WORKING_SET);
+  var every = opts.reviewEvery==null ? REVIEW_EVERY : opts.reviewEvery;
+  var pots = (progress && progress.pots) || {};
+  function flat(w,pot,review){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,
+    wrong:w.wrong||0,disputeId:w.disputeId,pot:pot,review:!!review}; }
+  function avail(pot){ return (pots[pot]||[]).filter(function(w){ return w && !w.disputeId; }); }
+  function notLast(w){ return !lastWord || w.word!==lastWord; }
+
+  // 1. Fällige Wiederholung eines gelernten Worts — jede N-te Frage.
+  var dueList = avail(6).map(function(w){ return {w:w, over:due6(w,today)}; })
+                        .filter(function(x){ return x.over >= 0 && notLast(x.w); });
+  var answerNo = opts.answerNo || 0;
+  if(every>0 && dueList.length && answerNo>0 && answerNo % every === 0){
+    dueList.sort(function(a,b){ return b.over - a.over; });
+    var top = dueList.slice(0, Math.max(3, Math.ceil(dueList.length*0.2)));
+    return flat(shuffleArr(top)[0].w, 6, true);
+  }
+
+  // 2. Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
+  //    nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
+  //    im Kreis.
+  var working = [], resting = [];
+  [2,3,4,5].forEach(function(pot){ avail(pot).forEach(function(w){
+    (retiredToday(w,today)?resting:working).push({w:w, pot:pot});
+  }); });
+  avail(1).forEach(function(w){ if(wordSeen(w)) (retiredToday(w,today)?resting:working).push({w:w, pot:1}); });
+
+  // 3. Auffüllen mit noch nie gezeigten Wörtern.
+  if(working.length < setSize){
+    var fresh = avail(1).filter(function(w){ return !wordSeen(w); });
+    fresh.slice(0, setSize - working.length).forEach(function(w){ working.push({w:w, pot:1}); });
+  }
+
+  var cands = working.concat(resting).filter(function(x){ return notLast(x.w); });
+  if(!cands.length) cands = working.concat(resting);
+  if(cands.length){
+    var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today); });
+    return flat(pick.w, pick.pot, false);
+  }
+
+  // 4. Alles gelernt: das am längsten überfällige Wort aus Topf 6.
+  if(dueList.length){
+    dueList.sort(function(a,b){ return b.over - a.over; });
+    return flat(dueList[0].w, 6, true);
+  }
+  var all6 = avail(6);
+  if(all6.length) return flat(shuffleArr(all6)[0], 6, true);
+  return null;
+}
+
+// Eine Stufe pro Wort und Tag. Ohne diese Schranke klettert ein Wort in einer
+// einzigen Sitzung von „neu" auf „gelernt" (2 richtige für Topf 1, je 1 für die
+// Töpfe 2–5) — der Prozentwert misst dann einen guten Nachmittag, nicht Behalten.
+function canPromote(wObj, today){ return (wObj.pd||'') !== (today||lsToday()); }
+
+function markPromoted(wObj, today){ wObj.pd = today||lsToday(); }
 
 function generateSentences(words, runName, forceNew) {
   var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
@@ -388,4 +490,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW_EVERY, REVIEW6_INTERVALS, due6, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

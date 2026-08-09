@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { DEFAULT_STREAK, REVIEW_DEFAULT, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { DEFAULT_STREAK, REVIEW6_INTERVALS, REVIEW_DEFAULT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -117,11 +117,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function pickWord(){
     if(!sesStart) setSesStart(Date.now());
-    var w = lsPickWord(data, current ? current.word : null);
+    var w = lsPickWord(data, current ? current.word : null,
+      {answerNo:sessionLog.length, workingSet:streak.workingSet, reviewEvery:streak.reviewEvery});
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
     qShownAt.current = Date.now();
-    if(w.pot===1){
+    if(w.pot===6){
+      // Fällige Wiederholung eines gelernten Worts: frei eintippen, kein Tipp.
+      setPhase('answer');
+    } else if(w.pot===1){
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
       var wType=getWordType(w);
@@ -165,7 +169,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var wObj=wIdx>=0?potArr.splice(wIdx,1)[0]:{word:current.word,clue:current.clue,streak:0};
     var newStreak=correct?(wObj.streak||0)+1:0;
     var moveTo=1;
-    if(correct&&newStreak>=reqStreak){moveTo=2;newStreak=0;}
+    if(correct&&newStreak>=reqStreak){
+      // Höchstens eine Stufe pro Tag — sonst ist „gelernt" nur ein guter Nachmittag.
+      if(canPromote(wObj)){ moveTo=2; newStreak=0; markPromoted(wObj); }
+      else newStreak=reqStreak;   // hält die Stufe: morgen reicht eine richtige Antwort
+    }
     wObj.streak=newStreak; wObj.correct=(wObj.correct||0)+(correct?1:0); wObj.wrong=(wObj.wrong||0)+(!correct?1:0);
     trackPot(wObj,1,correct);
     if(!newData.pots[moveTo])newData.pots[moveTo]=[];
@@ -222,6 +230,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var rt = answerMs();
     var typed = skipped ? '' : input.trim();
     var fromPot = current.pot;
+    var isReview = fromPot === 6;   // fällige Wiederholung eines gelernten Worts
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
     var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer);
@@ -236,9 +245,17 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(wIdx>=0) potArr.splice(wIdx,1);
     var newStreak = correct ? (wObj.streak||0)+1 : 0;
     var moveTo = fromPot;
-    if(correct && newStreak>=reqStreak){
-      moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot;
-      newStreak = 0;
+    if(isReview){
+      // Gelerntes Wort verteidigt: Abstand wächst (1→3→7→14→30→60 Tage).
+      // Nicht gekonnt: zurück in Topf 4, dort muss es neu erarbeitet werden.
+      if(correct){ wObj.rl = Math.min((wObj.rl||0)+1, REVIEW6_INTERVALS.length-1); newStreak = 0; }
+      else { moveTo = 4; wObj.rl = 0; newStreak = 0; }
+    } else if(correct && newStreak>=reqStreak){
+      // Höchstens eine Stufe pro Tag — sonst ist „gelernt" nur ein guter Nachmittag.
+      if(canPromote(wObj)){
+        moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot;
+        newStreak = 0; markPromoted(wObj);
+      } else newStreak = reqStreak;   // hält die Stufe: morgen reicht eine richtige Antwort
     } else if(!correct && fromPot>1){
       moveTo = fromPot-1; newStreak=0;
     }
@@ -253,6 +270,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
+    // Rückstufung aus der Wiederholung vermerken, damit ein sinkender
+    // Prozentwert später erklärbar ist.
+    if(isReview && !correct){
+      var rvDay = (newData.days||{})[dayKey()];
+      if(rvDay) rvDay.rv = (rvDay.rv||0) + 1;
+    }
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -538,13 +561,21 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           setSesAns(function(n){return n+1;}); setSesCor(function(n){return n+1;}); trackActiveTime();
           trackPot(wObj,2,true);
           var moveTo=2;
-          if(wObj.streak>=reqStreak){moveTo=3;wObj.streak=0;}
+          if(wObj.streak>=reqStreak){
+            // Höchstens eine Stufe pro Tag.
+            if(canPromote(wObj)){ moveTo=3; wObj.streak=0; markPromoted(wObj); }
+            else wObj.streak=reqStreak;
+          }
           if(!newData.pots[moveTo])newData.pots[moveTo]=[];
           newData.pots[moveTo].push(wObj);
           newData.totalCorrect=(newData.totalCorrect||0)+1;
+          tallyAnswer(true);
+          lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:2,toPot:moveTo,
+            pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
           saveAndUpdate(newData);
           var pts=10;
           if(onUpdateScore)onUpdateScore(pts);
+          setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:current.word,correct:true,partial:false,fromPot:2,toPot:moveTo,pts:pts}]);});
           if(moveTo===6)setCelebration('🏆 "'+current.word+'" gelernt!');
           setResult({correct:true,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:current.word,fromPot:2,toPot:moveTo,pts:pts,newStreak:wObj.streak,reqStreak:reqStreak});
           setPhase('showResult');
@@ -561,7 +592,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           if(!newData.pots[1])newData.pots[1]=[];
           newData.pots[1].push(wObj);
           newData.totalWrong=(newData.totalWrong||0)+1;
+          tallyAnswer(false);
+          lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:2,toPot:1,
+            pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
           saveAndUpdate(newData);
+          setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:typed,correct:false,partial:false,fromPot:2,toPot:1,pts:0}]);});
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
           setPhase('showResult');
         }}/>}
@@ -614,9 +649,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
-        <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
+        <div style={{textAlign:'center',padding:'18px 16px',background:current&&current.review?'#fef3c7':G50,borderRadius:14,marginBottom:12,border:'2px solid '+(current&&current.review?AM:G200)}}>
+          <div style={{fontSize:10,color:current&&current.review?'#92400e':G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>
+            {current&&current.review?'🔁 Wiederholung — kannst du es noch?':'Topf '+(current&&current.pot)+' — '+(current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?')}
+          </div>
           <div style={{fontSize:24,fontWeight:'bold',color:G900,marginBottom:4}}>{current&&(current.pot===5?current.word:current.clue)}</div>
+          {current&&current.review&&<div style={{fontSize:11,color:'#92400e'}}>Richtig = 30 Punkte</div>}
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
