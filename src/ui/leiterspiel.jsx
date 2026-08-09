@@ -602,7 +602,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
             placeholder={'Englisch ('+dashLetterCount+' Buchstaben)…'}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
+          <button onClick={function(){ submitAnswer(false); }} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
         <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
@@ -624,7 +624,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
             placeholder={current&&current.pot===5?'Deutsch…':'Englisch…'}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={submitAnswer} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
+          <button onClick={function(){ submitAnswer(false); }} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
         <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
       </div>
