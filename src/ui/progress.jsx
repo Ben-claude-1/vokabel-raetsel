@@ -376,12 +376,91 @@ function MeineLernuebersicht({ player, chapters, scope }) {
     </div>
     <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} title="🪜 Dein Leiterspiel-Fortschritt"/>
     <div style={{height:12}}/>
+    <BehaltensKurve progressRows={scopedProgress}/>
+    <div style={{height:12}}/>
     <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📈 Deine Lernzeit pro Tag</div>
     <LernVerlaufChart sessions={chartSessions}/>
     <div style={{height:12}}/>
     <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs}/>
     <div style={{height:12}}/>
     <GameBreakdown sessions={sessions} title="🎮 Insgesamt gelernt"/>
+  </div>;
+}
+
+// „Sitzt es wirklich?" — die einzige Zahl, die die Frage beantwortet, ob die
+// App etwas bringt: Wie viel kann sie noch, wenn sie eine Vokabel eine Weile
+// nicht gesehen hat?
+//
+// Grundlage sind die Erstversuche aus dem Tages-Log: `g` = Tage seit dem
+// letzten Kontakt, `f1` = beim ersten Versuch des Tages richtig. Beides wird
+// seit dem 04.08.2026 mitgeschrieben. Gezählt wird nur der erste Versuch —
+// ein zweiter Anlauf am selben Tag würde die Quote schönen.
+var BEHALTEN_KLASSEN = [
+  {label:'am nächsten Tag', min:1, max:1},
+  {label:'nach 2-3 Tagen', min:2, max:3},
+  {label:'nach einer Woche', min:4, max:7},
+  {label:'nach 2 Wochen', min:8, max:14},
+  {label:'nach einem Monat', min:15, max:99999},
+];
+
+function behaltensKurve(progressRows){
+  var klassen = BEHALTEN_KLASSEN.map(function(k){ return {label:k.label, n:0, ok:0}; });
+  (progressRows||[]).forEach(function(row){
+    var d = parseData(row.data);
+    Object.keys(d.days||{}).forEach(function(tag){
+      var w = (d.days[tag]||{}).w || {};
+      Object.keys(w).forEach(function(wort){
+        var rec = w[wort];
+        if(rec==null || rec.g==null || rec.f1==null) return;
+        for(var i=0;i<BEHALTEN_KLASSEN.length;i++){
+          if(rec.g>=BEHALTEN_KLASSEN[i].min && rec.g<=BEHALTEN_KLASSEN[i].max){
+            klassen[i].n++; if(rec.f1) klassen[i].ok++;
+            break;
+          }
+        }
+      });
+    });
+  });
+  return klassen;
+}
+
+function BehaltensKurve({ progressRows }){
+  var klassen = behaltensKurve(progressRows).filter(function(k){ return k.n>=5; });
+  if(!klassen.length) return null;
+  var gesamtN = klassen.reduce(function(s,k){ return s+k.n; }, 0);
+  var bester = klassen.reduce(function(m,k){ return Math.max(m, Math.round(k.ok/k.n*100)); }, 0);
+  return <div>
+    <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>🧠 Sitzt es wirklich?</div>
+    <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,padding:'12px 12px 10px'}}>
+      <div style={{fontSize:11,color:G600,marginBottom:10,lineHeight:1.5}}>
+        So viel konntest du noch, <b>ohne die Vokabel vorher nochmal anzusehen</b> — je länger der Abstand, desto mehr sagt es aus.
+      </div>
+      {klassen.map(function(k,i){
+        var pct = Math.round(k.ok/k.n*100);
+        // Maßstab bewusst nicht bei 70 %: Gezählt werden auch Vokabeln, die
+        // gerade erst gelernt werden — da ist die Hälfte beim ersten Versuch
+        // ein normaler Wert. Eine Wand aus roten Balken wäre demotivierend und
+        // sachlich irreführend.
+        var farbe = pct>=60?T:pct>=40?AM:RE;
+        return <div key={i} style={{marginBottom:9}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',fontSize:11,marginBottom:3}}>
+            <span style={{color:G900}}>{k.label}</span>
+            <span style={{fontWeight:'bold',color:farbe}}>{pct}%<span style={{color:G400,fontWeight:'normal',fontSize:10}}> · {k.n} Vokabeln</span></span>
+          </div>
+          <div style={{height:7,background:G100,borderRadius:4,overflow:'hidden'}}>
+            <div style={{height:'100%',width:pct+'%',background:farbe,borderRadius:4,transition:'width .4s'}}/>
+          </div>
+        </div>;
+      })}
+      <div style={{background:TL,color:TD,borderRadius:8,padding:'8px 10px',fontSize:11,lineHeight:1.45,marginTop:2}}>
+        {bester>=60
+          ? '💪 Stark — mehr als die Hälfte sitzt auch nach einer Pause.'
+          : 'Das sind Wörter, die du gerade erst lernst — da ist die Hälfte völlig normal. Die Zahl steigt, je öfter eine Vokabel mit Abstand wiederkommt.'}
+      </div>
+      <div style={{fontSize:10,color:G400,marginTop:8,lineHeight:1.4}}>
+        Aus {gesamtN} Erstversuchen. Nur der <b>erste</b> Versuch am Tag zählt — sonst würde ein zweiter Anlauf die Zahl schönfärben.
+      </div>
+    </div>
   </div>;
 }
 
@@ -584,4 +663,4 @@ function Scoreboard({ player }) {
   );
 }
 
-export { DailyLearnChart, GameBreakdown, LeiterspielFortschritt, TagesLeiterspiel, TagesDetail, MeineLernuebersicht, RepeatRunHistory, RepeatHistorySelf, Leaderboard, Stats, StickerCard, Scoreboard };
+export { DailyLearnChart, GameBreakdown, LeiterspielFortschritt, TagesLeiterspiel, TagesDetail, MeineLernuebersicht, RepeatRunHistory, RepeatHistorySelf, Leaderboard, Stats, StickerCard, Scoreboard, BehaltensKurve, behaltensKurve };

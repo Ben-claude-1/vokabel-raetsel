@@ -9,6 +9,7 @@ import { normWordKey, parseData } from '../core/words.js';
 import { GoalTracker, LoginScreen, RegisterScreen } from '../ui/auth.jsx';
 import { LeitersSpielCreate, LeitersSpielMenu, LeitersSpielSession } from '../ui/leiterspiel.jsx';
 import { Leaderboard, MeineLernuebersicht, RepeatHistorySelf, Scoreboard, Stats } from '../ui/progress.jsx';
+import { Tagesaufgaben } from '../ui/quests.jsx';
 import { SentenceLearner, VokabelTrainer, WorkoutSession, WorkoutSetup } from '../ui/trainer.jsx';
 import { WiederholungMode } from '../ui/wiederholung.jsx';
 
@@ -220,7 +221,13 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     return function(){ clearInterval(hb); };
   },[player&&player.id]);
 
-  function go(s, data) { setScreen(s); setScreenData(data||null); }
+  // Zählt jeden Wechsel zurück auf die Startseite. Die Tagesaufgaben laden
+  // daraufhin neu, damit ein gerade erfülltes Ziel sofort abhakbar ist.
+  var [homeVisits, setHomeVisits] = useState(0);
+  function go(s, data) {
+    setScreen(s); setScreenData(data||null);
+    if(s==='home') setHomeVisits(function(n){ return n+1; });
+  }
 
   // Einzige Stelle, die Punkte gutschreibt — die Spiele rufen nur noch hier an.
   // Der Zwischenstand liegt in scoreRef, weil `player` bei zwei Antworten kurz
@@ -339,6 +346,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               }
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
             </div>
+            <Tagesaufgaben player={player} chapters={chapters} scope={scope}
+              reviewDue={reviewInfo.locked} refreshKey={homeVisits}
+              onGo={function(s){ go(s); }} onReward={handleUpdateScore}/>
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
