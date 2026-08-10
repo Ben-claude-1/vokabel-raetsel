@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { HW_POST, SB_URL } from '../core/config.js';
-import { ANSWER_TALLY, REVIEW_DEFAULT, lsGetRunsForPlayer, reviewLockState } from '../core/leitner.js';
+import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsForPlayer, reviewLockState } from '../core/leitner.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { defaultScope, filterRunsByScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
 import { BUILTIN } from '../core/store.js';
@@ -105,15 +105,16 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       var last = (res[1]&&res[1][0]&&res[1][0].created_at) || null;
       var inScopeRun = {};
       filterRunsByScope(Array.isArray(res[3])?res[3]:[], chapters, scope).forEach(function(r){ inScopeRun[r.id]=1; });
-      var learned = {};
-      (Array.isArray(res[2])?res[2]:[]).forEach(function(row){
-        if(!inScopeRun[row.run_id]) return;
-        var d=parseData(row.data), pots=d.pots||{};
-        (pots[6]||[]).forEach(function(w){ if(w.word) learned[normWordKey(w.word)]=1; });
-      });
-      var poolSize = Object.keys(learned).length;
-      var st = reviewLockState(policy, last, poolSize);
-      setReviewInfo({locked:st.locked, policy:st.policy, poolSize:poolSize, daysSince:st.daysSince});
+      var mine = (Array.isArray(res[2])?res[2]:[]).filter(function(row){ return inScopeRun[row.run_id]; })
+        .map(function(row){ return parseData(row.data); });
+      // Fällige Vokabeln und die Lernantworten seit dem letzten Lauf sind die
+      // beiden Auslöser, die den Wechsel wirklich takten — die Zeit allein
+      // kommt gegen einen wachsenden Bestand nicht an.
+      var cnt = countDue6(mine);
+      var st = reviewLockState(policy, last, cnt.pool,
+        {dueCount:cnt.due, answersSince:answersSinceReview(mine, last)});
+      setReviewInfo({locked:st.locked, policy:st.policy, poolSize:cnt.pool, daysSince:st.daysSince,
+        reason:st.reason, dueCount:st.dueCount, answersSince:st.answersSince});
     }).catch(function(){});
   }, [player&&player.id, chapters, scope&&scope.grade, scope&&scope.language]);
   useEffect(function(){ loadReview(); }, [loadReview]);

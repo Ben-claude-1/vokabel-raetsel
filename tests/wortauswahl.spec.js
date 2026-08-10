@@ -125,7 +125,7 @@ test('alte Auswahl streut die Arbeit gleichmäßig und lernt nichts fertig', () 
 
 test('neue Auswahl bündelt auf ein Arbeitsset und bringt Wörter durch', () => {
   const r = simulate({
-    pick: (p, last, i) => L.lsPickWord(p, last, { answerNo: i, reviewEvery: 0 }),
+    pick: (p, last, i) => L.lsPickWord(p, last, {}),
     gate: false,
   });
   // Deutlich weniger Wörter, dafür jedes intensiv
@@ -137,7 +137,7 @@ test('neue Auswahl bündelt auf ein Arbeitsset und bringt Wörter durch', () => 
 
 test('Tagesschranke lässt kein Wort an einem Tag bis „gelernt" klettern', () => {
   const r = simulate({
-    pick: (p, last, i) => L.lsPickWord(p, last, { answerNo: i, reviewEvery: 0 }),
+    pick: (p, last, i) => L.lsPickWord(p, last, {}),
     gate: true,
   });
   // An einem einzigen Tag ist höchstens Topf 2 erreichbar
@@ -156,31 +156,84 @@ test('canPromote sperrt nur den laufenden Tag', () => {
   expect(L.canPromote(w)).toBe(true);
 });
 
-test('fällige Wiederholungen kommen aus Topf 6 und respektieren den Abstand', () => {
-  const today = L.lsToday();
-  const daysAgo = n => {
-    const d = new Date(today + 'T12:00:00');
-    d.setDate(d.getDate() - n);
-    return d.toISOString().slice(0, 10);
-  };
+// ── Zweiteilung: Leiterspiel lernt, der Wiederholungslauf behält ────────────
+
+const daysAgo = (n) => {
+  const d = new Date(L.lsToday() + 'T12:00:00');
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+
+test('das Leiterspiel fragt nie gelernte Vokabeln ab — das ist Sache der Wiederholung', () => {
   const p = makeProgress();
-  // ein frisch gekonntes und ein lange nicht gesehenes gelerntes Wort
-  p.pots[6].push({ word: 'frisch', clue: 'k', lc: daysAgo(0), rl: 0 });
-  p.pots[6].push({ word: 'alt', clue: 'k', lc: daysAgo(40), rl: 0 });
-  p.pots[6].push({ word: 'nie_belegt', clue: 'k' });
+  p.pots[6].push({ word: 'laengst_faellig', clue: 'k', lc: daysAgo(90), rl: 0 });
+  for (let i = 0; i < 200; i++) {
+    const w = L.lsPickWord(p, null, {});
+    expect(w.pot).toBeLessThan(6);
+  }
+});
 
-  expect(L.due6(p.pots[6][0], today)).toBeLessThan(0);      // noch nicht fällig
-  expect(L.due6(p.pots[6][1], today)).toBeGreaterThan(0);   // überfällig
-  expect(L.due6(p.pots[6][2], today)).toBe(999);            // nie belegt → Vorrang
+test('Fälligkeit wächst mit der Stufe 1-3-7-14-30-60', () => {
+  const today = L.lsToday();
+  expect(L.due6({ word: 'a', lc: daysAgo(0), rl: 0 }, today)).toBeLessThan(0);   // heute gekonnt
+  expect(L.due6({ word: 'a', lc: daysAgo(2), rl: 0 }, today)).toBeGreaterThan(0); // Stufe 0 = 1 Tag
+  expect(L.due6({ word: 'a', lc: daysAgo(2), rl: 2 }, today)).toBeLessThan(0);    // Stufe 2 = 7 Tage
+  expect(L.due6({ word: 'a', lc: daysAgo(40), rl: 4 }, today)).toBeGreaterThan(0); // Stufe 4 = 30 Tage
+  expect(L.due6({ word: 'a' }, today)).toBe(999);                                 // nie belegt → Vorrang
+});
 
-  // jede 5. Frage ist eine Wiederholung
-  const rev = L.lsPickWord(p, null, { answerNo: 5, reviewEvery: 5 });
-  expect(rev.review).toBe(true);
-  expect(rev.pot).toBe(6);
-  expect(['alt', 'nie_belegt']).toContain(rev.word);
+test('der Wechsel wird vom Lernen getaktet, nicht vom Rückstand', () => {
+  const pol = { enabled: true, days: 3, count: 20, minPool: 20, answersTrigger: 80, maxCount: 30 };
+  const gestern = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 
-  // dazwischen normale Wörter
-  const normal = L.lsPickWord(p, null, { answerNo: 6, reviewEvery: 5 });
-  expect(normal.review).toBe(false);
-  expect(normal.pot).toBeLessThan(6);
+  // Der entscheidende Fall: riesiger Rückstand, aber gerade erst wiederholt und
+  // seitdem kaum gelernt -> NICHT gesperrt. Sonst gäbe es keinen Wechsel,
+  // sondern eine Dauerschleife Wiederholung.
+  const frisch = L.reviewLockState(pol, gestern, 200, { dueCount: 190, answersSince: 5 });
+  expect(frisch.locked).toBe(false);
+
+  // Pensum voll -> Lauf schiebt sich dazwischen
+  const nachLernen = L.reviewLockState(pol, gestern, 200, { dueCount: 190, answersSince: 80 });
+  expect(nachLernen.locked).toBe(true);
+  expect(nachLernen.reason).toBe('learned');
+
+  // Lange nichts gemacht -> auch dann
+  const alt = new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString();
+  expect(L.reviewLockState(pol, alt, 200, { dueCount: 5, answersSince: 0 }).reason).toBe('days');
+
+  // Nichts fällig -> nie gesperrt, egal wie lange her
+  expect(L.reviewLockState(pol, alt, 200, { dueCount: 0, answersSince: 500 }).locked).toBe(false);
+
+  // Noch nie wiederholt -> beim ersten Mal sofort
+  expect(L.reviewLockState(pol, null, 200, { dueCount: 190, answersSince: 0 }).reason).toBe('first');
+
+  // Zu kleiner Pool -> die Sperre gilt für Anfänger nicht
+  expect(L.reviewLockState(pol, null, 5, { dueCount: 5, answersSince: 0 }).locked).toBe(false);
+});
+
+test('der Lauf wird größer, wenn Rückstand aufgelaufen ist — aber nicht endlos', () => {
+  const pol = { count: 20, maxCount: 30 };
+  expect(L.reviewRunSize(pol, 0)).toBe(20);
+  expect(L.reviewRunSize(pol, 50)).toBe(20);
+  expect(L.reviewRunSize(pol, 190)).toBe(30);
+  expect(L.reviewRunSize(pol, 5000)).toBe(30);
+});
+
+test('countDue6 entdoppelt Wörter, die in mehreren Runs stehen', () => {
+  const a = { pots: { 6: [{ word: 'same', lc: daysAgo(90) }, { word: 'x', lc: daysAgo(0) }] } };
+  const b = { pots: { 6: [{ word: 'Same', lc: daysAgo(90) }] } };
+  const r = L.countDue6([a, b]);
+  expect(r.pool).toBe(2);
+  expect(r.due).toBe(1);
+});
+
+test('answersSinceReview zählt nur Sitzungen nach dem letzten Lauf', () => {
+  const lauf = Date.now() - 3600 * 1000;
+  const d = { sessions: [
+    { ts: lauf - 10000, ans: 40 },   // davor
+    { ts: lauf + 10000, ans: 25 },   // danach
+    { ts: lauf + 20000, ans: 15 },
+  ] };
+  expect(L.answersSinceReview([d], new Date(lauf).toISOString())).toBe(40);
+  expect(L.answersSinceReview([d], null)).toBe(0);
 });

@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { DEFAULT_STREAK, REVIEW6_INTERVALS, REVIEW_DEFAULT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { DEFAULT_STREAK, REVIEW_DEFAULT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -117,15 +117,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function pickWord(){
     if(!sesStart) setSesStart(Date.now());
-    var w = lsPickWord(data, current ? current.word : null,
-      {answerNo:sessionLog.length, workingSet:streak.workingSet, reviewEvery:streak.reviewEvery});
+    var w = lsPickWord(data, current ? current.word : null, {workingSet:streak.workingSet});
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null);
     qShownAt.current = Date.now();
-    if(w.pot===6){
-      // Fällige Wiederholung eines gelernten Worts: frei eintippen, kein Tipp.
-      setPhase('answer');
-    } else if(w.pot===1){
+    if(w.pot===1){
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
       var wType=getWordType(w);
@@ -230,7 +226,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var rt = answerMs();
     var typed = skipped ? '' : input.trim();
     var fromPot = current.pot;
-    var isReview = fromPot === 6;   // fällige Wiederholung eines gelernten Worts
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
     var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer);
@@ -245,12 +240,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(wIdx>=0) potArr.splice(wIdx,1);
     var newStreak = correct ? (wObj.streak||0)+1 : 0;
     var moveTo = fromPot;
-    if(isReview){
-      // Gelerntes Wort verteidigt: Abstand wächst (1→3→7→14→30→60 Tage).
-      // Nicht gekonnt: zurück in Topf 4, dort muss es neu erarbeitet werden.
-      if(correct){ wObj.rl = Math.min((wObj.rl||0)+1, REVIEW6_INTERVALS.length-1); newStreak = 0; }
-      else { moveTo = 4; wObj.rl = 0; newStreak = 0; }
-    } else if(correct && newStreak>=reqStreak){
+    if(correct && newStreak>=reqStreak){
       // Höchstens eine Stufe pro Tag — sonst ist „gelernt" nur ein guter Nachmittag.
       if(canPromote(wObj)){
         moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot;
@@ -270,12 +260,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
-    // Rückstufung aus der Wiederholung vermerken, damit ein sinkender
-    // Prozentwert später erklärbar ist.
-    if(isReview && !correct){
-      var rvDay = (newData.days||{})[dayKey()];
-      if(rvDay) rvDay.rv = (rvDay.rv||0) + 1;
-    }
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -649,12 +633,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
-        <div style={{textAlign:'center',padding:'18px 16px',background:current&&current.review?'#fef3c7':G50,borderRadius:14,marginBottom:12,border:'2px solid '+(current&&current.review?AM:G200)}}>
-          <div style={{fontSize:10,color:current&&current.review?'#92400e':G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>
-            {current&&current.review?'🔁 Wiederholung — kannst du es noch?':'Topf '+(current&&current.pot)+' — '+(current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?')}
-          </div>
+        <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
           <div style={{fontSize:24,fontWeight:'bold',color:G900,marginBottom:4}}>{current&&(current.pot===5?current.word:current.clue)}</div>
-          {current&&current.review&&<div style={{fontSize:11,color:'#92400e'}}>Richtig = 30 Punkte</div>}
         </div>
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
@@ -1085,13 +1066,23 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
       <div style={{background:'white',border:'2px solid '+AM,borderRadius:16,padding:'22px 18px',textAlign:'center'}}>
         <div style={{fontSize:44,marginBottom:8}}>🔒</div>
         <div style={{fontWeight:'bold',fontSize:17,color:G900,marginBottom:6}}>Erst die Wiederholung!</div>
-        <div style={{fontSize:13,color:G600,lineHeight:1.55,marginBottom:4}}>
-          Alle {reviewInfo.policy.days} Tage prüfen wir, ob die gelernten Vokabeln noch sitzen.
-          {reviewInfo.daysSince!=null
-            ? ' Deine letzte Wiederholung war vor '+reviewInfo.daysSince+' Tag'+(reviewInfo.daysSince===1?'':'en')+'.'
-            : ' Du hast noch keine gemacht.'}
+        <div style={{fontSize:13,color:G600,lineHeight:1.55,marginBottom:8}}>
+          {reviewInfo.reason==='learned'
+            ? 'Du hast seit der letzten Wiederholung '+reviewInfo.answersSince+' Vokabeln geübt — jetzt schauen wir, ob das Gelernte noch sitzt.'
+            : reviewInfo.reason==='first'
+              ? 'Bevor es weitergeht: einmal prüfen, was von den gelernten Vokabeln noch sitzt.'
+              : 'Deine letzte Wiederholung war vor '+reviewInfo.daysSince+' Tag'+(reviewInfo.daysSince===1?'':'en')+' — Zeit zu prüfen, ob das Gelernte noch sitzt.'}
         </div>
-        <div style={{fontSize:12,color:G400,marginBottom:16}}>{reviewInfo.poolSize} gelernte Vokabeln im Pool · abgefragt wird, was am längsten her ist.</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontSize:11,color:G600,marginBottom:10}}>
+          <span style={{background:TL,color:TD,borderRadius:20,padding:'4px 10px',fontWeight:'bold'}}>📚 Lernen</span>
+          <span style={{color:G400}}>→</span>
+          <span style={{background:AM,color:'white',borderRadius:20,padding:'4px 10px',fontWeight:'bold'}}>🔁 Wiederholen</span>
+          <span style={{color:G400}}>→</span>
+          <span style={{background:TL,color:TD,borderRadius:20,padding:'4px 10px',fontWeight:'bold'}}>📚 Lernen</span>
+        </div>
+        <div style={{fontSize:12,color:G400,marginBottom:16}}>
+          {reviewInfo.runSize||reviewInfo.policy.count} Vokabeln · {reviewInfo.dueCount} von {reviewInfo.poolSize} gelernten sind dran
+        </div>
         <button onClick={onReview} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>🔁 Wiederholung starten</button>
         <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
       </div>
@@ -1481,19 +1472,27 @@ function ReviewPolicySettings(){
   return <div style={{marginTop:22,paddingTop:14,borderTop:'2px solid '+G100}}>
     <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:2}}>🔁 Pflicht-Wiederholung</div>
     <p style={{fontSize:11,color:G400,marginBottom:10,lineHeight:1.5}}>
-      Nach dem eingestellten Takt ist das Leiterspiel gesperrt, bis ein Wiederholungslauf gemacht wurde.
-      Abgefragt werden gelernte Vokabeln — die am längsten überfälligen zuerst (Abstand wächst 1→3→7→14→30→60 Tage).
-      Falsch beantwortete wandern zurück in Topf 4.
+      Lernen und Wiederholen wechseln sich ab: Nach dem eingestellten Pensum ist das Leiterspiel gesperrt,
+      bis ein Wiederholungslauf gemacht wurde. Abgefragt werden gelernte Vokabeln — die am längsten
+      überfälligen zuerst (Abstand wächst 1→3→7→14→30→60 Tage). Falsch beantwortete wandern zurück in Topf 4.
+      <br/><br/>
+      <b>Wichtig:</b> Den Takt gibt das Lernpensum vor, nicht der Rückstand. Bei vielen überfälligen Vokabeln
+      wäre sonst nach jedem Lauf sofort wieder gesperrt — es gäbe keinen Wechsel, sondern eine Dauerschleife.
+      Stattdessen wird der einzelne Lauf größer (bis zur Obergrenze), damit er den Rückstand aufholt.
     </p>
     <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 0',borderBottom:'1px solid '+G100}}>
       <div style={{flex:1,fontSize:12,color:G600,fontWeight:'bold'}}>Aktiv</div>
       <button onClick={function(){ setPol(Object.assign({},pol,{enabled:!pol.enabled})); }}
         style={BtnStyle(pol.enabled?T:G100, pol.enabled?'white':G600, {padding:'6px 14px',fontSize:12})}>{pol.enabled?'An':'Aus'}</button>
     </div>
-    <Row label="Takt in Tagen" hint="Sperre, wenn die letzte Wiederholung so lange her ist" min={1} max={60}
+    <Row label="Lernpensum bis zum Lauf" hint="Antworten im Leiterspiel, dann ist Wiederholen dran" min={10} max={500}
+      value={pol.answersTrigger} onChange={function(v){ setPol(Object.assign({},pol,{answersTrigger:v})); }}/>
+    <Row label="Takt in Tagen" hint="Spätestens nach so vielen Tagen, auch ohne Lernen" min={1} max={60}
       value={pol.days} onChange={function(v){ setPol(Object.assign({},pol,{days:v})); }}/>
-    <Row label="Vokabeln pro Lauf" hint="Umfang des Wiederholungslaufs" min={5} max={50}
+    <Row label="Vokabeln pro Lauf" hint="Normalgröße des Wiederholungslaufs" min={5} max={50}
       value={pol.count} onChange={function(v){ setPol(Object.assign({},pol,{count:v})); }}/>
+    <Row label="Obergrenze pro Lauf" hint="Bei viel Rückstand — mehr wird es nie" min={5} max={80}
+      value={pol.maxCount} onChange={function(v){ setPol(Object.assign({},pol,{maxCount:v})); }}/>
     <Row label="Erst ab … gelernten Vokabeln" hint="Vorher wird nicht gesperrt" min={1} max={500}
       value={pol.minPool} onChange={function(v){ setPol(Object.assign({},pol,{minPool:v})); }}/>
     {msg&&<div style={{padding:'8px 0',color:T,fontSize:12}}>{msg}</div>}

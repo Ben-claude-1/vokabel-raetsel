@@ -80,7 +80,18 @@ function lsLogAnswer(d, e){
   }
 }
 
-var REVIEW_DEFAULT = {enabled:true, days:7, count:20, minPool:20};
+// Lernen und Wiederholen wechseln sich ab: erst ein Stück lernen, dann prüfen,
+// ob das Gelernte noch sitzt, dann weiterlernen.
+//
+// Den Takt gibt das Lernen vor — nach `answersTrigger` Antworten (oder nach
+// `days` Tagen) schiebt sich der Lauf dazwischen. Bewusst NICHT der Rückstand:
+// bei ~190 überfälligen Vokabeln wäre nach jedem Lauf sofort wieder gesperrt
+// und es gäbe keinen Wechsel, sondern eine Dauerschleife Wiederholung.
+// Der Rückstand steuert stattdessen die *Größe* des Laufs, damit er trotzdem
+// aufholt.
+var REVIEW_DEFAULT = {enabled:true, days:3, count:20, minPool:20,
+  answersTrigger:80,   // so viele Lernantworten bis zum nächsten Lauf
+  maxCount:30};        // Obergrenze, wenn viel Rückstand aufgelaufen ist
 
 var REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -109,9 +120,12 @@ function reviewHistoryStats(history){
   return m;
 }
 
+// Überfälligkeit: >= 1 heißt „jetzt dran". Die Stufe steht am Wort selbst (`rl`,
+// vom Wiederholungslauf zurückgeschrieben); die Lauf-Historie zählt zusätzlich
+// mit, damit Läufe von vor der Umstellung nicht verloren gehen.
 function reviewOverdue(entry, stats, nowMs){
-  var st = stats[reviewKey(entry)];
-  var level = st ? st.level : 0;
+  var st = stats && stats[reviewKey(entry)];
+  var level = Math.max(entry.rl||0, st?st.level:0);
   var interval = REVIEW_INTERVALS[Math.min(level, REVIEW_INTERVALS.length-1)];
   var lastOk = Math.max(st?st.lastOk:0, entry.lcMs||0);
   if(!lastOk) return 99; // nie belegt gekonnt (Altbestand) → höchste Priorität
@@ -124,15 +138,66 @@ function reviewPolicyOf(raw){
   p.days = Math.max(1, Number(p.days)||REVIEW_DEFAULT.days);
   p.count = Math.max(5, Number(p.count)||REVIEW_DEFAULT.count);
   p.minPool = Math.max(1, Number(p.minPool)||REVIEW_DEFAULT.minPool);
+  p.answersTrigger = Math.max(10, Number(p.answersTrigger)||REVIEW_DEFAULT.answersTrigger);
+  p.maxCount = Math.max(p.count, Number(p.maxCount)||REVIEW_DEFAULT.maxCount);
   return p;
 }
 
-function reviewLockState(policy, lastReviewIso, poolSize){
+// Umfang des nächsten Laufs: Standardgröße, bei Rückstand mehr — aber gedeckelt,
+// damit ein Lauf nie zur Strafarbeit wird.
+function reviewRunSize(policy, dueCount){
   var p = reviewPolicyOf(policy);
-  if(!p.enabled || poolSize < p.minPool) return {locked:false, policy:p, daysSince:null};
+  return Math.max(p.count, Math.min(p.maxCount, Math.ceil((dueCount||0)/5)));
+}
+
+// `stats` = {dueCount, answersSince} aus dem Lernstand.
+//
+// Gesperrt wird nur, wenn es überhaupt etwas zu wiederholen gibt UND das
+// Lernpensum seit dem letzten Lauf voll ist. Der Rückstand selbst sperrt nicht
+// (siehe REVIEW_DEFAULT) — sonst gäbe es keinen Wechsel.
+function reviewLockState(policy, lastReviewIso, poolSize, stats){
+  var p = reviewPolicyOf(policy);
+  var s = stats || {};
+  var out = {locked:false, policy:p, daysSince:null, reason:null,
+    dueCount:s.dueCount||0, answersSince:s.answersSince||0, runSize:reviewRunSize(p, s.dueCount)};
+  if(!p.enabled || poolSize < p.minPool) return out;
+  if(!(s.dueCount>0)) return out;   // nichts fällig → nichts zu prüfen
   var last = lastReviewIso ? Date.parse(lastReviewIso) : 0;
-  var daysSince = last ? Math.floor((Date.now()-last)/DAY_MS) : null;
-  return {locked: !last || daysSince >= p.days, policy:p, daysSince:daysSince};
+  out.daysSince = last ? Math.floor((Date.now()-last)/DAY_MS) : null;
+  if(!last) out.reason = 'first';
+  else if((s.answersSince||0) >= p.answersTrigger) out.reason = 'learned';
+  else if(out.daysSince >= p.days) out.reason = 'days';
+  out.locked = !!out.reason;
+  return out;
+}
+
+// Wie viele gelernte Vokabeln sind fällig? Zählt über mehrere Runs hinweg und
+// entdoppelt, weil dasselbe Wort in mehreren Runs stehen kann.
+function countDue6(progressList, today){
+  var t = today || lsToday();
+  var seen = {}, due = 0, pool = 0;
+  (progressList||[]).forEach(function(d){
+    (((d||{}).pots||{})[6]||[]).forEach(function(w){
+      var k = normWordKey(w && w.word); if(!k || seen[k]) return;
+      seen[k] = 1; pool++;
+      if(due6(w, t) >= 0) due++;
+    });
+  });
+  return {due:due, pool:pool};
+}
+
+// Lernantworten seit dem letzten Wiederholungslauf — der dritte Auslöser.
+// Grundlage sind die Sitzungen im Lernstand, die einen Zeitstempel tragen.
+function answersSinceReview(progressList, lastReviewIso){
+  var since = lastReviewIso ? Date.parse(lastReviewIso) : 0;
+  if(!since) return 0;
+  var n = 0;
+  (progressList||[]).forEach(function(d){
+    ((d||{}).sessions||[]).forEach(function(s){
+      if(s && s.ts && s.ts > since) n += s.ans||0;
+    });
+  });
+  return n;
 }
 
 function lsDayStats(data, day){
@@ -207,12 +272,13 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
 // genau die falsche Zuteilung.
 //
 // Jetzt: ein begrenztes Arbeitsset (Standard 12 Wörter), das erst abgearbeitet
-// wird, bevor neue Wörter nachrücken, plus Gewichtung nach Dringlichkeit und
-// eingestreute fällige Wiederholungen aus Topf 6.
+// wird, bevor neue Wörter nachrücken, plus Gewichtung nach Dringlichkeit.
+//
+// Gelernte Wörter (Topf 6) kommen hier bewusst NICHT vor. Das Leiterspiel ist
+// der Lern-Teil; das Behalten übernimmt der Wiederholungslauf, der sich als
+// eigener Abschnitt dazwischenschiebt.
 
 var WORKING_SET = 12;   // so viele Wörter sind gleichzeitig „in Arbeit"
-
-var REVIEW_EVERY = 5;   // jede N-te Frage ist eine fällige Wiederholung (Topf 6)
 
 var REVIEW6_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -254,33 +320,22 @@ function lsPickWord(progress, lastWord, opts) {
   opts = opts || {};
   var today = lsToday();
   var setSize = Math.max(4, opts.workingSet || WORKING_SET);
-  var every = opts.reviewEvery==null ? REVIEW_EVERY : opts.reviewEvery;
   var pots = (progress && progress.pots) || {};
-  function flat(w,pot,review){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,
-    wrong:w.wrong||0,disputeId:w.disputeId,pot:pot,review:!!review}; }
+  function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,
+    wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
   function avail(pot){ return (pots[pot]||[]).filter(function(w){ return w && !w.disputeId; }); }
   function notLast(w){ return !lastWord || w.word!==lastWord; }
 
-  // 1. Fällige Wiederholung eines gelernten Worts — jede N-te Frage.
-  var dueList = avail(6).map(function(w){ return {w:w, over:due6(w,today)}; })
-                        .filter(function(x){ return x.over >= 0 && notLast(x.w); });
-  var answerNo = opts.answerNo || 0;
-  if(every>0 && dueList.length && answerNo>0 && answerNo % every === 0){
-    dueList.sort(function(a,b){ return b.over - a.over; });
-    var top = dueList.slice(0, Math.max(3, Math.ceil(dueList.length*0.2)));
-    return flat(shuffleArr(top)[0].w, 6, true);
-  }
-
-  // 2. Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
-  //    nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
-  //    im Kreis.
+  // Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
+  // nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
+  // im Kreis.
   var working = [], resting = [];
   [2,3,4,5].forEach(function(pot){ avail(pot).forEach(function(w){
     (retiredToday(w,today)?resting:working).push({w:w, pot:pot});
   }); });
   avail(1).forEach(function(w){ if(wordSeen(w)) (retiredToday(w,today)?resting:working).push({w:w, pot:1}); });
 
-  // 3. Auffüllen mit noch nie gezeigten Wörtern.
+  // Auffüllen mit noch nie gezeigten Wörtern.
   if(working.length < setSize){
     var fresh = avail(1).filter(function(w){ return !wordSeen(w); });
     fresh.slice(0, setSize - working.length).forEach(function(w){ working.push({w:w, pot:1}); });
@@ -288,19 +343,9 @@ function lsPickWord(progress, lastWord, opts) {
 
   var cands = working.concat(resting).filter(function(x){ return notLast(x.w); });
   if(!cands.length) cands = working.concat(resting);
-  if(cands.length){
-    var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today); });
-    return flat(pick.w, pick.pot, false);
-  }
-
-  // 4. Alles gelernt: das am längsten überfällige Wort aus Topf 6.
-  if(dueList.length){
-    dueList.sort(function(a,b){ return b.over - a.over; });
-    return flat(dueList[0].w, 6, true);
-  }
-  var all6 = avail(6);
-  if(all6.length) return flat(shuffleArr(all6)[0], 6, true);
-  return null;
+  if(!cands.length) return null;   // alles gelernt → der Run ist durch
+  var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today); });
+  return flat(pick.w, pick.pot);
 }
 
 // Eine Stufe pro Wort und Tag. Ohne diese Schranke klettert ein Wort in einer
@@ -490,4 +535,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW_EVERY, REVIEW6_INTERVALS, due6, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

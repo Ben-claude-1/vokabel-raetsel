@@ -1,5 +1,5 @@
 import { sbGet, sbPost } from '../core/api.js';
-import { lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, reviewHistoryStats, reviewOverdue, reviewPolicyOf, tallyAnswer } from '../core/leitner.js';
+import { REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
@@ -50,12 +50,13 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
       var map6={}, map5={};
       function add(map,w,runId,pot){
         var k=wkey(w); if(!w.word||k==='|') return;
-        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0,src:[],lcMs:0};
+        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0,src:[],lcMs:0,rl:0};
         map[k].wrong+=(w.wrong||0); map[k].correct+=(w.correct||0);
         map[k].src.push({runId:runId, pot:pot});
-        // zuletzt im Leiterspiel gekonnt zählt als Beleg mit
+        // zuletzt gekonnt + erreichte Wiederholungsstufe zählen als Beleg mit
         var lc = w.lc ? Date.parse(w.lc+'T12:00:00Z') : 0;
         if(lc > map[k].lcMs) map[k].lcMs = lc;
+        if((w.rl||0) > map[k].rl) map[k].rl = w.rl||0;
       }
       rows.forEach(function(row){
         if(!inScopeRun[row.run_id]) return;
@@ -94,7 +95,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
     // Die am längsten überfälligen zuerst — genau die zeigen, ob es sitzt.
     // Aus den doppelt so vielen Kandidaten wird gemischt, damit nicht jeder
     // Lauf identisch ist.
-    var n = Math.min(pol.count, ranked.length);
+    var n = Math.min(reviewRunSize(pol, dueCount), ranked.length);
     var head = ranked.slice(0, Math.min(ranked.length, Math.max(n, n*2)));
     var picked = shuffleArr(head).slice(0, n).map(function(x){ return x.item; });
     picked.sort(function(a,b){ return 0; });
@@ -138,20 +139,26 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
     if(ni>=items.length){ finishRun(); return; }
     setIdx(ni); setInput(''); setHints(0); setResult(null); setPhase('q');
   }
-  // Vokabeln, die in der Wiederholung durchgefallen sind, gehen im Leiterspiel
-  // zurück: falsch/aufgegeben → Topf 4, nur mit 2 Tipps gekonnt → Topf 5.
-  // Sie müssen also neu erarbeitet werden — genau darum geht es beim Prüfen,
-  // ob sie die Vokabel wirklich kann.
-  function demoteFailures(finalLog){
+  // Das Ergebnis des Laufs zurück in den Lernstand schreiben. Zwei Richtungen:
+  //
+  //   verteidigt (ohne Tipp)  → Abstand wächst (rl+1), bleibt „gelernt"
+  //   nur mit Tipp 1 gekonnt  → Abstand bleibt stehen, gilt als gesehen
+  //   nur mit 2 Tipps gekonnt → zurück in Topf 5
+  //   falsch / aufgegeben     → zurück in Topf 4, Abstand auf Anfang
+  //
+  // Ohne dieses Zurückschreiben wüsste das Leiterspiel nie, was der Lauf schon
+  // geprüft hat — die Fälligkeit wäre in beiden Teilen eine andere Zahl.
+  function applyRunResult(finalLog){
+    var today = lsToday();
     var target = {};
     finalLog.forEach(function(l){
-      var t = (!l.correct) ? 4 : (l.hints>=2 ? 5 : null);
-      if(t==null) return;
-      var src = (pool.find(function(w){ return wkey(w)===wkey(l); })||{}).src || [];
-      src.forEach(function(ref){
-        if(ref.pot<=t) return;                       // steht schon tiefer
+      var entry = pool.find(function(w){ return wkey(w)===wkey(l); });
+      if(!entry) return;
+      var to = (!l.correct) ? 4 : (l.hints>=2 ? 5 : null);   // null = bleibt liegen
+      var lvl = (!l.correct || l.hints>=2) ? 0 : (l.hints>=1 ? (entry.rl||0) : Math.min((entry.rl||0)+1, REVIEW_INTERVALS.length-1));
+      (entry.src||[]).forEach(function(ref){
         if(!target[ref.runId]) target[ref.runId] = [];
-        target[ref.runId].push({word:l.word, to:t});
+        target[ref.runId].push({word:l.word, to:to, rl:lvl, ok:!!l.correct});
       });
     });
     var runIds = Object.keys(target);
@@ -162,21 +169,28 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
         if(!Array.isArray(rows)||!rows.length) return;
         var row = rows[0], d = parseData(row.data);
         if(!d || !d.pots) return;
+        var demotedHere = 0;
         target[runId].forEach(function(m){
-          [5,6].forEach(function(p){
+          [4,5,6].forEach(function(p){
             var arr = d.pots[p]||[];
             var i = arr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(m.word); });
-            if(i<0 || p<=m.to) return;
-            var w = arr.splice(i,1)[0];
+            if(i<0) return;
+            var w = arr[i];
+            // Prüfergebnis am Wort festhalten — davon lebt die Fälligkeit.
+            w.rl = m.rl;
+            w.ls = today;
+            if(m.ok) w.lc = today;
+            if(m.to==null || p<=m.to) return;   // bleibt, wo es ist
+            arr.splice(i,1);
             w.streak = 0;
             if(!d.pots[m.to]) d.pots[m.to] = [];
             d.pots[m.to].push(w);
-            moved++;
+            moved++; demotedHere++;
           });
         });
         // Im Tages-Log vermerken, damit der Prozent-Rückgang erklärbar bleibt.
         var day = lsDayEntry(d, lsPercent(d));
-        day.rv = (day.rv||0) + target[runId].length;
+        if(demotedHere) day.rv = (day.rv||0) + demotedHere;
         day.p1 = Math.round(lsPercent(d));
         return lsSaveProgress(pid, runId, d, row.id);
       }).catch(function(){});
@@ -193,7 +207,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
     var body={player_id:pid, score:score, max_score:items.length*10, word_count:items.length, correct_count:correctCount, hint1_count:h1, hint2_count:h2, items:finalLog};
     sbPost('repeat_runs',body).then(function(res){
       if(res && !res._err) setHistory(function(h){ return [Object.assign({created_at:new Date().toISOString()},body,res||{})].concat(h); });
-      return demoteFailures(finalLog);
+      return applyRunResult(finalLog);
     }).then(function(moved){
       setDemoted(moved||0);
       if(onCompleted) onCompleted();
@@ -215,7 +229,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
     <div style={{textAlign:'center',marginBottom:14}}>
       <div style={{fontSize:34}}>🔁</div>
       <div style={{fontWeight:'bold',fontSize:17,color:T}}>{wasMandatory?'Wiederholung fällig':'Wiederholung'}</div>
-      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(pol.count,pool.length)} Vokabeln pro Lauf</div>
+      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(reviewRunSize(pol,dueCount),pool.length)} Vokabeln in diesem Lauf</div>
     </div>
     {wasMandatory&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:10,padding:'10px 12px',marginBottom:12,fontSize:12,lineHeight:1.5}}>
       🔒 Das Leiterspiel ist gesperrt, bis du diesen Lauf gemacht hast. Danach geht es sofort weiter.
