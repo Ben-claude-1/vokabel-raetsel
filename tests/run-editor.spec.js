@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { ADMIN, login } = require('./helpers');
+const { ADMIN, login, blockWrites } = require('./helpers');
 
 test.describe('RunEditor', () => {
   test.beforeEach(async ({ page }) => {
+    await blockWrites(page);
     await login(page, ADMIN);
   });
 

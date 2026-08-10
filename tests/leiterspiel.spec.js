@@ -1,8 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { EMMA, login } = require('./helpers');
+const { EMMA, login, blockWrites } = require('./helpers');
 
 test.describe('Leiterspiel', () => {
   test.beforeEach(async ({ page }) => {
+    await blockWrites(page);
     await login(page, EMMA);
   });
 

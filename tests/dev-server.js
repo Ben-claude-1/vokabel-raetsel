@@ -16,6 +16,18 @@ const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.TEST_PORT || 3333);
 const API = process.env.TEST_API || 'https://mac-studio.taild5562c.ts.net';
 
+// Schreibsperre — standardmäßig an.
+//
+// Die Tests laufen gegen die echte Datenbank. Das Abfangen im Browser
+// (helpers.blockWrites) reicht nicht: Der Sitzungs-Tracker schickt seinen
+// letzten Speichervorgang beim Schließen der Seite mit `keepalive`
+// (Shell.jsx), und den kann Playwright nicht mehr abfangen, weil die Seite da
+// schon abgebaut wird. Am 10.08.2026 sind so 27 Kunst-Sitzungen in Emmas
+// Lernzeit gelandet. Der Proxy ist die letzte Stelle, an der alles vorbeikommt.
+//
+// Für einen manuellen Browser-Test mit echtem Speichern: ALLOW_WRITES=1 setzen.
+const ALLOW_WRITES = process.env.ALLOW_WRITES === '1';
+
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -29,7 +41,16 @@ const TYPES = {
   '.map': 'application/json; charset=utf-8',
 };
 
+let blockiert = 0;
+
 function proxy(req, res) {
+  if (!ALLOW_WRITES && req.method !== 'GET' && req.method !== 'OPTIONS') {
+    blockiert++;
+    console.log('[schreibgeschützt] ' + req.method + ' ' + req.url.split('?')[0] + ' abgewiesen (' + blockiert + ')');
+    req.resume();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end('[]');
+  }
   const target = new URL(API + req.url);
   const headers = Object.assign({}, req.headers, { host: target.host });
   delete headers['origin'];
@@ -69,5 +90,6 @@ http.createServer((req, res) => {
   if (req.url.startsWith('/rest/v1/')) return proxy(req, res);
   serveStatic(req, res);
 }).listen(PORT, () => {
-  console.log('Test-Server auf http://localhost:' + PORT + ' (API-Proxy -> ' + API + ')');
+  console.log('Test-Server auf http://localhost:' + PORT + ' (API-Proxy -> ' + API + ')'
+    + (ALLOW_WRITES ? ' — SCHREIBEN ERLAUBT' : ' — schreibgeschützt'));
 });

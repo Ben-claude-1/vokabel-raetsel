@@ -11,7 +11,11 @@ module.exports = defineConfig({
     // Ohne das blockt der CORS-Preflight jeden Login (siehe tests/dev-server.js).
     command: 'node tests/dev-server.js',
     url: 'http://localhost:3333',
-    reuseExistingServer: true,
+    // Bewusst KEIN Wiederverwenden: Der Testserver ist schreibgeschützt (siehe
+    // dev-server.js). Ein bereits laufender Server könnte ohne diesen Schutz
+    // gestartet worden sein — dann landen Testdaten in Emmas Lernstand.
+    // Lieber ein lauter Fehler "Port belegt" als stille Datenverfälschung.
+    reuseExistingServer: false,
   },
   use: {
     baseURL: 'http://localhost:3333',

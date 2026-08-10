@@ -1,14 +1,16 @@
 const { test, expect } = require('@playwright/test');
-const { ADMIN, EMMA, login } = require('./helpers');
+const { ADMIN, EMMA, login, blockWrites } = require('./helpers');
 
 test.describe('Login', () => {
   test('Admin-Login funktioniert', async ({ page }) => {
+    await blockWrites(page);
     await login(page, ADMIN);
     // Admin hat zusätzliche Tabs sichtbar
     await expect(page.locator('button:has-text("👥 User")')).toBeVisible();
   });
 
   test('Spieler-Login funktioniert (Emma)', async ({ page }) => {
+    await blockWrites(page);
     await login(page, EMMA);
     await expect(page.locator('button:has-text("Abmelden")')).toBeVisible();
   });
