@@ -4,7 +4,8 @@ import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsF
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
 import { BUILTIN } from '../core/store.js';
-import { BtnStyle, G100, G200, G400, G600, G900, T, TD, dailyGoalMin, dailyGoalSec, screenGame } from '../core/theme.js';
+import { dayGoalHint, dayGoalState } from '../core/goal.js';
+import { BtnStyle, G100, G200, G400, G600, G900, T, TD, screenGame } from '../core/theme.js';
 import { normWordKey, parseData } from '../core/words.js';
 import { GoalTracker, LoginScreen, RegisterScreen } from '../ui/auth.jsx';
 import { LeitersSpielCreate, LeitersSpielMenu, LeitersSpielSession } from '../ui/leiterspiel.jsx';
@@ -163,7 +164,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now(), created=false;
     var IDLE_MS=120000, TICK_MS=1000, FLUSH_MS=15000;
     // Antworten dieser Session = Zuwachs des globalen Zählers seit Sessionstart.
-    var baseOk=ANSWER_TALLY.ok, baseBad=ANSWER_TALLY.bad;
+    var baseOk=ANSWER_TALLY.ok, baseBad=ANSWER_TALLY.bad, baseSkip=ANSWER_TALLY.skip;
     function isActive(){ return document.visibilityState==='visible' && (Date.now()-lastActivity)<IDLE_MS; }
     // Jede Speicherung ist ein vollständiger Upsert (merge-duplicates auf der id).
     // Damit ist die Reihenfolge egal — kein "PATCH vor INSERT"-Verlust mehr, und
@@ -173,7 +174,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       created=true; lastSavedSeconds=localSeconds;
       var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds,
         grade:scope?scope.grade:null, language:scope?scope.language:null,
-        correct_count:Math.max(0,ANSWER_TALLY.ok-baseOk), wrong_count:Math.max(0,ANSWER_TALLY.bad-baseBad) };
+        correct_count:Math.max(0,ANSWER_TALLY.ok-baseOk), wrong_count:Math.max(0,ANSWER_TALLY.bad-baseBad),
+        skipped_count:Math.max(0,ANSWER_TALLY.skip-baseSkip) };
       if(closing) row.ended_at=new Date().toISOString();
       try{
         fetch(SB_URL+'/rest/v1/learn_sessions',{
@@ -358,7 +360,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
                 {goalInfo.current>0&&<span style={{fontSize:13,fontWeight:'bold',color:'#d97706'}}>🔥 {goalInfo.current}</span>}
               </div>
               {goalInfo.todaySec>0
-                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute{goalInfo.todaySec>=dailyGoalSec()?' · ✅ Tagesziel erreicht!':' / '+dailyGoalMin()+' Min Ziel'}</div>
+                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute · {dayGoalHint(dayGoalState(goalInfo.tag))}</div>
                 : <div style={{fontSize:12,color:G600}}>Heute noch nichts gelernt — los geht's! 💪</div>
               }
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}

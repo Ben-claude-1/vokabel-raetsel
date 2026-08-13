@@ -3,8 +3,9 @@ import { SB_URL } from '../core/config.js';
 import { DEFAULT_STREAK, lsGetRuns, lsPercent, lsRunPacing, saveChapterSentences, saveChapterWords, syncAutoRunsForScope } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { chGrade, filterRunsByScope, scopeText } from '../core/scope.js';
-import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL, dailyGoalMin, dailyGoalSec } from '../core/theme.js';
-import { calcStreakFromByDay, dayKey, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
+import { buildDayStats, calcStreakFromStats, dayCounts } from '../core/goal.js';
+import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL } from '../core/theme.js';
+import { dayKey, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
 import { aiCategorizeWords, normWordKey, parseData, quickDetectType, safeWords, translateSentenceEN2DE } from '../core/words.js';
 import { GrammarAdmin } from './grammar.jsx';
 import { KlassenarbeitAdmin } from './klassenarbeit.jsx';
@@ -15,22 +16,24 @@ import { LernVerlaufChart } from './widgets.jsx';
 function AdminLernzeitOverview({ allUsers }) {
   var [sessions, setSessions] = useState([]);
   useEffect(function(){
-    sbGet('learn_sessions','select=player_id,active_seconds,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
+    sbGet('learn_sessions','select=player_id,game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
   },[]);
   var weekDays = getWeekDays();
   var today = dayKey();
   var DAY_LABELS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  // Je Kind die Tageszahlen — Zeit allein reicht für einen Häkchen-Tag nicht
+  // mehr, es zählen auch Antworten und Überspringer (siehe core/goal.js).
   var playerByDay = {};
+  var bySpieler = {};
   sessions.forEach(function(s){
-    var pid=s.player_id; var k=s.started_at?String(s.started_at).slice(0,10):'';
-    if(!k||!pid) return;
-    if(!playerByDay[pid]) playerByDay[pid]={};
-    playerByDay[pid][k]=(playerByDay[pid][k]||0)+(s.active_seconds||0);
+    if(!s || !s.player_id) return;
+    (bySpieler[s.player_id] || (bySpieler[s.player_id]=[])).push(s);
   });
+  Object.keys(bySpieler).forEach(function(pid){ playerByDay[pid] = buildDayStats(bySpieler[pid]); });
   if(!allUsers||allUsers.length===0) return null;
   return (
     <div style={{marginBottom:14}}>
-      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: {dailyGoalMin()} Min/Tag</div>
+      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: 5 Min Grammatik · 10 Min Englisch · 10 Min Spanisch</div>
       <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',background:G50,padding:'5px 8px',gap:2,borderBottom:'1px solid '+G200}}>
           <div/>
@@ -41,14 +44,14 @@ function AdminLernzeitOverview({ allUsers }) {
         </div>
         {allUsers.map(function(u){
           var byDay=playerByDay[u.id]||{};
-          var streak=calcStreakFromByDay(byDay);
+          var streak=calcStreakFromStats(byDay);
           return <div key={u.id} style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',padding:'5px 8px',gap:2,borderBottom:'1px solid '+G50,alignItems:'center'}}>
             <div style={{fontSize:11,fontWeight:'bold',color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               {u.name}{streak>0&&<span style={{fontSize:9,color:'#d97706',marginLeft:3}}>🔥{streak}</span>}
             </div>
             {weekDays.map(function(d){
-              var sec=byDay[d]||0, min=Math.round(sec/60);
-              var done=sec>=dailyGoalSec(d), isFuture=d>today, isToday=d===today;
+              var st=byDay[d], sec=(st&&st.sec)||0, min=Math.round(sec/60);
+              var done=dayCounts(d, st), isFuture=d>today, isToday=d===today;
               var bg=isFuture?'white':done?'#d1fae5':sec>0?'#fef3c7':'#f9fafb';
               var col=isFuture?G200:done?T:sec>0?'#92400e':G400;
               return <div key={d} style={{textAlign:'center',padding:'3px 1px',borderRadius:4,background:bg,border:'1px solid '+(isToday?T:'transparent')}}>

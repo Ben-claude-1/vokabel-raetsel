@@ -1,40 +1,24 @@
 import { sbGet } from '../core/api.js';
-import { lsToday } from '../core/leitner.js';
+import { buildDayStats } from '../core/goal.js';
 import { ALL_DONE_BONUS, loadClaimed, questState, saveClaimed } from '../core/quests.js';
 import { useCallback, useEffect, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G600, G900, GR, T, TD, TL } from '../core/theme.js';
 import { dayKey } from '../core/util.js';
 
-// Lernminuten des Tages je Bereich. Die Zeit fällt beim Spielen ohnehin an —
-// es wird nichts zusätzlich mitgeschrieben.
-//
-// Grammatik zählt über das Spiel (es gibt sie nur auf Englisch, sie soll aber
-// nicht die Englisch-Minuten füllen). Alles andere zählt über die Sprache der
-// Sitzung. Ältere Sitzungen tragen noch keine Sprache — bei denen wird sie,
-// soweit möglich, über den Leiterspiel-Run erschlossen.
+// Rohzahlen des Tages: Minuten, richtige Antworten und Überspringer je Bereich.
+// Alles fällt beim Spielen ohnehin an — es wird nichts zusätzlich
+// mitgeschrieben. `ls_runs` liefert die Sprache für ältere Sitzungen, die noch
+// keine eigene Sprachspalte haben.
 function ladeTagesstand(pid){
-  var today = lsToday();
+  var today = dayKey();
   return Promise.all([
-    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,run_id,language,active_seconds,started_at'),
+    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at'),
     sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&select=id,language'),
   ]).then(function(res){
     var runLang = {};
     (Array.isArray(res[1])?res[1]:[]).forEach(function(r){ if(r && r.language) runLang[r.id] = r.language; });
-
-    var sek = {grammatik:0, en:0, es:0};
-    (Array.isArray(res[0])?res[0]:[]).forEach(function(s){
-      if(!s || !s.started_at || !s.active_seconds) return;
-      if(dayKey(new Date(s.started_at)) !== today) return;
-      if(s.game === 'grammatik'){ sek.grammatik += s.active_seconds; return; }
-      var lang = s.language || runLang[s.run_id];
-      if(lang && sek[lang] != null) sek[lang] += s.active_seconds;
-    });
-
-    return {minutes:{
-      grammatik: Math.floor(sek.grammatik/60),
-      en: Math.floor(sek.en/60),
-      es: Math.floor(sek.es/60),
-    }};
+    var stats = buildDayStats(Array.isArray(res[0])?res[0]:[], runLang);
+    return stats[today] || {sec:0, secBy:{}, corBy:{}, ans:0, cor:0, skip:0};
   });
 }
 
@@ -88,7 +72,8 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
       <span style={{fontSize:18}}>🎯</span>
       <div style={{flex:1}}>
         <div style={{fontWeight:'bold',fontSize:13,color:G900}}>Deine 3 Aufgaben heute</div>
-        <div style={{fontSize:10,color:G400}}>{fertig} von 3 geschafft{st.alleFertig?' — alles erledigt! 🎉':''}</div>
+        <div style={{fontSize:10,color:G400}}>{fertig} von 3 geschafft{st.alleFertig?' — alles erledigt! 🎉':''}
+          {st.gespart>0&&<span style={{color:GR,fontWeight:'bold'}}> · {st.gespart} Min gespart 🎉</span>}</div>
       </div>
       {[0,1,2].map(function(i){
         var q = st.list[i];
@@ -107,6 +92,7 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
           {!q.done&&<Balken have={q.have} goal={q.goal} done={q.done}/>}
           <div style={{fontSize:10,color:G400,marginTop:3}}>
             {q.done ? (q.claimed?'abgeholt':'geschafft') : q.have+' / '+q.goal+' Min'}
+            {q.saved>0&&<span style={{color:GR,marginLeft:6}}>−{q.saved} Min für {q.correct} richtige</span>}
             <span style={{color:AM,fontWeight:'bold',marginLeft:6}}>+{q.pts}</span>
           </div>
         </div>
@@ -116,6 +102,16 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
 
     {st.bonusOffen&&<div style={{fontSize:10,color:AM,fontWeight:'bold',padding:'2px 6px'}}>
       🏅 Alle drei geschafft: +{ALL_DONE_BONUS} Bonus
+    </div>}
+
+    {/* Zeit allein reicht nicht: der Tag zählt erst mit echten Antworten. */}
+    {st.tag.zeitFertig&&!st.tag.erfuellt&&<div style={{fontSize:10,color:'#92400e',background:'#fef3c7',borderRadius:8,padding:'6px 8px',marginTop:6}}>
+      {!st.tag.genugAntworten
+        ? 'Die Zeit steht — für den Streak fehlen noch ein paar beantwortete Vokabeln.'
+        : 'Viel übersprungen heute — der Tag zählt erst, wenn die Hälfte davon echte Versuche sind.'}
+    </div>}
+    {!st.tag.zeitFertig&&st.tag.answers>0&&<div style={{fontSize:10,color:G400,padding:'2px 6px',marginTop:4}}>
+      Heute: {st.tag.answers} Antworten{st.tag.skipped>0?' · '+st.tag.skipped+'× nicht gewusst':''}
     </div>}
 
     {st.offeneBelohnung>0&&<button onClick={belohnungHolen} disabled={holen}

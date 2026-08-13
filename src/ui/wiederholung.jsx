@@ -1,7 +1,7 @@
 import { sbGet, sbPost } from '../core/api.js';
 import { REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { langFlag, langLabel, runScope } from '../core/scope.js';
+import { langFlag, langLabel, langRank, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
@@ -118,7 +118,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     var n = Math.min(reviewRunSize(pol, dueCount), ranked.length);
     var head = ranked.slice(0, Math.min(ranked.length, Math.max(n, n*2)));
     var picked = shuffleArr(head).slice(0, n).map(function(x){ return x.item; });
-    picked.sort(function(a,b){ return 0; });
+    // Innerhalb des Laufs wird die Sprache nicht gewechselt: erst alle
+    // englischen Vokabeln, dann die spanischen. Hin- und Herspringen zwischen
+    // zwei Sprachen kostet bei jeder Frage einen Umschaltmoment.
+    picked.sort(function(a,b){ return langRank(a.lang) - langRank(b.lang); });
     setItems(picked); setIdx(0); setInput(''); setHints(0); setResult(null); setLog([]); setScore(0); setShowReview(false);
     setPhase('q');
   }
@@ -149,6 +152,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   }
   function giveUp(){
     if(!cur) return;
+    tallyAnswer(false, true);
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:'', correct:false, hints:hints, points:0, skipped:true};
     setLog(function(l){return l.concat([entry]);});
     setResult({correct:false, points:0, answer:wordDisplay(cur), typed:'', hints:hints, skipped:true});
@@ -328,6 +332,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
       {!result.correct&&!result.skipped&&result.typed&&<div style={{fontSize:11,color:G600,marginTop:4}}>Deine Eingabe: „{result.typed}"</div>}
       <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
     </div>
+    {items[idx+1] && items[idx+1].lang !== cur.lang &&
+      <div style={{background:TL,color:TD,borderRadius:10,padding:'9px 12px',marginBottom:10,fontSize:12,textAlign:'center',fontWeight:'bold'}}>
+        {langFlag(items[idx+1].lang)} Gleich geht es auf {langLabel(items[idx+1].lang)} weiter
+      </div>}
     <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>{idx+1>=items.length?'Ergebnis anzeigen':'Weiter →'}</button>
   </WiederholungWrap>;
 

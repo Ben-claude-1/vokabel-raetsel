@@ -6,6 +6,12 @@ var LANGS = { en:{label:'Englisch', flag:'🇬🇧'}, es:{label:'Spanisch', flag
 
 function langLabel(l){ return (LANGS[l]||{}).label || (l||'').toUpperCase(); }
 
+// Reihenfolge, in der Sprachen abgearbeitet werden — im Wiederholungslauf wird
+// nicht zwischen Sprachen hin- und hergesprungen: erst Englisch, dann Spanisch.
+var LANG_ORDER = ['en', 'es', 'fr', 'la'];
+
+function langRank(l){ var i = LANG_ORDER.indexOf(l||'en'); return i<0 ? LANG_ORDER.length : i; }
+
 function langFlag(l){ return (LANGS[l]||{}).flag || '🗣️'; }
 
 function chGrade(c){ return c && c.grade != null ? Number(c.grade) : 5; }
@@ -105,4 +111,4 @@ function filterRunsByScope(runs, chapters, sc){
   return sortRunsForDisplay((runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); }), chapters);
 }
 
-export { SCOPE_KEY, LANGS, langLabel, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };
+export { SCOPE_KEY, LANGS, LANG_ORDER, langLabel, langRank, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };

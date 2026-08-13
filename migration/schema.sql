@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS public.learn_sessions (
   -- je Sprache (siehe src/core/quests.js).
   grade integer,
   language text,
+  -- übersprungene Antworten („nicht gewusst") — Bedingung für die Streak
+  skipped_count integer DEFAULT 0 NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL,
   PRIMARY KEY (id)
 );

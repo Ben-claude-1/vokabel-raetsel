@@ -1,8 +1,9 @@
 import { hashPw, sbGet, sbPost } from '../core/api.js';
 import { HG, SB_URL } from '../core/config.js';
 import { useEffect, useState } from '../core/react.js';
-import { BtnStyle, G200, G400, G600, G900, RE, T, dailyGoalSec } from '../core/theme.js';
-import { buildByDay, calcStreakFromByDay, dayKey, getWeekDays, getWeekKey } from '../core/util.js';
+import { BtnStyle, G200, G400, G600, G900, RE, T } from '../core/theme.js';
+import { buildDayStats, calcStreakFromStats, dayCounts } from '../core/goal.js';
+import { dayKey, getWeekDays, getWeekKey } from '../core/util.js';
 
 function LoginScreen({ onLogin, onRegister }) {
   var [name, setName] = useState('');
@@ -128,19 +129,25 @@ function GoalTracker({ player, onInfo }) {
   function check() {
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!player||!player.id||!UUID.test(player.id)) return;
-    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=active_seconds,started_at').then(function(sessions){
-      if(!Array.isArray(sessions)) return;
-      var byDay = buildByDay(sessions);
+    Promise.all([
+      sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at'),
+      sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+player.id+')&select=id,language'),
+    ]).then(function(res){
+      var sessions = Array.isArray(res[0])?res[0]:[];
+      var runLang = {};
+      (Array.isArray(res[1])?res[1]:[]).forEach(function(r){ if(r && r.language) runLang[r.id]=r.language; });
+      var stats = buildDayStats(sessions, runLang);
       var today = dayKey();
-      var todaySec = byDay[today]||0;
+      var heute = stats[today] || {sec:0, secBy:{}, corBy:{}, ans:0, skip:0};
+      var todaySec = heute.sec||0;
       var weekDays = getWeekDays();
-      var weekGoalDays = weekDays.filter(function(k){return (byDay[k]||0)>=dailyGoalSec(k);}).length;
-      var streak = calcStreakFromByDay(byDay);
+      var weekGoalDays = weekDays.filter(function(k){ return dayCounts(k, stats[k]); }).length;
+      var streak = calcStreakFromStats(stats);
       var stored={}; try{stored=JSON.parse(localStorage.getItem(streakKey)||'{}');}catch(e){}
       var shown={};  try{shown =JSON.parse(localStorage.getItem(shownKey)||'{}');}catch(e){}
       var best = Math.max(stored.best||0, streak);
       var newToasts=[];
-      if(todaySec>=dailyGoalSec(today) && shown.dailyDate!==today){
+      if(dayCounts(today, heute) && shown.dailyDate!==today){
         shown.dailyDate=today;
         newToasts.push({id:'daily',emoji:'🎯',msg:'Super gemacht! Dein Tagesziel hast du erreicht!'});
       }
@@ -155,7 +162,7 @@ function GoalTracker({ player, onInfo }) {
       }
       localStorage.setItem(streakKey,JSON.stringify({current:streak,best:best}));
       localStorage.setItem(shownKey, JSON.stringify(shown));
-      if(onInfo) onInfo({current:streak,best:best,todaySec:todaySec});
+      if(onInfo) onInfo({current:streak,best:best,todaySec:todaySec,tag:heute});
       if(newToasts.length>0) setToasts(function(prev){
         return prev.concat(newToasts.filter(function(n){return !prev.find(function(p){return p.id===n.id;});}));
       });

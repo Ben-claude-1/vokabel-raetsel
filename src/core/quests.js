@@ -1,70 +1,53 @@
 // Tagesaufgaben.
 //
-// Drei feste Aufträge pro Tag, sichtbar auf der Startseite:
+// Drei feste Aufträge pro Tag — 5 Minuten Grammatik, 10 Minuten Englisch,
+// 10 Minuten Spanisch. Die Zeiten und die Belohnung für richtige Antworten
+// stehen in core/goal.js; hier kommen nur die Punkte und die Darstellung dazu.
 //
-//   ✏️  5 Minuten Grammatik
-//   🇬🇧 10 Minuten Englisch
-//   🇪🇸 10 Minuten Spanisch
-//
-// Gemessen wird die aktive Lernzeit aus `learn_sessions` — Grammatik über das
-// Spiel, die beiden Sprachen über die Sprache der Sitzung. Es wird nichts
-// zusätzlich mitgeschrieben; gespeichert wird nur, welche Belohnung schon
-// abgeholt wurde, damit Punkte nicht doppelt gutgeschrieben werden.
+// Gespeichert wird nur, welche Belohnung schon abgeholt wurde, damit Punkte
+// nicht doppelt gutgeschrieben werden.
 
 import { sbGet, sbPatch, sbPost } from './api.js';
+import { dayGoalState } from './goal.js';
 
-// Die drei Aufgaben. `goal` sind Minuten, `pts` die Belohnung.
-// `lang` = Sprache der Sitzung (null bei Grammatik, die zählt über das Spiel).
-var DAILY = [
-  {key:'grammatik', icon:'✏️',  goal:5,  pts:60,  lang:null, screen:'grammar',
-   text:function(n){ return n+' Minuten Grammatik üben'; }},
-  {key:'englisch',  icon:'🇬🇧', goal:10, pts:100, lang:'en', screen:'leiterspiel_menu',
-   text:function(n){ return n+' Minuten Englisch lernen'; }},
-  {key:'spanisch',  icon:'🇪🇸', goal:10, pts:100, lang:'es', screen:'leiterspiel_menu',
-   text:function(n){ return n+' Minuten Spanisch lernen'; }},
-];
+// Punkte und Ziel-Bildschirm je Bereich.
+var QUEST_META = {
+  grammatik: {pts:60,  screen:'grammar'},
+  englisch:  {pts:100, screen:'leiterspiel_menu'},
+  spanisch:  {pts:100, screen:'leiterspiel_menu'},
+};
 
 // Ein Bonus obendrauf, wenn alle drei Aufgaben erledigt sind.
 var ALL_DONE_BONUS = 150;
 
+function questText(a){
+  return a.goal+' Minuten '+a.label+(a.key==='grammatik'?' üben':' lernen');
+}
+
 // Ist der Wiederholungslauf fällig, ist das Leiterspiel gesperrt — dann führt
 // der Weg zu den Sprachminuten über die Wiederholung.
-function questsForDay(reviewDue){
-  return DAILY.map(function(q){
-    return {key:q.key, icon:q.icon, pts:q.pts, goal:q.goal, lang:q.lang,
-      screen:(reviewDue && q.lang) ? 'wiederholung' : q.screen,
-      text:q.text(q.goal)};
-  });
-}
-
-// Stand einer Aufgabe aus den Minuten des Tages.
-//   minutes  {grammatik:3, en:12, es:0} — aktive Lernzeit je Bereich
-function questProgress(key, s){
-  var min = (s && s.minutes) || {};
-  switch(key){
-    case 'grammatik': return min.grammatik || 0;
-    case 'englisch':  return min.en || 0;
-    case 'spanisch':  return min.es || 0;
-    default:          return 0;
-  }
-}
-
 function questState(reviewDue, stats, claimed){
-  var list = questsForDay(reviewDue).map(function(q){
-    var have = questProgress(q.key, stats);
-    return Object.assign({}, q, {
-      have: Math.min(have, q.goal),
-      raw: have,
-      done: have >= q.goal,
-      claimed: (claimed||[]).indexOf(q.key) >= 0,
-    });
+  var st = dayGoalState(stats);
+  var list = st.areas.map(function(a){
+    var m = QUEST_META[a.key] || {pts:80, screen:'leiterspiel_menu'};
+    return {
+      key: a.key, icon: a.icon, label: a.label, lang: a.lang,
+      pts: m.pts,
+      screen: (reviewDue && a.lang) ? 'wiederholung' : m.screen,
+      goal: a.goal, have: Math.min(a.have, a.goal), raw: a.have,
+      saved: a.saved, correct: a.correct,
+      text: questText(a),
+      done: a.done,
+      claimed: (claimed||[]).indexOf(a.key) >= 0,
+    };
   });
   var alleFertig = list.every(function(q){ return q.done; });
   var offeneBelohnung = list.filter(function(q){ return q.done && !q.claimed; })
     .reduce(function(s,q){ return s+q.pts; }, 0);
   var bonusOffen = alleFertig && (claimed||[]).indexOf('bonus') < 0;
   if(bonusOffen) offeneBelohnung += ALL_DONE_BONUS;
-  return {list:list, alleFertig:alleFertig, offeneBelohnung:offeneBelohnung, bonusOffen:bonusOffen};
+  return {list:list, alleFertig:alleFertig, offeneBelohnung:offeneBelohnung, bonusOffen:bonusOffen,
+          gespart:list.reduce(function(s,q){ return s+q.saved; }, 0), tag:st};
 }
 
 // ── Abgeholte Belohnungen ───────────────────────────────────────────────────
@@ -99,4 +82,4 @@ function saveClaimed(pid, day, claimed){
     .catch(function(){ return false; });
 }
 
-export { DAILY, ALL_DONE_BONUS, questsForDay, questProgress, questState, loadClaimed, saveClaimed };
+export { QUEST_META, ALL_DONE_BONUS, questState, loadClaimed, saveClaimed };

@@ -1,4 +1,3 @@
-import { dailyGoalSec } from './theme.js';
 
 function shuffleArr(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
 
@@ -23,29 +22,6 @@ function dayKey(d) {
   return x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());
 }
 
-function buildByDay(sessions) {
-  var byDay = {};
-  (sessions||[]).forEach(function(s){
-    var k = s.started_at ? String(s.started_at).slice(0,10) : (s.d||'');
-    if(!k) return;
-    byDay[k] = (byDay[k]||0) + (s.active_seconds||s.dur||0);
-  });
-  return byDay;
-}
-
-function calcStreakFromByDay(byDay) {
-  var today = new Date(); today.setHours(0,0,0,0);
-  var todayKey = dayKey(today);
-  var streak = (byDay[todayKey]||0) >= dailyGoalSec(todayKey) ? 1 : 0;
-  var d = new Date(today); d.setDate(d.getDate()-1);
-  for(var i=0; i<365; i++){
-    var k = dayKey(d);
-    if((byDay[k]||0) >= dailyGoalSec(k)){ streak++; d.setDate(d.getDate()-1); }
-    else break;
-  }
-  return streak;
-}
-
 function getWeekDays() {
   var d = new Date(); d.setHours(0,0,0,0);
   var mon = new Date(d); mon.setDate(d.getDate()-((d.getDay()+6)%7));
@@ -64,4 +40,4 @@ function weekdayOf(k){ var p=k.split('-'); return new Date(Date.UTC(+p[0],+p[1]-
 
 function fmtDayShort(k){ var p=k.split('-'); return (+p[2])+'.'+(+p[1])+'.'; }
 
-export { shuffleArr, shuffle, naturalSort, fmtTestStamp, dayKey, buildByDay, calcStreakFromByDay, getWeekDays, getWeekKey, fmtDuration, shiftDay, weekdayOf, fmtDayShort };
+export { shuffleArr, shuffle, naturalSort, fmtTestStamp, dayKey, getWeekDays, getWeekKey, fmtDuration, shiftDay, weekdayOf, fmtDayShort };

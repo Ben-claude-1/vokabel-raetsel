@@ -2,7 +2,8 @@ import { sbGet } from '../core/api.js';
 import { lsAnswersSince, lsDayStats, lsDeltaSince, lsGetRunsForPlayer, lsLearnedInRange, lsPercent } from '../core/leitner.js';
 import { useEffect, useState } from '../core/react.js';
 import { filterRunsByScope } from '../core/scope.js';
-import { AM, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, dailyGoalSec, gameOf } from '../core/theme.js';
+import { buildDayStats, dayCounts } from '../core/goal.js';
+import { AM, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, gameOf } from '../core/theme.js';
 import { dayKey, fmtDayShort, fmtDuration, shiftDay, weekdayOf } from '../core/util.js';
 import { parseData } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
@@ -288,6 +289,8 @@ function TagesDetail({ sessions, progressRows, runs }) {
     ? withTime.map(function(s){return String(s.started_at).slice(0,10);}).reduce(function(a,b){return a<b?a:b;})
     : today;
   if(sel>today) sel=today; if(sel<earliest) sel=earliest;
+  // Tageszahlen nach der Zielregel (Zeit je Bereich + echte Antworten).
+  var dayStatsAll = buildDayStats(sessions||[]);
   var daySessions = (sessions||[]).filter(function(s){ return s.started_at && String(s.started_at).slice(0,10)===sel; });
   var daySec = daySessions.reduce(function(a,s){ return a+(s.active_seconds||0); },0);
   // Antworten des Tages: aus learn_sessions (alle Spiele). Für ältere Tage
@@ -314,7 +317,7 @@ function TagesDetail({ sessions, progressRows, runs }) {
       </div>
       <div style={{display:'flex',gap:6,marginBottom:dayAns>0||daySec>0?12:2}}>
         <div style={{flex:1,textAlign:'center'}}>
-          <span style={{fontSize:26,fontWeight:'bold',color:daySec>=dailyGoalSec(sel)?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
+          <span style={{fontSize:26,fontWeight:'bold',color:dayCounts(sel, dayStatsAll[sel])?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
           <span style={{fontSize:12,color:G600,marginLeft:4}}>Min</span>
         </div>
         {dayAns>0&&<div style={{flex:1,textAlign:'center'}}>
@@ -339,7 +342,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
     if(!player) return;
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!UUID.test(player.id)){ setSessions([]); return; }
-    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,active_seconds,correct_count,wrong_count,started_at&order=started_at.desc&limit=1000')
+    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at&order=started_at.desc&limit=1000')
       .then(function(rows){ setSessions(Array.isArray(rows)?rows:[]); })
       .catch(function(){ setSessions([]); });
     sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data')
@@ -353,6 +356,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
   var scopedProgress = (progressRows||[]).filter(function(r){ return runIds[r.run_id]; });
   if(sessions===null) return <div style={{textAlign:'center',padding:20,color:G400,fontSize:12}}>Lade…</div>;
   var today=dayKey();
+  var tagesStand = buildDayStats(sessions);
   var totalSec=0, todaySec=0, days={};
   sessions.forEach(function(s){
     var sec=s.active_seconds||0; totalSec+=sec;
@@ -371,7 +375,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
   return <div>
     <div style={{display:'flex',gap:6,marginBottom:12}}>
       <Stat value={fmtDuration(totalSec)} label="Gesamt gelernt"/>
-      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={todaySec>=dailyGoalSec()?T:'#d97706'}/>
+      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={dayCounts(today, tagesStand[today])?T:'#d97706'}/>
       <Stat value={activeDays} label="Aktive Tage"/>
     </div>
     <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} title="🪜 Dein Leiterspiel-Fortschritt"/>

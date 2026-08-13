@@ -214,7 +214,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!newData.pots[1]) newData.pots[1]=[];
     newData.pots[1].push(wObj);
     newData.totalWrong = (newData.totalWrong||0)+1;
-    tallyAnswer(false);
+    tallyAnswer(false, true);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:1,toPot:1,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:true});
     saveAndUpdate(newData);
@@ -263,7 +263,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     newData.pots[moveTo].push(wObj);
     if(correct) newData.totalCorrect=(newData.totalCorrect||0)+1;
     else newData.totalWrong=(newData.totalWrong||0)+1;
-    tallyAnswer(correct);
+    tallyAnswer(correct, !!skipped);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
     saveAndUpdate(newData);
@@ -404,7 +404,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   function skipTestAnswer(){
     var w = testWords[testIdx]; if(!w) return;
     setSesAns(function(n){return n+1;}); trackActiveTime();
-    tallyAnswer(false);
+    tallyAnswer(false, true);
     var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:'', correct:false, partial:false, skipped:true, wordRef:w.wordRef||null, rt:answerMs()};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({skipped:true,correct:false,answer:testItemAnswer(w),word:entry.word,clue:entry.clue,typed:'',kind:w.kind});

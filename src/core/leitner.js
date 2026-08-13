@@ -13,9 +13,14 @@ function lsGetRunsForPlayer(pid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 
 function trackPot(wObj, pot, isCorrect) { if(!wObj.ps) wObj.ps={}; if(!wObj.ps[pot]) wObj.ps[pot]={c:0,w:0}; if(isCorrect) wObj.ps[pot].c=(wObj.ps[pot].c||0)+1; else wObj.ps[pot].w=(wObj.ps[pot].w||0)+1; }
 
-var ANSWER_TALLY = {ok:0, bad:0};
+var ANSWER_TALLY = {ok:0, bad:0, skip:0};
 
-function tallyAnswer(correct){ if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++; }
+// `skipped` = „nicht gewusst". Zählt als falsche Antwort und zusätzlich als
+// Überspringer — daran hängt die Ehrlichkeits-Bedingung des Tagesziels.
+function tallyAnswer(correct, skipped){
+  if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++;
+  if(skipped) ANSWER_TALLY.skip++;
+}
 
 // Höchstens so viele Vokabeln lassen sich pro Runde einfach überspringen.
 // Danach wird die Lösung gezeigt und muss einmal geschrieben werden — es zählt
