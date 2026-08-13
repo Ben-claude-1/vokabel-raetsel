@@ -1,7 +1,7 @@
 import { hashPw, sbGet, sbPost } from '../core/api.js';
 import { HG, SB_URL } from '../core/config.js';
 import { useEffect, useState } from '../core/react.js';
-import { BtnStyle, DAILY_GOAL_SEC, G200, G400, G600, G900, RE, T } from '../core/theme.js';
+import { BtnStyle, G200, G400, G600, G900, RE, T, dailyGoalSec } from '../core/theme.js';
 import { buildByDay, calcStreakFromByDay, dayKey, getWeekDays, getWeekKey } from '../core/util.js';
 
 function LoginScreen({ onLogin, onRegister }) {
@@ -134,13 +134,13 @@ function GoalTracker({ player, onInfo }) {
       var today = dayKey();
       var todaySec = byDay[today]||0;
       var weekDays = getWeekDays();
-      var weekGoalDays = weekDays.filter(function(k){return (byDay[k]||0)>=DAILY_GOAL_SEC;}).length;
+      var weekGoalDays = weekDays.filter(function(k){return (byDay[k]||0)>=dailyGoalSec(k);}).length;
       var streak = calcStreakFromByDay(byDay);
       var stored={}; try{stored=JSON.parse(localStorage.getItem(streakKey)||'{}');}catch(e){}
       var shown={};  try{shown =JSON.parse(localStorage.getItem(shownKey)||'{}');}catch(e){}
       var best = Math.max(stored.best||0, streak);
       var newToasts=[];
-      if(todaySec>=DAILY_GOAL_SEC && shown.dailyDate!==today){
+      if(todaySec>=dailyGoalSec(today) && shown.dailyDate!==today){
         shown.dailyDate=today;
         newToasts.push({id:'daily',emoji:'🎯',msg:'Super gemacht! Dein Tagesziel hast du erreicht!'});
       }

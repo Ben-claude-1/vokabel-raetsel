@@ -1,4 +1,4 @@
-import { DAILY_GOAL_SEC } from './theme.js';
+import { dailyGoalSec } from './theme.js';
 
 function shuffleArr(arr) { return arr.slice().sort(function(){ return Math.random()-0.5; }); }
 
@@ -36,11 +36,11 @@ function buildByDay(sessions) {
 function calcStreakFromByDay(byDay) {
   var today = new Date(); today.setHours(0,0,0,0);
   var todayKey = dayKey(today);
-  var streak = (byDay[todayKey]||0) >= DAILY_GOAL_SEC ? 1 : 0;
+  var streak = (byDay[todayKey]||0) >= dailyGoalSec(todayKey) ? 1 : 0;
   var d = new Date(today); d.setDate(d.getDate()-1);
   for(var i=0; i<365; i++){
     var k = dayKey(d);
-    if((byDay[k]||0) >= DAILY_GOAL_SEC){ streak++; d.setDate(d.getDate()-1); }
+    if((byDay[k]||0) >= dailyGoalSec(k)){ streak++; d.setDate(d.getDate()-1); }
     else break;
   }
   return streak;

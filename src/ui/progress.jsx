@@ -2,7 +2,7 @@ import { sbGet } from '../core/api.js';
 import { lsAnswersSince, lsDayStats, lsDeltaSince, lsGetRunsForPlayer, lsLearnedInRange, lsPercent } from '../core/leitner.js';
 import { useEffect, useState } from '../core/react.js';
 import { filterRunsByScope } from '../core/scope.js';
-import { AM, DAILY_GOAL_SEC, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, gameOf } from '../core/theme.js';
+import { AM, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, dailyGoalSec, gameOf } from '../core/theme.js';
 import { dayKey, fmtDayShort, fmtDuration, shiftDay, weekdayOf } from '../core/util.js';
 import { parseData } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
@@ -314,7 +314,7 @@ function TagesDetail({ sessions, progressRows, runs }) {
       </div>
       <div style={{display:'flex',gap:6,marginBottom:dayAns>0||daySec>0?12:2}}>
         <div style={{flex:1,textAlign:'center'}}>
-          <span style={{fontSize:26,fontWeight:'bold',color:daySec>=DAILY_GOAL_SEC?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
+          <span style={{fontSize:26,fontWeight:'bold',color:daySec>=dailyGoalSec(sel)?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
           <span style={{fontSize:12,color:G600,marginLeft:4}}>Min</span>
         </div>
         {dayAns>0&&<div style={{flex:1,textAlign:'center'}}>
@@ -371,7 +371,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
   return <div>
     <div style={{display:'flex',gap:6,marginBottom:12}}>
       <Stat value={fmtDuration(totalSec)} label="Gesamt gelernt"/>
-      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={todaySec>=DAILY_GOAL_SEC?T:'#d97706'}/>
+      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={todaySec>=dailyGoalSec()?T:'#d97706'}/>
       <Stat value={activeDays} label="Aktive Tage"/>
     </div>
     <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} title="🪜 Dein Leiterspiel-Fortschritt"/>

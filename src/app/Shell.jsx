@@ -4,7 +4,7 @@ import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsF
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { defaultScope, filterRunsByScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
 import { BUILTIN } from '../core/store.js';
-import { BtnStyle, DAILY_GOAL_SEC, G100, G200, G400, G600, G900, T, TD, screenGame } from '../core/theme.js';
+import { BtnStyle, G100, G200, G400, G600, G900, T, TD, dailyGoalMin, dailyGoalSec, screenGame } from '../core/theme.js';
 import { normWordKey, parseData } from '../core/words.js';
 import { GoalTracker, LoginScreen, RegisterScreen } from '../ui/auth.jsx';
 import { LeitersSpielCreate, LeitersSpielMenu, LeitersSpielSession } from '../ui/leiterspiel.jsx';
@@ -354,7 +354,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
                 {goalInfo.current>0&&<span style={{fontSize:13,fontWeight:'bold',color:'#d97706'}}>🔥 {goalInfo.current}</span>}
               </div>
               {goalInfo.todaySec>0
-                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute{goalInfo.todaySec>=DAILY_GOAL_SEC?' · ✅ Tagesziel erreicht!':' / 15 Min Ziel'}</div>
+                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute{goalInfo.todaySec>=dailyGoalSec()?' · ✅ Tagesziel erreicht!':' / '+dailyGoalMin()+' Min Ziel'}</div>
                 : <div style={{fontSize:12,color:G600}}>Heute noch nichts gelernt — los geht's! 💪</div>
               }
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}

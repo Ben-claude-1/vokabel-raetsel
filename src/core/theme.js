@@ -22,7 +22,17 @@ var POT_LABEL={1:'Topf 1',2:'Topf 2',3:'Topf 3',4:'Topf 4',5:'Topf 5',6:'Gelernt
 
 var POT_COL={1:RE,2:'#f97316',3:AM,4:T,5:'#7c3aed',6:GR};
 
-var DAILY_GOAL_SEC = 900; // 15 Minuten
+// Tagesziel = die Summe der drei Tagesaufgaben (5 Grammatik + 10 Englisch +
+// 10 Spanisch, siehe core/quests.js). Vorher waren es 15 Minuten — für Tage
+// davor gilt weiter der alte Wert, sonst würde eine Umstellung heute die
+// Streak-Historie rückwirkend entwerten.
+var DAILY_GOAL_SEC = 1500; // 25 Minuten
+var DAILY_GOAL_SEC_ALT = 900; // bis 12.08.2026: 15 Minuten
+var DAILY_GOAL_FROM = '2026-08-13';
+
+function dailyGoalSec(day){ return (day && day < DAILY_GOAL_FROM) ? DAILY_GOAL_SEC_ALT : DAILY_GOAL_SEC; }
+
+function dailyGoalMin(day){ return Math.round(dailyGoalSec(day)/60); }
 
 var SCREEN_GAME = {
   leiterspiel_play:'leiterspiel',
@@ -59,4 +69,4 @@ function gameOf(s){ return s.game || (s.run_id ? 'leiterspiel' : 'sonstiges'); }
 
 var WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
-export { T, TL, TD, AM, RE, GR, G50, G100, G200, G400, G600, G900, BtnStyle, COLOR_BG, COLOR_FG, COLOR_DOT, POT_PTS_CUM, POT_ICON, POT_LABEL, POT_COL, DAILY_GOAL_SEC, SCREEN_GAME, screenGame, GAME_META, gameOf, WD_LONG };
+export { T, TL, TD, AM, RE, GR, G50, G100, G200, G400, G600, G900, BtnStyle, COLOR_BG, COLOR_FG, COLOR_DOT, POT_PTS_CUM, POT_ICON, POT_LABEL, POT_COL, DAILY_GOAL_SEC, DAILY_GOAL_SEC_ALT, DAILY_GOAL_FROM, dailyGoalSec, dailyGoalMin, SCREEN_GAME, screenGame, GAME_META, gameOf, WD_LONG };

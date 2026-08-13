@@ -3,7 +3,7 @@ import { SB_URL } from '../core/config.js';
 import { DEFAULT_STREAK, lsGetRuns, lsPercent, lsRunPacing, saveChapterSentences, saveChapterWords, syncAutoRunsForScope } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { chGrade, filterRunsByScope, scopeText } from '../core/scope.js';
-import { AM, BtnStyle, DAILY_GOAL_SEC, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL } from '../core/theme.js';
+import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL, dailyGoalMin, dailyGoalSec } from '../core/theme.js';
 import { calcStreakFromByDay, dayKey, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
 import { aiCategorizeWords, normWordKey, parseData, quickDetectType, safeWords, translateSentenceEN2DE } from '../core/words.js';
 import { GrammarAdmin } from './grammar.jsx';
@@ -30,7 +30,7 @@ function AdminLernzeitOverview({ allUsers }) {
   if(!allUsers||allUsers.length===0) return null;
   return (
     <div style={{marginBottom:14}}>
-      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: 15 Min/Tag</div>
+      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: {dailyGoalMin()} Min/Tag</div>
       <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden'}}>
         <div style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',background:G50,padding:'5px 8px',gap:2,borderBottom:'1px solid '+G200}}>
           <div/>
@@ -48,7 +48,7 @@ function AdminLernzeitOverview({ allUsers }) {
             </div>
             {weekDays.map(function(d){
               var sec=byDay[d]||0, min=Math.round(sec/60);
-              var done=sec>=DAILY_GOAL_SEC, isFuture=d>today, isToday=d===today;
+              var done=sec>=dailyGoalSec(d), isFuture=d>today, isToday=d===today;
               var bg=isFuture?'white':done?'#d1fae5':sec>0?'#fef3c7':'#f9fafb';
               var col=isFuture?G200:done?T:sec>0?'#92400e':G400;
               return <div key={d} style={{textAlign:'center',padding:'3px 1px',borderRadius:4,background:bg,border:'1px solid '+(isToday?T:'transparent')}}>

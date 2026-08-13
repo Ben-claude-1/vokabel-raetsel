@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from '../core/react.js';
-import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T } from '../core/theme.js';
+import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, dailyGoalMin, dailyGoalSec } from '../core/theme.js';
 import { dayKey, shuffleArr } from '../core/util.js';
 import { buildT2Layout } from '../core/words.js';
 
@@ -163,7 +163,7 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
             </g>;
           }
           var y=yFor(dMin);
-          var col=day.dur>=900?GR:day.dur>=300?AM:'#5eead4';
+          var col=day.dur>=dailyGoalSec(day.k)?GR:day.dur>=300?AM:'#5eead4';
           return <g key={day.k}>
             {day.isToday&&<rect x={x} y={pT} width={slot} height={cH} fill={T} opacity={0.10} rx={1}/>}
             <rect x={cx-bW/2} y={y} width={bW} height={Math.max(3,baseY-y)} fill={col} rx={1}/>
@@ -176,13 +176,13 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
         </g>}
       </svg>
       <div style={{marginTop:4,display:'flex',justifyContent:'space-between',fontSize:10,color:G600}}>
-        <span>Heute: <span style={{fontWeight:'bold',color:todayMin>=15?GR:todayMin>=5?AM:G600}}>{todayMin} Min</span></span>
+        <span>Heute: <span style={{fontWeight:'bold',color:todayMin>=dailyGoalMin()?GR:todayMin>=5?AM:G600}}>{todayMin} Min</span></span>
         <span>Gelernt: <span style={{fontWeight:'bold',color:G900}}>{learnedDays}</span>/30 Tage{streak>1?<span style={{color:AM}}> · 🔥 {streak}</span>:null}</span>
         <span>Σ 30T: <span style={{fontWeight:'bold'}}>{totalMin} Min</span></span>
       </div>
       <div style={{display:'flex',gap:8,fontSize:9,color:G400,marginTop:4,justifyContent:'center',flexWrap:'wrap'}}>
-        <span><span style={{color:GR}}>&#9632;</span> ≥15 Min</span>
-        <span><span style={{color:AM}}>&#9632;</span> 5-14 Min</span>
+        <span><span style={{color:GR}}>&#9632;</span> ≥{dailyGoalMin()} Min</span>
+        <span><span style={{color:AM}}>&#9632;</span> 5–{dailyGoalMin()-1} Min</span>
         <span><span style={{color:'#5eead4'}}>&#9632;</span> &lt;5 Min</span>
         <span><span style={{color:C_NONE}}>&#9679;</span> kein Lernen</span>
       </div>
