@@ -1,7 +1,7 @@
 import { sbGet, sbPost } from '../core/api.js';
 import { REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { filterRunsByScope } from '../core/scope.js';
+import { langFlag, langLabel, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
@@ -9,7 +9,14 @@ import { RepeatRunHistory } from './progress.jsx';
 
 function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; }
 
-function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, onCompleted }){
+// Der Pool ist sprachübergreifend — in der Frage muss deshalb stehen, in welche
+// Sprache übersetzt werden soll.
+var ZIEL = {en:['Englische','Englisches'], es:['Spanische','Spanisches'],
+            fr:['Französische','Französisches'], la:['Lateinische','Lateinisches']};
+function zielSprache(l){ return (ZIEL[l]||ZIEL.en)[0]; }
+function zielWort(l){ return (ZIEL[l]||ZIEL.en)[1]+' Wort…'; }
+
+function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompleted }){
   var [phase,setPhase]=useState('loading'); // loading, empty, intro, q, show, done
   var [pool,setPool]=useState([]);
   var [poolNote,setPoolNote]=useState('');
@@ -30,7 +37,9 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
   var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var inputRef = useRef(null);
 
-  function wkey(w){ return (w.word||'').toLowerCase()+'|'+(w.clue||'').toLowerCase(); }
+  // Sprache gehört in den Schlüssel: der Pool ist sprachübergreifend, und
+  // „Hotel → hotel" gibt es auf Englisch wie auf Spanisch.
+  function wkey(w, lang){ return (lang||w.lang||'')+'|'+(w.word||'').toLowerCase()+'|'+(w.clue||'').toLowerCase(); }
 
   useEffect(function(){
     if(!pid || !UUID.test(pid)){ setPhase('empty'); return; }
@@ -43,14 +52,19 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
       var hist = Array.isArray(res[1])?res[1]:[];
       var allRuns = Array.isArray(res[2])?res[2]:[];
       setHistory(hist);
-      // Nur die Runs der gewählten Klasse/Sprache — sonst käme im Spanisch-
-      // Modus Englisch dran.
-      var inScopeRun = {};
-      filterRunsByScope(allRuns, chapters||[], scope).forEach(function(r){ inScopeRun[r.id]=1; });
+      // Bewusst NICHT auf die gewählte Klasse/Sprache eingeschränkt: sobald der
+      // Umschalter auf Klasse 6 steht, wäre der ganze Klasse-5-Wortschatz aus
+      // der Wiederholung verschwunden und würde still verfallen. Stattdessen
+      // hängt an jeder Vokabel die Sprache ihres Runs, damit in der Frage steht,
+      // in welcher Sprache geantwortet werden soll.
+      var runInfo = {};
+      allRuns.forEach(function(r){ runInfo[r.id] = runScope(r, chapters||[]); });
       var map6={}, map5={};
       function add(map,w,runId,pot){
-        var k=wkey(w); if(!w.word||k==='|') return;
-        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,wrong:0,correct:0,src:[],lcMs:0,rl:0};
+        var sc = runInfo[runId] || {};
+        var k=wkey(w, sc.language); if(!w.word||!w.clue) return;
+        if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,lang:sc.language||'en',grade:sc.grade||null,
+          wrong:0,correct:0,src:[],lcMs:0,rl:0};
         map[k].wrong+=(w.wrong||0); map[k].correct+=(w.correct||0);
         map[k].src.push({runId:runId, pot:pot});
         // zuletzt gekonnt + erreichte Wiederholungsstufe zählen als Beleg mit
@@ -59,7 +73,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
         if((w.rl||0) > map[k].rl) map[k].rl = w.rl||0;
       }
       rows.forEach(function(row){
-        if(!inScopeRun[row.run_id]) return;
+        if(!runInfo[row.run_id]) return;   // Run gehört nicht (mehr) zu diesem Kind
         var d=parseData(row.data), pots=d.pots||{};
         (pots[6]||[]).forEach(function(w){ add(map6,w,row.run_id,6); });
         (pots[5]||[]).forEach(function(w){ add(map5,w,row.run_id,5); });
@@ -74,7 +88,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
       setPool(finalPool); setPoolNote(finalPool.length>=20?'':note);
       setPhase(finalPool.length===0?'empty':'intro');
     }).catch(function(){ setPhase('empty'); });
-  },[pid, scope&&scope.grade, scope&&scope.language]);
+  },[pid, chapters]);
 
   // Wiederholungsabstand je Vokabel aus der Lauf-Historie (1→3→7→14→30→60 Tage).
   var revStats = useMemo(function(){ return reviewHistoryStats(history); },[history]);
@@ -90,6 +104,12 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
   var dueCount = useMemo(function(){
     return ranked.filter(function(x){ return x.over>=1; }).length;
   },[ranked]);
+  // Was steckt im Pool — sichtbar machen, dass auch die alte Klasse dabei ist.
+  var poolNachSprache = useMemo(function(){
+    var m = {};
+    (pool||[]).forEach(function(w){ var l=w.lang||'en'; m[l]=(m[l]||0)+1; });
+    return Object.keys(m).sort().map(function(l){ return {lang:l, n:m[l]}; });
+  },[pool]);
 
   function startRun(){
     // Die am längsten überfälligen zuerst — genau die zeigen, ob es sitzt.
@@ -121,7 +141,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
     var correct = status==='correct'||status==='partial';
     tallyAnswer(correct);
     var pts = correct ? ptsForHints(hints) : 0;
-    var entry={word:cur.word, clue:cur.clue, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
+    var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
     setScore(function(s){return s+pts;});
     setResult({correct:correct, points:pts, answer:wordDisplay(cur), typed:typed, hints:hints, skipped:false});
@@ -129,7 +149,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
   }
   function giveUp(){
     if(!cur) return;
-    var entry={word:cur.word, clue:cur.clue, typed:'', correct:false, hints:hints, points:0, skipped:true};
+    var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:'', correct:false, hints:hints, points:0, skipped:true};
     setLog(function(l){return l.concat([entry]);});
     setResult({correct:false, points:0, answer:wordDisplay(cur), typed:'', hints:hints, skipped:true});
     setPhase('show');
@@ -239,7 +259,9 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
       Tippe das gesuchte Wort. <b>Ohne Tipp = 10 Punkte</b>, nach Tipp 1 (Länge) noch <b>5</b>, nach Tipp 2 (Buchstaben) <b>0</b>. Dran sind die Vokabeln, die du am längsten nicht mehr sicher konntest. Was du hier <b>nicht</b> kannst, wandert im Leiterspiel zurück und wird nochmal geübt.
     </div>
     {poolNote&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:8,padding:'8px 10px',fontSize:11,marginBottom:12}}>{poolNote}</div>}
-    <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln{dueCount>0&&<span> · <b style={{color:T}}>{dueCount}</b> sind dran 🔔</span>}</div>
+    <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln{dueCount>0&&<span> · <b style={{color:T}}>{dueCount}</b> sind dran 🔔</span>}
+      <div style={{fontSize:10,color:G400,marginTop:3}}>aus allen Klassen und Sprachen: {poolNachSprache.map(function(x,i){ return <span key={x.lang}>{i>0?' · ':''}{langFlag(x.lang)} {x.n}</span>; })}</div>
+    </div>
     {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
     <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
     <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
@@ -254,7 +276,8 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
       <div style={{height:'100%',width:Math.round(idx/items.length*100)+'%',background:T,borderRadius:3,transition:'width .3s'}}/>
     </div>
     <div style={{background:'white',borderRadius:14,border:'1px solid '+G200,padding:'18px 16px',marginBottom:12,textAlign:'center'}}>
-      <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Übersetze ins Englische</div>
+      <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Übersetze ins {zielSprache(cur.lang)}</div>
+      <div style={{fontSize:11,color:T,fontWeight:'bold',marginBottom:6}}>{langFlag(cur.lang)} {langLabel(cur.lang)}{cur.grade?' · Klasse '+cur.grade:''}</div>
       <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{cur.clue}</div>
       <div style={{fontSize:11,color:hints===0?T:hints===1?'#d97706':RE,marginTop:6,fontWeight:'bold'}}>
         {hints===0?'🏆 10 Punkte möglich':hints===1?'💡 noch 5 Punkte':'💡 0 Punkte (Buchstaben-Hilfe)'}
@@ -278,7 +301,7 @@ function WiederholungMode({ player, chapters, scope, mandatory, policy, onDone, 
 
     <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
       onKeyDown={function(e){ if(e.key==='Enter'){ e.preventDefault(); submit(); } }}
-      placeholder="Englisches Wort…" autoCapitalize="none" autoCorrect="off" spellCheck={false}
+      placeholder={zielWort(cur.lang)} autoCapitalize="none" autoCorrect="off" spellCheck={false}
       style={{width:'100%',padding:'13px 14px',fontSize:17,border:'2px solid '+G200,borderRadius:10,boxSizing:'border-box',marginBottom:12,outline:'none'}}/>
 
     <button onClick={submit} disabled={!input.trim()} style={BtnStyle(input.trim()?T:G200,'white',{width:'100%',padding:'13px',fontSize:15,marginBottom:10,cursor:input.trim()?'pointer':'default'})}>Prüfen</button>

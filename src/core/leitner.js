@@ -17,6 +17,13 @@ var ANSWER_TALLY = {ok:0, bad:0};
 
 function tallyAnswer(correct){ if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++; }
 
+// Höchstens so viele Vokabeln lassen sich pro Runde einfach überspringen.
+// Danach wird die Lösung gezeigt und muss einmal geschrieben werden — es zählt
+// weiter wie „nicht gewusst", kostet aber Aufmerksamkeit statt eines Klicks.
+// Hintergrund: am 12.08.2026 waren 83 von 86 Antworten reine Überspringer bei
+// 0,6 s Antwortzeit — die Sitzung sah nach Lernen aus und war keines.
+var SKIP_LIMIT = 3;
+
 var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
 
 var DAY_WORDS_KEEP = 60;  // Tage mit Wort-Detail (spart Platz im Blob)
@@ -535,4 +542,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

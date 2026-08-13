@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { DEFAULT_STREAK, REVIEW_DEFAULT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -25,6 +25,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sesStart, setSesStart] = useState(null);
   var [sesAns, setSesAns] = useState(0);
   var [sesCor, setSesCor] = useState(0);
+  // Überspringen ist begrenzt: die ersten SKIP_LIMIT gehen mit einem Klick,
+  // danach muss die Lösung einmal geschrieben werden (zählt trotzdem als
+  // „nicht gewusst"). `copyMode` ist dieser Abschreib-Schritt.
+  var [skipsLeft, setSkipsLeft] = useState(SKIP_LIMIT);
+  var [copyMode, setCopyMode] = useState(false);
+  var [copyHint, setCopyHint] = useState(false);
   var [testWords, setTestWords] = useState([]);
   var [testIdx, setTestIdx] = useState(0);
   var [testLog, setTestLog] = useState([]);
@@ -274,8 +280,62 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
 
+  // Die Lösung der aktuellen Frage — im Abschreib-Schritt sichtbar und das,
+  // was eingegeben werden muss.
+  function loesung(){
+    if(!current) return '';
+    return current.pot===5 ? current.clue : wordDisplay(current);
+  }
+
+  // „Nicht gewusst" drücken. Solange Überspringer übrig sind, geht es wie
+  // bisher direkt weiter; danach kommt der Abschreib-Schritt.
+  function requestSkip(){
+    if(!current || copyMode) return;
+    if(skipsLeft > 0){
+      setSkipsLeft(function(n){ return n-1; });
+      if(phase==='quiz') skipQuiz(); else submitAnswer(true);
+      return;
+    }
+    setCopyHint(false); setInput(''); setCopyMode(true);
+  }
+
+  // Abschreiben abgeschlossen → wird wie ein Überspringer verbucht.
+  function finishCopy(){
+    if(!copyMode) return;
+    setCopyMode(false); setCopyHint(false);
+    if(phase==='quiz') skipQuiz(); else submitAnswer(true);
+  }
+
+  function submitCopy(){
+    var st = checkAnswer(input.trim(), loesung());
+    if(st==='correct'||st==='partial') finishCopy();
+    else setCopyHint(true);
+  }
+
+  // Ein Klick auf ✓ / Enter: im Abschreib-Schritt gegen die Lösung prüfen,
+  // sonst die normale Antwort werten.
+  function submitTyped(){ if(copyMode) submitCopy(); else submitAnswer(false); }
+
+  function copyBox(anleitung){
+    if(!copyMode) return null;
+    return <div style={{background:'#fef3c7',border:'2px solid #fcd34d',borderRadius:12,padding:'10px 12px',marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:'bold',color:'#92400e',marginBottom:3}}>Keine Überspringer mehr übrig</div>
+      <div style={{fontSize:11,color:'#92400e',marginBottom:6}}>{anleitung}</div>
+      <div style={{fontSize:20,fontWeight:'bold',color:G900,textAlign:'center'}}>{loesung()}</div>
+      {copyHint&&<div style={{fontSize:11,color:RE,marginTop:6,textAlign:'center'}}>Noch nicht gleich — Buchstabe für Buchstabe abschreiben.</div>}
+    </div>;
+  }
+
+  function skipButton(extra){
+    return <button onClick={requestSkip} disabled={copyMode}
+      style={BtnStyle(G100,G600,Object.assign({width:'100%',padding:'8px',fontSize:12,opacity:copyMode?0.45:1},extra||{}))}>
+      {skipsLeft>0 ? 'Überspringen / Nicht gewusst · noch '+skipsLeft : '🔤 Lösung zeigen & abschreiben'}
+    </button>;
+  }
+
   function nextWord(){
     setResult(null); setCelebration(null);
+    setCopyMode(false); setCopyHint(false);
     var allDone = (data.pots[6]||[]).length >= Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
     if(allDone){ setPhase('done'); return; }
     pickWord();
@@ -505,21 +565,24 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
         </div>
+        {copyBox('Tippe die markierte Lösung an — zählt als „nicht gewusst".')}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
           {quizOptions.map(function(opt){
             var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
             var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
-            var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
-            var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
-            return <button key={opt.word} onClick={function(){handleQuizAnswer(opt);}} disabled={!!quizChosen}
+            var istLoesung=copyMode&&normWordKey(opt.word)===normWordKey(current.word);
+            var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):istLoesung?'#fef3c7':copyMode?G50:'white';
+            var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):istLoesung?'#f59e0b':G200;
+            return <button key={opt.word} onClick={function(){ if(copyMode){ if(istLoesung) finishCopy(); return; } handleQuizAnswer(opt); }}
+              disabled={!!quizChosen||(copyMode&&!istLoesung)}
               style={{padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
-                textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation'}}>
+                textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation',
+                opacity:copyMode&&!istLoesung?0.5:1}}>
               {opt.word}
             </button>;
           })}
         </div>
-        <button onClick={function(){ skipQuiz(); }}
-          style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        {skipButton()}
       </div>
     );
   }
@@ -533,7 +596,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
           <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
         </div>
+        {copyBox('Lege die Lösung mit den Buchstaben — zählt als „nicht gewusst".')}
         {current&&<T2LetterField key={'t2_'+current.word} word={wordDisplay(current)} onCorrect={function(){
+          if(copyMode){ finishCopy(); return; }
           var newData=JSON.parse(JSON.stringify(data));
           var potArr=(newData.pots[2]||[]);
           var wIdx=potArr.findIndex(function(w){return normWordKey(w.word)===normWordKey(current.word);});
@@ -584,7 +649,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
           setPhase('showResult');
         }}/>}
-        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',marginTop:10,fontSize:12})}>Überspringen</button>
+        {skipButton({marginTop:10})}
       </div>
     );
   }
@@ -615,15 +680,16 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           </div>
           <div style={{fontSize:11,color:G400,marginTop:6}}>{dashLetterCount} Buchstaben</div>
         </div>
+        {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter')submitAnswer();}}
+            onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
             autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
-            placeholder={'Englisch ('+dashLetterCount+' Buchstaben)…'}
-            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={function(){ submitAnswer(false); }} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
+            placeholder={copyMode?'Lösung abschreiben…':('Englisch ('+dashLetterCount+' Buchstaben)…')}
+            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+(copyMode?'#f59e0b':T),borderRadius:10,outline:'none'}}/>
+          <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        {skipButton()}
       </div>
     );
   }
@@ -637,15 +703,16 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
           <div style={{fontSize:24,fontWeight:'bold',color:G900,marginBottom:4}}>{current&&(current.pot===5?current.word:current.clue)}</div>
         </div>
+        {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
         <div style={{display:'flex',gap:8,marginBottom:8}}>
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter')submitAnswer();}}
+            onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
-            placeholder={current&&current.pot===5?'Deutsch…':'Englisch…'}
-            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+T,borderRadius:10,outline:'none'}}/>
-          <button onClick={function(){ submitAnswer(false); }} style={BtnStyle(T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
+            placeholder={copyMode?'Lösung abschreiben…':(current&&current.pot===5?'Deutsch…':'Englisch…')}
+            style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+(copyMode?'#f59e0b':T),borderRadius:10,outline:'none'}}/>
+          <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
-        <button onClick={function(){ submitAnswer(true); }} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Überspringen / Nicht gewusst</button>
+        {skipButton()}
       </div>
     );
     return(

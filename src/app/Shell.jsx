@@ -2,7 +2,7 @@ import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { HW_POST, SB_URL } from '../core/config.js';
 import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsForPlayer, reviewLockState } from '../core/leitner.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { defaultScope, filterRunsByScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
+import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
 import { BUILTIN } from '../core/store.js';
 import { BtnStyle, G100, G200, G400, G600, G900, T, TD, dailyGoalMin, dailyGoalSec, screenGame } from '../core/theme.js';
 import { normWordKey, parseData } from '../core/words.js';
@@ -104,9 +104,13 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     ]).then(function(res){
       var policy = (res[0]&&res[0][0]&&res[0][0].value) || null;
       var last = (res[1]&&res[1][0]&&res[1][0].created_at) || null;
-      var inScopeRun = {};
-      filterRunsByScope(Array.isArray(res[3])?res[3]:[], chapters, scope).forEach(function(r){ inScopeRun[r.id]=1; });
-      var mine = (Array.isArray(res[2])?res[2]:[]).filter(function(row){ return inScopeRun[row.run_id]; })
+      // Über alle Klassen und Sprachen: die Wiederholung prüft den gesamten
+      // gelernten Bestand. Vorher zählte nur die gewählte Klasse — nach dem
+      // Wechsel auf Klasse 6 war der Klasse-5-Wortschatz aus der Fälligkeit
+      // verschwunden und wurde nie wieder abgefragt.
+      var meineRuns = {};
+      (Array.isArray(res[3])?res[3]:[]).forEach(function(r){ meineRuns[r.id]=1; });
+      var mine = (Array.isArray(res[2])?res[2]:[]).filter(function(row){ return meineRuns[row.run_id]; })
         .map(function(row){ return parseData(row.data); });
       // Fällige Vokabeln und die Lernantworten seit dem letzten Lauf sind die
       // beiden Auslöser, die den Wechsel wirklich takten — die Zeit allein
@@ -117,7 +121,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       setReviewInfo({locked:st.locked, policy:st.policy, poolSize:cnt.pool, daysSince:st.daysSince,
         reason:st.reason, dueCount:st.dueCount, answersSince:st.answersSince});
     }).catch(function(){});
-  }, [player&&player.id, chapters, scope&&scope.grade, scope&&scope.language]);
+  }, [player&&player.id]);
   useEffect(function(){ loadReview(); }, [loadReview]);
 
   var scopes = useMemo(function(){ return listScopes(chapters); }, [chapters]);
@@ -300,7 +304,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={scopeTree} scope={scope} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
-    if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters} scope={scope}
+    if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters}
       mandatory={reviewInfo.locked} policy={reviewInfo.policy}
       onCompleted={loadReview} onDone={function(fromLock){ loadReview(); go(fromLock===true?'leiterspiel_menu':'home'); }}/>;
     if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} chapters={chapters} scope={scope} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
