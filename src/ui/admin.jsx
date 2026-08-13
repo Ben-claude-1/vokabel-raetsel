@@ -16,7 +16,7 @@ import { LernVerlaufChart } from './widgets.jsx';
 function AdminLernzeitOverview({ allUsers }) {
   var [sessions, setSessions] = useState([]);
   useEffect(function(){
-    sbGet('learn_sessions','select=player_id,game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
+    sbGet('learn_sessions','select=player_id,game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,credit_points,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
   },[]);
   var weekDays = getWeekDays();
   var today = dayKey();

@@ -12,7 +12,7 @@ import { dayKey } from '../core/util.js';
 function ladeTagesstand(pid){
   var today = dayKey();
   return Promise.all([
-    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at'),
+    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,credit_points,started_at'),
     sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&select=id,language'),
   ]).then(function(res){
     var runLang = {};
@@ -74,6 +74,7 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
         <div style={{fontWeight:'bold',fontSize:13,color:G900}}>Deine 3 Aufgaben heute</div>
         <div style={{fontSize:10,color:G400}}>{fertig} von 3 geschafft{st.alleFertig?' — alles erledigt! 🎉':''}
           {st.gespart>0&&<span style={{color:GR,fontWeight:'bold'}}> · {st.gespart} Min gespart 🎉</span>}</div>
+        {st.gespart>0&&<div style={{fontSize:9,color:G400}}>Schwere Vokabeln zählen mehr als Multiple Choice</div>}
       </div>
       {[0,1,2].map(function(i){
         var q = st.list[i];
@@ -92,7 +93,7 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
           {!q.done&&<Balken have={q.have} goal={q.goal} done={q.done}/>}
           <div style={{fontSize:10,color:G400,marginTop:3}}>
             {q.done ? (q.claimed?'abgeholt':'geschafft') : q.have+' / '+q.goal+' Min'}
-            {q.saved>0&&<span style={{color:GR,marginLeft:6}}>−{q.saved} Min für {q.correct} richtige</span>}
+            {q.saved>0&&<span style={{color:GR,marginLeft:6}}>−{q.saved} Min gutgeschrieben</span>}
             <span style={{color:AM,fontWeight:'bold',marginLeft:6}}>+{q.pts}</span>
           </div>
         </div>

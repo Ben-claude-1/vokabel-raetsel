@@ -13,12 +13,31 @@ function lsGetRunsForPlayer(pid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 
 function trackPot(wObj, pot, isCorrect) { if(!wObj.ps) wObj.ps={}; if(!wObj.ps[pot]) wObj.ps[pot]={c:0,w:0}; if(isCorrect) wObj.ps[pot].c=(wObj.ps[pot].c||0)+1; else wObj.ps[pot].w=(wObj.ps[pot].w||0)+1; }
 
-var ANSWER_TALLY = {ok:0, bad:0, skip:0};
+var ANSWER_TALLY = {ok:0, bad:0, skip:0, credit:0};
+
+// Wie viel eine richtige Antwort wert ist. In Topf 1 stehen vier Möglichkeiten
+// zur Auswahl — da ist auch Raten oft richtig; frei abgerufen wird es erst ab
+// Topf 3, und am meisten sagt die Wiederholung nach Tagen ohne Kontakt.
+// Bezugsgröße: CREDIT_PER_MIN in core/goal.js.
+var CREDIT = {
+  pot1: 1,   // Multiple Choice
+  pot2: 2,   // Buchstaben sortieren
+  pot3: 4,   // frei tippen, Länge vorgegeben
+  pot4: 5,   // frei tippen
+  pot5: 6,   // rückwärts (Englisch → Deutsch)
+  typed: 4,  // andere Spiele mit freier Eingabe (Grammatik, Trainer, Test)
+  choice: 1, // andere Spiele mit Auswahl
+  review0: 8, review1: 4, review2: 2,   // Wiederholung: ohne / mit 1 / mit 2 Tipps
+};
+
+function potCredit(pot){ return CREDIT['pot'+pot] || CREDIT.typed; }
 
 // `skipped` = „nicht gewusst". Zählt als falsche Antwort und zusätzlich als
 // Überspringer — daran hängt die Ehrlichkeits-Bedingung des Tagesziels.
-function tallyAnswer(correct, skipped){
-  if(correct) ANSWER_TALLY.ok++; else ANSWER_TALLY.bad++;
+// `credit` ist die Gutschrift einer richtigen Antwort (Standard: freie Eingabe).
+function tallyAnswer(correct, skipped, credit){
+  if(correct){ ANSWER_TALLY.ok++; ANSWER_TALLY.credit += (credit==null ? CREDIT.typed : credit); }
+  else ANSWER_TALLY.bad++;
   if(skipped) ANSWER_TALLY.skip++;
 }
 
@@ -547,4 +566,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

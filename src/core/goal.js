@@ -3,9 +3,13 @@
 // Drei Bereiche mit eigener Zeit — 5 Minuten Grammatik, 10 Minuten Englisch,
 // 10 Minuten Spanisch. Zwei Regeln kommen dazu:
 //
-//   Belohnung   Richtige Antworten verkürzen die Zeit: je 10 richtige Antworten
-//               eine Minute weniger in genau dem Bereich, in dem sie anfielen —
-//               höchstens bis auf die Hälfte. Wer es kann, ist schneller fertig.
+//   Belohnung   Richtige Antworten verkürzen die Zeit — aber gewichtet nach
+//               Schwierigkeit (CREDIT in core/leitner.js): in Topf 1 stehen vier
+//               Möglichkeiten zur Auswahl, da ist auch Raten oft richtig; frei
+//               abgerufen wird erst ab Topf 3, am meisten sagt die Wiederholung
+//               nach Tagen ohne Kontakt. 40 Gutschriftpunkte sind eine Minute,
+//               höchstens bis auf die halbe Zeit — in genau dem Bereich, in dem
+//               sie anfielen.
 //   Ehrlichkeit Ein Tag zählt nur mit genug echten Antworten. Reines
 //               Durchklicken („nicht gewusst") lässt die Zeit laufen, ohne dass
 //               gelernt wird; am 12.08.2026 waren 83 von 86 Antworten so
@@ -23,7 +27,10 @@ var AREAS = [
   {key:'spanisch',  icon:'🇪🇸', label:'Spanisch',  min:10, lang:'es'},
 ];
 
-var CORRECT_PER_MIN = 10;   // richtige Antworten je gesparter Minute
+// 40 Punkte = 1 Minute. In Zahlen für eine Minute Gutschrift:
+//   Topf 1 (Auswahl) 40 · Topf 2 20 · Topf 3 10 · Topf 4 8 · Topf 5 ~7
+//   Wiederholung ohne Tipp 5
+var CREDIT_PER_MIN = 40;
 var MIN_ANSWERS = 20;       // so viele Antworten braucht ein Tag mindestens
 var MAX_SKIP_SHARE = 0.5;   // höchstens die Hälfte davon darf „nicht gewusst" sein
 
@@ -51,33 +58,42 @@ function buildDayStats(sessions, runLang){
   (sessions||[]).forEach(function(s){
     if(!s || !s.started_at) return;
     var k = dayKey(new Date(s.started_at));
-    var d = out[k] || (out[k] = {sec:0, secBy:{}, corBy:{}, ans:0, cor:0, skip:0});
+    var d = out[k] || (out[k] = {sec:0, secBy:{}, corBy:{}, creBy:{}, ans:0, cor:0, skip:0, credit:0});
     var sec = s.active_seconds||0;
     d.sec += sec;
     var korrekt = s.correct_count||0, falsch = s.wrong_count||0, skip = s.skipped_count||0;
     d.ans += korrekt + falsch; d.cor += korrekt; d.skip += skip;
+    // Ältere Sitzungen ohne Gewichtung: eine richtige Antwort zählt wie eine
+    // frei getippte, sonst verlöre der Altbestand seine Gutschrift.
+    var credit = s.credit_points!=null ? s.credit_points : korrekt*4;
+    d.credit += credit;
     var a = areaOfSession(s, runLang);
-    if(a){ d.secBy[a] = (d.secBy[a]||0) + sec; d.corBy[a] = (d.corBy[a]||0) + korrekt; }
+    if(a){
+      d.secBy[a] = (d.secBy[a]||0) + sec;
+      d.corBy[a] = (d.corBy[a]||0) + korrekt;
+      d.creBy[a] = (d.creBy[a]||0) + credit;
+    }
   });
   return out;
 }
 
 // Zeitziel eines Bereichs nach Abzug der Belohnung.
-function areaGoalMin(area, correct){
-  var gespart = Math.floor((correct||0)/CORRECT_PER_MIN);
+function areaGoalMin(area, credit){
+  var gespart = Math.floor((credit||0)/CREDIT_PER_MIN);
   var maxGespart = Math.floor(area.min/2);      // nie unter die Hälfte
   return area.min - Math.min(gespart, maxGespart);
 }
 
 // Stand eines Tages: je Bereich Ziel und Ist, dazu die Ehrlichkeits-Bedingung.
 function dayGoalState(st){
-  st = st || {sec:0, secBy:{}, corBy:{}, ans:0, skip:0};
+  st = st || {sec:0, secBy:{}, corBy:{}, creBy:{}, ans:0, skip:0, credit:0};
   var areas = AREAS.map(function(a){
     var cor = (st.corBy||{})[a.key]||0;
-    var goal = areaGoalMin(a, cor);
+    var cre = (st.creBy||{})[a.key]||0;
+    var goal = areaGoalMin(a, cre);
     var have = Math.floor(((st.secBy||{})[a.key]||0)/60);
     return {key:a.key, icon:a.icon, label:a.label, lang:a.lang, goal:goal, have:have,
-            done:have>=goal, saved:a.min-goal, correct:cor};
+            done:have>=goal, saved:a.min-goal, correct:cor, credit:cre};
   });
   var ans = st.ans||0, skip = st.skip||0;
   var genug = ans >= MIN_ANSWERS;
@@ -125,5 +141,5 @@ function calcStreakFromStats(stats){
   return streak;
 }
 
-export { AREAS, CORRECT_PER_MIN, MIN_ANSWERS, MAX_SKIP_SHARE, GOAL_RULE_FROM, LEGACY_GOAL_SEC,
+export { AREAS, CREDIT_PER_MIN, MIN_ANSWERS, MAX_SKIP_SHARE, GOAL_RULE_FROM, LEGACY_GOAL_SEC,
   areaOfSession, buildDayStats, areaGoalMin, dayGoalState, dayGoalHint, dayCounts, calcStreakFromStats };

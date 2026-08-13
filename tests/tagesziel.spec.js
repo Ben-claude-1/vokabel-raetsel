@@ -4,8 +4,8 @@ const { test, expect } = require('@playwright/test');
 // Browser, weil src/ ESM ist und das Projekt sonst CommonJS nutzt.
 //
 //   Zeit      5 Min Grammatik, 10 Min Englisch, 10 Min Spanisch
-//   Belohnung je 10 richtige Antworten eine Minute weniger, höchstens bis auf
-//             die Hälfte
+//   Belohnung gewichtet nach Schwierigkeit — 40 Gutschriftpunkte sind eine
+//             Minute, höchstens bis auf die Hälfte
 //   Ehrlichkeit mindestens 20 Antworten, höchstens die Hälfte davon
 //             „nicht gewusst"
 async function goal(page, fn) {
@@ -18,7 +18,7 @@ async function goal(page, fn) {
 
 // Eine Sitzung, wie sie in learn_sessions steht.
 const S = (o) => Object.assign({ started_at: new Date().toISOString(), active_seconds: 0,
-  correct_count: 0, wrong_count: 0, skipped_count: 0 }, o);
+  correct_count: 0, wrong_count: 0, skipped_count: 0, credit_points: 0 }, o);
 
 test.describe('Tagesziel', () => {
   test('ohne Belohnung gelten 5 / 10 / 10 Minuten', async ({ page }) => {
@@ -27,22 +27,39 @@ test.describe('Tagesziel', () => {
     expect(r).toBe('grammatik:5 englisch:10 spanisch:10');
   });
 
-  test('richtige Antworten verkürzen die Zeit — je 10 eine Minute', async ({ page }) => {
+  test('Gutschrift: 40 Punkte sind eine Minute, höchstens bis zur Hälfte', async ({ page }) => {
     const r = await goal(page, (g) => ({
-      zehn: g.areaGoalMin({ min: 10 }, 10),
-      dreissig: g.areaGoalMin({ min: 10 }, 30),
-      // nie unter die Hälfte, auch nicht bei 200 richtigen
-      viele: g.areaGoalMin({ min: 10 }, 200),
-      grammatikViele: g.areaGoalMin({ min: 5 }, 200),
-      keine: g.areaGoalMin({ min: 10 }, 9),
+      vierzig: g.areaGoalMin({ min: 10 }, 40),
+      hundertzwanzig: g.areaGoalMin({ min: 10 }, 120),
+      viele: g.areaGoalMin({ min: 10 }, 2000),
+      grammatikViele: g.areaGoalMin({ min: 5 }, 2000),
+      knappDrunter: g.areaGoalMin({ min: 10 }, 39),
     }));
-    expect(r).toEqual({ zehn: 9, dreissig: 7, viele: 5, grammatikViele: 3, keine: 10 });
+    expect(r).toEqual({ vierzig: 9, hundertzwanzig: 7, viele: 5, grammatikViele: 3, knappDrunter: 10 });
+  });
+
+  test('Multiple Choice zählt weniger als freies Abrufen', async ({ page }) => {
+    // Eine Minute Gutschrift kostet 40 Antworten in Topf 1, aber nur 10 in
+    // Topf 3 und 5 in der Wiederholung.
+    await page.goto('/tests/leer.html');
+    const r = await page.evaluate(async () => {
+      const { CREDIT, potCredit } = await import('/src/core/leitner.js');
+      const g = await import('/src/core/goal.js');
+      const proMinute = (c) => Math.ceil(g.CREDIT_PER_MIN / c);
+      return {
+        topf1: proMinute(potCredit(1)), topf2: proMinute(potCredit(2)),
+        topf3: proMinute(potCredit(3)), topf5: proMinute(potCredit(5)),
+        wiederholung: proMinute(CREDIT.review0),
+      };
+    });
+    expect(r).toEqual({ topf1: 40, topf2: 20, topf3: 10, topf5: 7, wiederholung: 5 });
   });
 
   test('Belohnung gilt nur im eigenen Bereich', async ({ page }) => {
-    // 20 richtige Antworten auf Englisch verkürzen Englisch, nicht Spanisch.
+    // 80 Gutschriftpunkte auf Englisch (= 16 Antworten in Topf 4) verkürzen
+    // Englisch um 2 Minuten, Spanisch bleibt bei 10.
     const r = await goal(page, (g) => {
-      const st = g.dayGoalState({ sec: 480, secBy: { englisch: 480 }, corBy: { englisch: 20 }, ans: 25, skip: 0 });
+      const st = g.dayGoalState({ sec: 480, secBy: { englisch: 480 }, creBy: { englisch: 80 }, ans: 25, skip: 0 });
       const en = st.areas.find((a) => a.key === 'englisch');
       const es = st.areas.find((a) => a.key === 'spanisch');
       return { enZiel: en.goal, enHat: en.have, enFertig: en.done, esZiel: es.goal };
@@ -67,9 +84,10 @@ test.describe('Tagesziel', () => {
 
   test('Sitzungen werden je Bereich verbucht — Grammatik nicht als Englisch', async ({ page }) => {
     const sessions = [
-      S({ game: 'grammatik', language: 'en', active_seconds: 300, correct_count: 5 }),
-      S({ game: 'leiterspiel', language: 'en', active_seconds: 600, correct_count: 12, wrong_count: 3 }),
-      S({ game: 'leiterspiel', language: 'es', active_seconds: 540, correct_count: 4, wrong_count: 2, skipped_count: 2 }),
+      S({ game: 'grammatik', language: 'en', active_seconds: 300, correct_count: 5, credit_points: 20 }),
+      // 12 richtige in Topf 4 = 60 Punkte → 1 Minute Gutschrift
+      S({ game: 'leiterspiel', language: 'en', active_seconds: 600, correct_count: 12, wrong_count: 3, credit_points: 60 }),
+      S({ game: 'leiterspiel', language: 'es', active_seconds: 540, correct_count: 4, wrong_count: 2, skipped_count: 2, credit_points: 4 }),
     ];
     await page.goto('/tests/leer.html');
     const r = await page.evaluate(async (rows) => {
@@ -86,7 +104,7 @@ test.describe('Tagesziel', () => {
     expect(r.cor).toEqual({ grammatik: 5, englisch: 12, spanisch: 4 });
     expect(r.ans).toBe(26);
     expect(r.skip).toBe(2);
-    // Englisch: 12 richtige → 1 Minute gespart → 10 von 9 Min geschafft
+    // Englisch: 60 Punkte → 1 Minute gespart → 10 von 9 Min geschafft
     expect(r.ziele).toBe('grammatik:5/5 englisch:10/9 spanisch:9/10');
   });
 

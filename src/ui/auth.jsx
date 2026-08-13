@@ -130,7 +130,7 @@ function GoalTracker({ player, onInfo }) {
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!player||!player.id||!UUID.test(player.id)) return;
     Promise.all([
-      sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at'),
+      sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,credit_points,started_at'),
       sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+player.id+')&select=id,language'),
     ]).then(function(res){
       var sessions = Array.isArray(res[0])?res[0]:[];

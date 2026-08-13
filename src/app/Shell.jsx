@@ -164,7 +164,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     var localSeconds=0, lastSavedSeconds=0, lastActivity=Date.now(), created=false;
     var IDLE_MS=120000, TICK_MS=1000, FLUSH_MS=15000;
     // Antworten dieser Session = Zuwachs des globalen Zählers seit Sessionstart.
-    var baseOk=ANSWER_TALLY.ok, baseBad=ANSWER_TALLY.bad, baseSkip=ANSWER_TALLY.skip;
+    var baseOk=ANSWER_TALLY.ok, baseBad=ANSWER_TALLY.bad, baseSkip=ANSWER_TALLY.skip, baseCredit=ANSWER_TALLY.credit;
     function isActive(){ return document.visibilityState==='visible' && (Date.now()-lastActivity)<IDLE_MS; }
     // Jede Speicherung ist ein vollständiger Upsert (merge-duplicates auf der id).
     // Damit ist die Reihenfolge egal — kein "PATCH vor INSERT"-Verlust mehr, und
@@ -175,7 +175,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds,
         grade:scope?scope.grade:null, language:scope?scope.language:null,
         correct_count:Math.max(0,ANSWER_TALLY.ok-baseOk), wrong_count:Math.max(0,ANSWER_TALLY.bad-baseBad),
-        skipped_count:Math.max(0,ANSWER_TALLY.skip-baseSkip) };
+        skipped_count:Math.max(0,ANSWER_TALLY.skip-baseSkip),
+        credit_points:Math.max(0,ANSWER_TALLY.credit-baseCredit) };
       if(closing) row.ended_at=new Date().toISOString();
       try{
         fetch(SB_URL+'/rest/v1/learn_sessions',{

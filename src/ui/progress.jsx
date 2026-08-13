@@ -342,7 +342,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
     if(!player) return;
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if(!UUID.test(player.id)){ setSessions([]); return; }
-    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,started_at&order=started_at.desc&limit=1000')
+    sbGet('learn_sessions','player_id=eq.'+player.id+'&select=game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,credit_points,started_at&order=started_at.desc&limit=1000')
       .then(function(rows){ setSessions(Array.isArray(rows)?rows:[]); })
       .catch(function(){ setSessions([]); });
     sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data')

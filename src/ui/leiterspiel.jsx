@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -182,7 +182,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     newData.pots[moveTo].push(wObj);
     if(correct)newData.totalCorrect=(newData.totalCorrect||0)+1;
     else newData.totalWrong=(newData.totalWrong||0)+1;
-    tallyAnswer(correct);
+    tallyAnswer(correct, false, CREDIT.pot1);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
     saveAndUpdate(newData);
@@ -263,7 +263,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     newData.pots[moveTo].push(wObj);
     if(correct) newData.totalCorrect=(newData.totalCorrect||0)+1;
     else newData.totalWrong=(newData.totalWrong||0)+1;
-    tallyAnswer(correct, !!skipped);
+    tallyAnswer(correct, !!skipped, potCredit(fromPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
     saveAndUpdate(newData);
@@ -395,7 +395,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var status = checkAnswer(typed, correctAnswer);
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
-    tallyAnswer(correct);
+    tallyAnswer(correct, false, CREDIT.typed);
     var entry = {kind:w.kind, word:testItemDisplayWord(w), clue:testItemPrompt(w), typed:typed, correct:correct, partial:status==='partial', skipped:false, wordRef:w.wordRef||null, rt:answerMs()};
     setTestLog(function(l){return l.concat([entry]);});
     setResult({correct:correct,partial:status==='partial',answer:correctAnswer,word:entry.word,clue:entry.clue,typed:typed,skipped:false,kind:w.kind});
@@ -618,7 +618,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           if(!newData.pots[moveTo])newData.pots[moveTo]=[];
           newData.pots[moveTo].push(wObj);
           newData.totalCorrect=(newData.totalCorrect||0)+1;
-          tallyAnswer(true);
+          tallyAnswer(true, false, CREDIT.pot2);
           lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:2,toPot:moveTo,
             pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
           saveAndUpdate(newData);
@@ -1060,7 +1060,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) 
     setChosen(opt);
     var res=checkAnswer(opt,answer);
     var ok=res==='correct'||res==='partial';
-    tallyAnswer(ok);
+    tallyAnswer(ok, false, CREDIT.choice);
     var pts=ok?10:0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     setTotal(function(t){return t+pts;});

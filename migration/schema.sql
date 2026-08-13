@@ -52,6 +52,9 @@ CREATE TABLE IF NOT EXISTS public.learn_sessions (
   language text,
   -- übersprungene Antworten („nicht gewusst") — Bedingung für die Streak
   skipped_count integer DEFAULT 0 NOT NULL,
+  -- gewichtete Gutschrift für richtige Antworten (Multiple Choice zählt wenig,
+  -- freies Abrufen viel) — verkürzt das Tagesziel, siehe src/core/leitner.js
+  credit_points integer DEFAULT 0 NOT NULL,
   created_at timestamptz DEFAULT now() NOT NULL,
   PRIMARY KEY (id)
 );
