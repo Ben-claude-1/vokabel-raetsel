@@ -1,94 +1,56 @@
 // Tagesaufgaben.
 //
-// Drei kleine Aufträge pro Tag, sichtbar auf der Startseite. Sie sollen drei
-// Dinge auf einmal leisten:
+// Drei feste Aufträge pro Tag, sichtbar auf der Startseite:
 //
-//   Abwechslung  — eine der drei Aufgaben führt immer aus dem Leiterspiel
-//                  heraus in ein anderes Spiel.
-//   Behalten     — sobald der Wiederholungslauf fällig ist, wird er zur Aufgabe.
-//   Sichtbarkeit — jede Aufgabe hat einen Balken, der sich beim Spielen füllt.
+//   ✏️  5 Minuten Grammatik
+//   🇬🇧 10 Minuten Englisch
+//   🇪🇸 10 Minuten Spanisch
 //
-// Der Fortschritt wird aus Daten berechnet, die ohnehin anfallen (Tages-Log,
-// Sitzungen, Wiederholungsläufe) — es wird nichts zusätzlich mitgeschrieben.
-// Gespeichert wird nur, welche Belohnung schon abgeholt wurde, damit Punkte
-// nicht doppelt gutgeschrieben werden.
+// Gemessen wird die aktive Lernzeit aus `learn_sessions` — Grammatik über das
+// Spiel, die beiden Sprachen über die Sprache der Sitzung. Es wird nichts
+// zusätzlich mitgeschrieben; gespeichert wird nur, welche Belohnung schon
+// abgeholt wurde, damit Punkte nicht doppelt gutgeschrieben werden.
 
 import { sbGet, sbPatch, sbPost } from './api.js';
-import { dayKey } from './util.js';
 
-// Aufgaben-Katalog. `goal` ist die Zielzahl, `pts` die Belohnung.
-var QUESTS = {
-  learn:   {icon:'🪜', pts:100, goal:30, screen:'leiterspiel_menu',
-            text:function(n){ return n+' Vokabeln im Leiterspiel üben'; }},
-  first:   {icon:'🥇', pts:120, goal:12, screen:'leiterspiel_menu',
-            text:function(n){ return n+' Vokabeln gleich beim ersten Versuch treffen'; }},
-  climb:   {icon:'⬆️', pts:120, goal:6, screen:'leiterspiel_menu',
-            text:function(n){ return n+' Vokabeln eine Stufe weiterbringen'; }},
-  review:  {icon:'🔁', pts:150, goal:1, screen:'wiederholung',
-            text:function(){ return 'Einen Wiederholungslauf machen'; }},
-  time:    {icon:'⏱️', pts:80, goal:15, screen:'leiterspiel_menu',
-            text:function(n){ return n+' Minuten lernen'; }},
-  quiz:    {icon:'🎯', pts:80, goal:1, screen:'quiz_duel_menu',
-            text:function(){ return 'Eine Runde Quiz spielen'; }},
-  cross:   {icon:'🧩', pts:80, goal:1, screen:'crossword',
-            text:function(){ return 'Ein Kreuzworträtsel lösen'; }},
-  workout: {icon:'🏋️', pts:80, goal:1, screen:'workout_setup',
-            text:function(){ return 'Ein Workout machen'; }},
-  trainer: {icon:'📝', pts:80, goal:1, screen:'word_select_trainer',
-            text:function(){ return 'Mit dem Vokabeltrainer üben'; }},
-};
+// Die drei Aufgaben. `goal` sind Minuten, `pts` die Belohnung.
+// `lang` = Sprache der Sitzung (null bei Grammatik, die zählt über das Spiel).
+var DAILY = [
+  {key:'grammatik', icon:'✏️',  goal:5,  pts:60,  lang:null, screen:'grammar',
+   text:function(n){ return n+' Minuten Grammatik üben'; }},
+  {key:'englisch',  icon:'🇬🇧', goal:10, pts:100, lang:'en', screen:'leiterspiel_menu',
+   text:function(n){ return n+' Minuten Englisch lernen'; }},
+  {key:'spanisch',  icon:'🇪🇸', goal:10, pts:100, lang:'es', screen:'leiterspiel_menu',
+   text:function(n){ return n+' Minuten Spanisch lernen'; }},
+];
 
 // Ein Bonus obendrauf, wenn alle drei Aufgaben erledigt sind.
 var ALL_DONE_BONUS = 150;
 
-var LERNEN = ['learn', 'first', 'climb'];
-var ANDERE = ['quiz', 'cross', 'workout', 'trainer'];
-
-// Tagesnummer — daraus wird die Auswahl abgeleitet, damit sie sich beim
-// Neuladen nicht ändert und trotzdem jeden Tag anders aussieht.
-function dayIndex(day){
-  var p = (day || dayKey()).split('-');
-  return Math.floor(Date.UTC(+p[0], +p[1]-1, +p[2]) / 86400000);
-}
-
-// Die drei Aufgaben des Tages. `reviewDue` schiebt die Wiederholung auf den
-// Abwechslungs-Platz — dann ist sie die Aufgabe, die aus dem Leiterspiel führt.
-function questsForDay(day, reviewDue){
-  var i = dayIndex(day);
-  var a = LERNEN[i % LERNEN.length];
-  var b = reviewDue ? 'review' : ANDERE[i % ANDERE.length];
-  return [a, b, 'time'].map(function(key){
-    var q = QUESTS[key];
-    return {key:key, icon:q.icon, pts:q.pts, goal:q.goal, screen:q.screen, text:q.text(q.goal)};
+// Ist der Wiederholungslauf fällig, ist das Leiterspiel gesperrt — dann führt
+// der Weg zu den Sprachminuten über die Wiederholung.
+function questsForDay(reviewDue){
+  return DAILY.map(function(q){
+    return {key:q.key, icon:q.icon, pts:q.pts, goal:q.goal, lang:q.lang,
+      screen:(reviewDue && q.lang) ? 'wiederholung' : q.screen,
+      text:q.text(q.goal)};
   });
 }
 
-// Stand einer Aufgabe aus den Rohzahlen des Tages.
-//   answers    Antworten im Leiterspiel (Tages-Log)
-//   firstOk    davon beim Erstversuch richtig
-//   climbed    Vokabeln, die heute eine Stufe aufgestiegen sind
-//   reviews    abgeschlossene Wiederholungsläufe
-//   minutes    gemessene Lernminuten
-//   games      {kreuzwort:1, satzquiz:0, …} Sitzungen je Spiel (learn_sessions.game)
+// Stand einer Aufgabe aus den Minuten des Tages.
+//   minutes  {grammatik:3, en:12, es:0} — aktive Lernzeit je Bereich
 function questProgress(key, s){
-  s = s || {};
+  var min = (s && s.minutes) || {};
   switch(key){
-    case 'learn':   return s.answers||0;
-    case 'first':   return s.firstOk||0;
-    case 'climb':   return s.climbed||0;
-    case 'review':  return s.reviews||0;
-    case 'time':    return s.minutes||0;
-    // Spielnamen wie in learn_sessions.game (siehe SCREEN_GAME in theme.js)
-    case 'quiz':    return ((s.games||{}).satzquiz||0) + ((s.games||{}).quizduell||0);
-    case 'cross':   return (s.games||{}).kreuzwort||0;
-    case 'workout': return (s.games||{}).workout||0;
-    case 'trainer': return (s.games||{}).vokabeltrainer||0;
-    default:        return 0;
+    case 'grammatik': return min.grammatik || 0;
+    case 'englisch':  return min.en || 0;
+    case 'spanisch':  return min.es || 0;
+    default:          return 0;
   }
 }
 
-function questState(day, reviewDue, stats, claimed){
-  var list = questsForDay(day, reviewDue).map(function(q){
+function questState(reviewDue, stats, claimed){
+  var list = questsForDay(reviewDue).map(function(q){
     var have = questProgress(q.key, stats);
     return Object.assign({}, q, {
       have: Math.min(have, q.goal),
@@ -137,4 +99,4 @@ function saveClaimed(pid, day, claimed){
     .catch(function(){ return false; });
 }
 
-export { QUESTS, ALL_DONE_BONUS, dayIndex, questsForDay, questProgress, questState, loadClaimed, saveClaimed };
+export { DAILY, ALL_DONE_BONUS, questsForDay, questProgress, questState, loadClaimed, saveClaimed };

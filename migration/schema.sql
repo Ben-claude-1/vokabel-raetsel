@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS public.learn_sessions (
   correct_count integer DEFAULT 0 NOT NULL,
   wrong_count integer DEFAULT 0 NOT NULL,
   game text,
+  -- Klasse/Sprache der Sitzung — die Tagesaufgaben zählen die Lernminuten
+  -- je Sprache (siehe src/core/quests.js).
+  grade integer,
+  language text,
   created_at timestamptz DEFAULT now() NOT NULL,
   PRIMARY KEY (id)
 );

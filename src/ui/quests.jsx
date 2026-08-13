@@ -2,54 +2,39 @@ import { sbGet } from '../core/api.js';
 import { lsToday } from '../core/leitner.js';
 import { ALL_DONE_BONUS, loadClaimed, questState, saveClaimed } from '../core/quests.js';
 import { useCallback, useEffect, useState } from '../core/react.js';
-import { filterRunsByScope } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G600, G900, GR, T, TD, TL } from '../core/theme.js';
 import { dayKey } from '../core/util.js';
-import { parseData } from '../core/words.js';
 
-// Rohzahlen des Tages einsammeln. Alles davon fällt beim Spielen ohnehin an —
+// Lernminuten des Tages je Bereich. Die Zeit fällt beim Spielen ohnehin an —
 // es wird nichts zusätzlich mitgeschrieben.
-function ladeTagesstand(pid, chapters, scope){
+//
+// Grammatik zählt über das Spiel (es gibt sie nur auf Englisch, sie soll aber
+// nicht die Englisch-Minuten füllen). Alles andere zählt über die Sprache der
+// Sitzung. Ältere Sitzungen tragen noch keine Sprache — bei denen wird sie,
+// soweit möglich, über den Leiterspiel-Run erschlossen.
+function ladeTagesstand(pid){
   var today = lsToday();
   return Promise.all([
-    sbGet('ls_progress','player_id=eq.'+pid+'&select=run_id,data'),
-    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,active_seconds,started_at'),
-    sbGet('repeat_runs','player_id=eq.'+pid+'&select=created_at&order=created_at.desc&limit=20'),
-    sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&select=id,name,grade,language,words'),
+    sbGet('learn_sessions','player_id=eq.'+pid+'&select=game,run_id,language,active_seconds,started_at'),
+    sbGet('ls_runs','or=(is_admin_run.eq.true,player_id.eq.'+pid+')&select=id,language'),
   ]).then(function(res){
-    var inScopeRun = {};
-    filterRunsByScope(Array.isArray(res[3])?res[3]:[], chapters||[], scope)
-      .forEach(function(r){ inScopeRun[r.id]=1; });
+    var runLang = {};
+    (Array.isArray(res[1])?res[1]:[]).forEach(function(r){ if(r && r.language) runLang[r.id] = r.language; });
 
-    var answers=0, firstOk=0, climbed=0;
-    (Array.isArray(res[0])?res[0]:[]).forEach(function(row){
-      if(!inScopeRun[row.run_id]) return;
-      var d = parseData(row.data);
-      var day = (d.days||{})[today];
-      if(day){ answers += day.a||0; firstOk += day.c1||0; }
-      // `pd` steht am Wort und hält fest, an welchem Tag es zuletzt eine Stufe
-      // aufgestiegen ist — daraus ergibt sich „heute weitergebracht" ohne
-      // zusätzliche Buchführung.
-      [1,2,3,4,5,6].forEach(function(p){
-        ((d.pots||{})[p]||[]).forEach(function(w){ if(w && w.pd===today) climbed++; });
-      });
-    });
-
-    var minutes=0, games={};
-    (Array.isArray(res[1])?res[1]:[]).forEach(function(s){
-      if(!s || !s.started_at) return;
+    var sek = {grammatik:0, en:0, es:0};
+    (Array.isArray(res[0])?res[0]:[]).forEach(function(s){
+      if(!s || !s.started_at || !s.active_seconds) return;
       if(dayKey(new Date(s.started_at)) !== today) return;
-      minutes += (s.active_seconds||0);
-      var g = s.game || 'sonstiges';
-      games[g] = (games[g]||0) + 1;
+      if(s.game === 'grammatik'){ sek.grammatik += s.active_seconds; return; }
+      var lang = s.language || runLang[s.run_id];
+      if(lang && sek[lang] != null) sek[lang] += s.active_seconds;
     });
-    minutes = Math.floor(minutes/60);
 
-    var reviews = (Array.isArray(res[2])?res[2]:[]).filter(function(r){
-      return r && r.created_at && dayKey(new Date(r.created_at)) === today;
-    }).length;
-
-    return {answers:answers, firstOk:firstOk, climbed:climbed, minutes:minutes, games:games, reviews:reviews};
+    return {minutes:{
+      grammatik: Math.floor(sek.grammatik/60),
+      en: Math.floor(sek.en/60),
+      es: Math.floor(sek.es/60),
+    }};
   });
 }
 
@@ -61,7 +46,7 @@ function Balken({ have, goal, done }){
 }
 
 // Die Tagesaufgaben-Karte auf der Startseite.
-function Tagesaufgaben({ player, chapters, scope, reviewDue, onGo, onReward, refreshKey }){
+function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
   var [stand, setStand] = useState(null);
   var [claimed, setClaimed] = useState([]);
   var [holen, setHolen] = useState(false);
@@ -72,13 +57,13 @@ function Tagesaufgaben({ player, chapters, scope, reviewDue, onGo, onReward, ref
 
   var laden = useCallback(function(){
     if(!pid || !UUID.test(pid)) return;
-    ladeTagesstand(pid, chapters, scope).then(setStand).catch(function(){});
+    ladeTagesstand(pid).then(setStand).catch(function(){});
     loadClaimed(pid, today).then(setClaimed);
-  }, [pid, chapters, scope&&scope.grade, scope&&scope.language, today]);
+  }, [pid, today]);
   useEffect(function(){ laden(); }, [laden, refreshKey]);
 
   if(!pid || !UUID.test(pid) || !stand) return null;
-  var st = questState(today, reviewDue, stand, claimed);
+  var st = questState(reviewDue, stand, claimed);
   var fertig = st.list.filter(function(q){ return q.done; }).length;
 
   function belohnungHolen(){
@@ -112,7 +97,7 @@ function Tagesaufgaben({ player, chapters, scope, reviewDue, onGo, onReward, ref
     </div>
 
     {st.list.map(function(q){
-      return <button key={q.key} onClick={function(){ if(!q.done && onGo) onGo(q.screen); }}
+      return <button key={q.key} onClick={function(){ if(!q.done && onGo) onGo(q.screen, q.lang); }}
         style={{display:'flex',alignItems:'flex-start',gap:10,width:'100%',padding:'8px 6px',marginBottom:2,
           border:'none',background:'none',textAlign:'left',cursor:q.done?'default':'pointer',touchAction:'manipulation'}}>
         <span style={{fontSize:17,flexShrink:0,opacity:q.done?0.5:1}}>{q.done?'✅':q.icon}</span>
@@ -121,7 +106,7 @@ function Tagesaufgaben({ player, chapters, scope, reviewDue, onGo, onReward, ref
             textDecoration:q.done?'line-through':'none'}}>{q.text}</div>
           {!q.done&&<Balken have={q.have} goal={q.goal} done={q.done}/>}
           <div style={{fontSize:10,color:G400,marginTop:3}}>
-            {q.done ? (q.claimed?'abgeholt':'geschafft') : q.have+' / '+q.goal}
+            {q.done ? (q.claimed?'abgeholt':'geschafft') : q.have+' / '+q.goal+' Min'}
             <span style={{color:AM,fontWeight:'bold',marginLeft:6}}>+{q.pts}</span>
           </div>
         </div>

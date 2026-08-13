@@ -130,6 +130,16 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   }, [scopes]);
   function setScope(sc){ setScopeState(sc); saveScope(sc); }
 
+  // Sprachwechsel aus den Tagesaufgaben heraus: möglichst in derselben Klasse
+  // bleiben, sonst die höchste Klasse nehmen, zu der es die Sprache gibt.
+  function switchLang(lang){
+    if(!lang || (scope && scope.language === lang)) return;
+    var passend = scopes.filter(function(s){ return s.language === lang; });
+    if(!passend.length) return;
+    var gleicheKlasse = scope && passend.filter(function(s){ return s.grade === scope.grade; });
+    setScope((gleicheKlasse && gleicheKlasse[0]) || passend[passend.length-1]);
+  }
+
   useEffect(function(){
     if(!player) return;
     sbGet('settings','key=eq.quiz_scoring&select=value').then(function(d){
@@ -158,6 +168,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       if(created && localSeconds===lastSavedSeconds && !closing) return;
       created=true; lastSavedSeconds=localSeconds;
       var row={ id:sessionId, player_id:player.id, run_id:runId, game:game, started_at:startedAt, active_seconds:localSeconds,
+        grade:scope?scope.grade:null, language:scope?scope.language:null,
         correct_count:Math.max(0,ANSWER_TALLY.ok-baseOk), wrong_count:Math.max(0,ANSWER_TALLY.bad-baseBad) };
       if(closing) row.ended_at=new Date().toISOString();
       try{
@@ -187,7 +198,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       window.removeEventListener('pagehide',onUnload);
       flush(true,true);
     };
-  },[player&&player.id, lsRun&&lsRun.id, screen]);
+    // Klasse/Sprache gehören zur Sitzung — ein Wechsel schließt die laufende ab
+    // und beginnt eine neue, damit die Lernzeit sauber der Sprache zufällt.
+  },[player&&player.id, lsRun&&lsRun.id, screen, scope&&scope.grade, scope&&scope.language]);
 
   useEffect(function(){
     if(!player) return;
@@ -346,9 +359,9 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               }
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
             </div>
-            <Tagesaufgaben player={player} chapters={chapters} scope={scope}
+            <Tagesaufgaben player={player}
               reviewDue={reviewInfo.locked} refreshKey={homeVisits}
-              onGo={function(s){ go(s); }} onReward={handleUpdateScore}/>
+              onGo={function(s, lang){ if(lang) switchLang(lang); go(s); }} onReward={handleUpdateScore}/>
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
