@@ -74,7 +74,11 @@ function lsDayEntry(d, pctBefore){
 function lsLogAnswer(d, e){
   var today = lsToday();
   var day = lsDayEntry(d, e.pctBefore);
-  day.a++; if(e.correct) day.c++;
+  // `helped` = mit der Hilfe „wie im Topf davor" gelöst. Zählt als echte
+  // Antwort, aber NICHT als Beleg für Können — sonst würde genau die
+  // Behaltenskurve verwässert, die die Hilfe-Option umgehen soll.
+  var counts = e.correct && !e.helped;
+  day.a++; if(counts) day.c++;
   day.p1 = Math.round(e.pctAfter||day.p1);
   day.n = lsWordCount(d);
   if(!day.w) day.w = {};
@@ -83,8 +87,8 @@ function lsLogAnswer(d, e){
   if(!rec) rec = day.w[e.word] = {c:0, f:0, clue:e.clue||'', p:e.toPot};
   if(first){
     // Erstversuch des Tages: der zählt für „hat sie es wirklich behalten?".
-    day.a1 = (day.a1||0)+1; if(e.correct) day.c1 = (day.c1||0)+1;
-    rec.f1 = e.correct?1:0;
+    day.a1 = (day.a1||0)+1; if(counts) day.c1 = (day.c1||0)+1;
+    rec.f1 = counts?1:0;
     var prevSeen = e.wObj && e.wObj.ls;
     var gap = daysBetween(prevSeen, today);
     if(gap!=null && gap>0) rec.g = gap;
@@ -92,10 +96,11 @@ function lsLogAnswer(d, e){
     if(e.rt!=null && e.rt>0 && e.rt<120000) rec.t = Math.round(e.rt);
   }
   if(e.skipped) rec.s = (rec.s||0)+1;
-  if(e.correct) rec.c++; else rec.f++;
+  if(e.helped) rec.h = (rec.h||0)+1;
+  if(!e.helped){ if(e.correct) rec.c++; else rec.f++; }
   if(e.wObj){
     e.wObj.ls = today;
-    if(e.correct) e.wObj.lc = today;
+    if(counts) e.wObj.lc = today;
   }
   if(e.toPot!=null) rec.p = e.toPot;
   if(e.toPot===6 && e.fromPot!==6){

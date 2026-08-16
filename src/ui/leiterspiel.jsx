@@ -31,6 +31,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [skipsLeft, setSkipsLeft] = useState(SKIP_LIMIT);
   var [copyMode, setCopyMode] = useState(false);
   var [copyHint, setCopyHint] = useState(false);
+  // „Wie im Topf davor lösen": in Topf 3-5 kann statt aufzugeben die leichtere
+  // Mechanik des vorherigen Topfs genutzt werden. Richtig gelöst bleibt das
+  // Wort im aktuellen Topf — weder Auf- noch Abstieg. Topf 1+2 haben keine
+  // Vorstufe, die einfacher wäre, deshalb dort nicht verfügbar.
+  var [helpMode, setHelpMode] = useState(false);
+  var HELP_FROM_POT = {3:2, 4:3, 5:4};
   var [testWords, setTestWords] = useState([]);
   var [testIdx, setTestIdx] = useState(0);
   var [testLog, setTestLog] = useState([]);
@@ -125,7 +131,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!sesStart) setSesStart(Date.now());
     var w = lsPickWord(data, current ? current.word : null, {workingSet:streak.workingSet});
     if(!w){ setPhase('done'); return; }
-    setCurrent(w); setInput(''); setResult(null);
+    setCurrent(w); setInput(''); setResult(null); setHelpMode(false);
     qShownAt.current = Date.now();
     if(w.pot===1){
       var allWords=[];
@@ -327,15 +333,93 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   function skipButton(extra){
-    return <button onClick={requestSkip} disabled={copyMode}
-      style={BtnStyle(G100,G600,Object.assign({width:'100%',padding:'8px',fontSize:12,opacity:copyMode?0.45:1},extra||{}))}>
+    return <button onClick={requestSkip} disabled={copyMode||helpMode}
+      style={BtnStyle(G100,G600,Object.assign({width:'100%',padding:'8px',fontSize:12,opacity:(copyMode||helpMode)?0.45:1},extra||{}))}>
       {skipsLeft>0 ? 'Überspringen / Nicht gewusst · noch '+skipsLeft : '🔤 Lösung zeigen & abschreiben'}
     </button>;
   }
 
+  function findWordRef(d, pot, word){
+    var arr = (d.pots[pot]||[]);
+    var idx = arr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(word); });
+    if(idx<0) idx = arr.findIndex(function(w){ return w.word===word; });
+    return idx>=0 ? arr[idx] : null;
+  }
+
+  function helpAvailable(){ return !!(current && HELP_FROM_POT[current.pot]) && !copyMode; }
+
+  function startHelp(){
+    if(!helpAvailable()) return;
+    setInput(''); setCopyHint(false); setHelpMode(true);
+  }
+
+  // Mit der Hilfe richtig gelöst: zählt weder als Auf- noch als Abstieg, das
+  // Wort bleibt exakt da, wo es war. Gutschrift und Punkte richten sich nach
+  // dem leichteren Topf, nicht nach dem eigentlichen — das war ja der
+  // erleichterte Weg.
+  function submitHelped(){
+    if(!current) return;
+    var fromPot = current.pot;
+    var helperPot = HELP_FROM_POT[fromPot];
+    if(!helperPot) return;
+    var rt = answerMs();
+    setSesAns(function(n){return n+1;}); setSesCor(function(n){return n+1;}); trackActiveTime();
+    var newData = JSON.parse(JSON.stringify(data));
+    var wObj = findWordRef(newData, fromPot, current.word);
+    tallyAnswer(true, false, potCredit(helperPot));
+    lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:fromPot,toPot:fromPot,
+      pctBefore:lsPercent(data), pctAfter:lsPercent(data), rt:rt, wObj:wObj, helped:true});
+    saveAndUpdate(newData);
+    var pts = helperPot*5;
+    if(pts>0 && onUpdateScore) onUpdateScore(pts);
+    setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:wordDisplay(current),correct:true,partial:false,helped:true,fromPot:fromPot,toPot:fromPot,pts:pts}]);});
+    setHelpMode(false);
+    setResult({correct:true,helped:true,answer:wordDisplay(current),word:current.word,clue:current.clue,typed:wordDisplay(current),fromPot:fromPot,toPot:fromPot,pts:pts});
+    setPhase('showResult');
+  }
+
+  // Auch mit Hilfe nicht geschafft: zählt wie ein normales „nicht gewusst" im
+  // aktuellen Topf (Rückstufung, Zählung als Überspringer).
+  function submitHelpFailed(){
+    setHelpMode(false);
+    submitAnswer(true);
+  }
+
+  // Getippte Antwort im Hilfe-Modus: das Ziel ist in Topf 4 und 5 gleich —
+  // das Wort selbst (Topf 5 fragt sonst rückwärts, die Hilfe dreht das um).
+  function submitHelpTyped(){
+    if(!current) return;
+    var status = checkAnswer(input.trim(), wordDisplay(current));
+    if(status==='correct'||status==='partial') submitHelped();
+    else submitHelpFailed();
+  }
+
+  function helpButton(extra){
+    if(!helpAvailable()) return null;
+    return <button onClick={startHelp} disabled={copyMode||helpMode}
+      style={BtnStyle('#3b82f6','white',Object.assign({width:'100%',padding:'8px',fontSize:12,marginTop:6,opacity:(copyMode||helpMode)?0.45:1},extra||{}))}>
+      🔽 Wie im Topf davor lösen
+    </button>;
+  }
+
+  function dashBoxes(layout, inputVal){
+    var ai=0; var typedNS=inputVal.replace(/\s+/g,'');
+    return <div style={{display:'flex',gap:4,alignItems:'flex-end',justifyContent:'center',flexWrap:'wrap'}}>
+      {layout.items.map(function(it,ci){
+        if(it.type==='space') return <span key={'sp'+ci} style={{width:12,display:'inline-block'}}/>;
+        if(it.type==='static') return <span key={'st'+ci} style={{fontSize:13,color:G600,fontStyle:'italic',padding:'0 4px',whiteSpace:'nowrap',alignSelf:'center'}}>{it.text}</span>;
+        var letter=typedNS[ai]||''; ai++;
+        return <div key={'sl'+ci} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+          <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
+          <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
+        </div>;
+      })}
+    </div>;
+  }
+
   function nextWord(){
     setResult(null); setCelebration(null);
-    setCopyMode(false); setCopyHint(false);
+    setCopyMode(false); setCopyHint(false); setHelpMode(false);
     var allDone = (data.pots[6]||[]).length >= Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
     if(allDone){ setPhase('done'); return; }
     pickWord();
@@ -655,6 +739,18 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   if(phase==='dashes'){
+    if(helpMode) return(
+      <div style={{padding:8}}>
+        {liveChip}
+        <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
+          <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf 2 — Buchstaben sortieren</div>
+          <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
+          <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
+        </div>
+        {current&&<T2LetterField key={'help3_'+current.word} word={wordDisplay(current)} onCorrect={submitHelped} onWrong={submitHelpFailed}/>}
+        <div style={{fontSize:11,color:G400,textAlign:'center',marginTop:8}}>Richtig gelöst bleibt die Vokabel in Topf 3.</div>
+      </div>
+    );
     var dashLayout = buildT2Layout(wordDisplay(current));
     var dashLetterCount = dashLayout.targetNoSpaces.length;
     return(
@@ -664,20 +760,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
-          <div style={{display:'flex',gap:4,alignItems:'flex-end',justifyContent:'center',flexWrap:'wrap'}}>
-            {(function(){
-              var ai=0; var typedNS=input.replace(/\s+/g,'');
-              return dashLayout.items.map(function(it,ci){
-                if(it.type==='space') return <span key={'sp'+ci} style={{width:12,display:'inline-block'}}/>;
-                if(it.type==='static') return <span key={'st'+ci} style={{fontSize:13,color:G600,fontStyle:'italic',padding:'0 4px',whiteSpace:'nowrap',alignSelf:'center'}}>{it.text}</span>;
-                var letter=typedNS[ai]||''; ai++;
-                return <div key={'sl'+ci} style={{width:24,textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-                  <span style={{fontSize:16,fontWeight:'bold',color:T,minHeight:22,lineHeight:'22px'}}>{letter}</span>
-                  <div style={{width:24,height:3,background:letter?T:G400,borderRadius:1}}/>
-                </div>;
-              });
-            })()}
-          </div>
+          {dashBoxes(dashLayout, input)}
           <div style={{fontSize:11,color:G400,marginTop:6}}>{dashLetterCount} Buchstaben</div>
         </div>
         {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
@@ -690,11 +773,38 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
         {skipButton()}
+        {helpButton()}
       </div>
     );
   }
 
   if(phase==='showResult'||phase==='answer'){
+    if(phase==='answer' && helpMode){
+      var helperPot = HELP_FROM_POT[current.pot];
+      var showDashHint = helperPot===3;
+      var hLayout = showDashHint ? buildT2Layout(wordDisplay(current)) : null;
+      var hLetterCount = hLayout ? hLayout.targetNoSpaces.length : null;
+      return(
+        <div style={{padding:8}}>
+          {liveChip}
+          <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
+            <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf {helperPot} — Wie heißt das auf Englisch?</div>
+            <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:showDashHint?10:4}}>{current&&current.clue}</div>
+            {showDashHint && dashBoxes(hLayout, input)}
+            {showDashHint && <div style={{fontSize:11,color:G400,marginTop:6}}>{hLetterCount} Buchstaben</div>}
+          </div>
+          <div style={{display:'flex',gap:8,marginBottom:8}}>
+            <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+              onKeyDown={function(e){if(e.key==='Enter')submitHelpTyped();}}
+              autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
+              placeholder={showDashHint?('Englisch ('+hLetterCount+' Buchstaben)…'):'Englisch…'}
+              style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #3b82f6',borderRadius:10,outline:'none'}}/>
+            <button onClick={submitHelpTyped} style={BtnStyle('#3b82f6','white',{padding:'12px 16px',fontSize:15})}>✓</button>
+          </div>
+          <div style={{fontSize:11,color:G400,textAlign:'center'}}>Richtig gelöst bleibt die Vokabel in Topf {current.pot}.</div>
+        </div>
+      );
+    }
     if(phase==='answer') return(
       <div style={{padding:8}}>
         {liveChip}
@@ -713,6 +823,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
         {skipButton()}
+        {helpButton()}
       </div>
     );
     return(
@@ -720,13 +831,17 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);}}/>}
         {result&&(
-          <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.correct?GR:RE)}}>
-            <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
-              {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
+          <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.helped?'#eff6ff':result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.helped?'#93c5fd':result.correct?GR:RE)}}>
+            <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.helped?'#1d4ed8':result.correct?'#065f46':'#991b1b',marginBottom:6}}>
+              {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
             <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
             {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
-            {!result.skipped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+            {result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+              <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} bleibt {POT_LABEL[result.fromPot]}</span>
+              {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
+            </div>}
+            {!result.skipped&&!result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} {POT_LABEL[result.fromPot]}</span>
               <span style={{fontSize:12,color:G400}}>→</span>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.toPot]+'22',color:POT_COL[result.toPot],fontWeight:'bold'}}>{POT_ICON[result.toPot]} {POT_LABEL[result.toPot]}</span>
@@ -843,8 +958,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         </div>
         {sessionLog.length>0&&<div style={{marginBottom:12}}>
           {sessionLog.slice(-10).map(function(l,i){
-            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',marginBottom:3,borderRadius:7,background:l.correct?'#d1fae5':l.skipped?G50:'#fee2e2',fontSize:11}}>
-              <span>{l.correct?'✓':l.skipped?'⏭':'✗'}</span>
+            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',marginBottom:3,borderRadius:7,background:l.helped?'#dbeafe':l.correct?'#d1fae5':l.skipped?G50:'#fee2e2',fontSize:11}}>
+              <span>{l.helped?'🔽':l.correct?'✓':l.skipped?'⏭':'✗'}</span>
               <span style={{fontWeight:'bold',flex:1}}>{l.word}</span>
               <span style={{color:G400}}>{l.clue}</span>
               {l.pts>0&&<span style={{color:AM,fontWeight:'bold'}}>+{l.pts}</span>}
