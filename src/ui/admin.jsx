@@ -10,6 +10,7 @@ import { aiCategorizeWords, normWordKey, parseData, quickDetectType, safeWords, 
 import { GrammarAdmin } from './grammar.jsx';
 import { KlassenarbeitAdmin } from './klassenarbeit.jsx';
 import { LeitersSpielCreate, LeitersSpielStreakSettings, RunEditor } from './leiterspiel.jsx';
+import { PushAdmin } from './push.jsx';
 import { DailyLearnChart, GameBreakdown, LeiterspielFortschritt, RepeatRunHistory, TagesDetail } from './progress.jsx';
 import { LernVerlaufChart } from './widgets.jsx';
 
@@ -1091,7 +1092,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA'],['push','🔔 Push']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -1587,7 +1588,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
 
                 {/* Tag für Tag: Zeit, Antworten, gelernte Vokabeln */}
                 {learnSess.length>0&&<div style={{marginTop:10}}>
-                  <TagesDetail sessions={learnSess} progressRows={rows} runs={runs}/>
+                  <TagesDetail sessions={learnSess} progressRows={rows} runs={runs} playerId={u.id}/>
                 </div>}
 
                 {/* Aufschlüsselung nach Spiel */}
@@ -1720,6 +1721,9 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
       </div>)}
       {tab==='klassenarbeit'&&(<div>
         <KlassenarbeitAdmin player={player} chapters={chapters} scope={scope}/>
+      </div>)}
+      {tab==='push'&&(<div>
+        <PushAdmin player={player}/>
       </div>)}
     </div>
   );

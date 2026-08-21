@@ -87,7 +87,7 @@ function serveStatic(req, res) {
 }
 
 http.createServer((req, res) => {
-  if (req.url.startsWith('/rest/v1/')) return proxy(req, res);
+  if (req.url.startsWith('/rest/v1/') || req.url.startsWith('/push/')) return proxy(req, res);
   serveStatic(req, res);
 }).listen(PORT, () => {
   console.log('Test-Server auf http://localhost:' + PORT + ' (API-Proxy -> ' + API + ')'
