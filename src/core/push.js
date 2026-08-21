@@ -20,7 +20,7 @@ function subscribeToPush(playerId) {
   if (!pushSupported()) return Promise.reject(new Error('Push wird von diesem Browser nicht unterstützt'));
   return Notification.requestPermission().then(function(perm) {
     if (perm !== 'granted') throw new Error('Benachrichtigungen wurden nicht erlaubt');
-    return navigator.serviceWorker.register('/sw.js');
+    return navigator.serviceWorker.register('sw.js');
   }).then(function() {
     return navigator.serviceWorker.ready;
   }).then(function(reg) {
