@@ -1777,14 +1777,19 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   var [saving, setSaving] = useState(false);
   var [targetDate, setTargetDate] = useState(run.target_date || '');
   var [targetPct, setTargetPct] = useState(run.target_pct != null ? run.target_pct : 100);
-  var allChapWords = useMemo(function(){
-    var w=[];
-    chapters.filter(function(c){return c.parent_id;}).forEach(function(ch){
-      var cw=ch.words; if(typeof cw==='string'){try{cw=JSON.parse(cw);}catch(e){cw=[];}} (Array.isArray(cw)?cw:[]).forEach(function(ww){ w.push(Object.assign({},ww,{chapId:ch.id,chapColor:ch.color||T})); });
-    });
-    return w;
+  // Klasse 5/6 sind dreistufig (Klasse > Sprache > Theme/Unidad) — die Wörter
+  // hängen erst am dritten Level. byParent erlaubt beliebige Verschachtelungstiefe,
+  // statt wie zuvor nur Kinder von topLevel zu zeigen (dort standen bei Klasse 5/6
+  // immer 0 Wörter, weil das Sprach-Zwischenlevel selbst keine eigenen hat).
+  var byParent = useMemo(function(){
+    var m={};
+    (chapters||[]).forEach(function(c){ var p=c.parent_id||null; (m[p]=m[p]||[]).push(c); });
+    return m;
   },[chapters]);
-  var [openCh, setOpenCh] = useState(null);
+  var byId = useMemo(function(){
+    var m={}; (chapters||[]).forEach(function(c){ m[c.id]=c; }); return m;
+  },[chapters]);
+  var [openCh, setOpenCh] = useState({});
   function isInRun(word){ return words.findIndex(function(w){return normWordKey(w.word)===normWordKey(word.word);})>=0; }
   function getRunPot(wordStr){ var found=words.find(function(w){return normWordKey(w.word)===normWordKey(wordStr);}); return found?found.pot:1; }
   function toggle(wObj){
@@ -1794,17 +1799,24 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
       return prev.concat([{word:wObj.word,clue:wObj.clue,pot:existing?existing.pot:1}]);
     });
   }
-  function toggleChapter(ch){
-    var allIn=safeWords(ch.words).every(function(w){return isInRun(w);});
-    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !safeWords(ch.words).some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
-    else { var toAdd=safeWords(ch.words).filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
+  function collectWords(chId){
+    var out=[]; var node=byId[chId];
+    if(node) out=out.concat(safeWords(node.words));
+    (byParent[chId]||[]).forEach(function(c){ out=out.concat(collectWords(c.id)); });
+    return out;
+  }
+  function toggleChapter(chId){
+    var all=collectWords(chId);
+    var allIn=all.length>0 && all.every(function(w){return isInRun(w);});
+    if(allIn){ setWords(function(prev){return prev.filter(function(w){return !all.some(function(cw){return normWordKey(cw.word)===normWordKey(w.word);});}); }); }
+    else { var toAdd=all.filter(function(w){return !isInRun(w);}).map(function(w){return{word:w.word,clue:w.clue,pot:1};}); setWords(function(prev){return prev.concat(toAdd);}); }
   }
   function setPot(wordStr, pot){
     setWords(function(prev){ return prev.map(function(w){ return normWordKey(w.word)===normWordKey(wordStr)?Object.assign({},w,{pot:pot}):w; }); });
   }
-  function getRunPot(wordStr){ var found=words.find(function(w){return normWordKey(w.word)===normWordKey(wordStr);}); return found?found.pot:1; }
   function removeWord(wordStr){ setWords(function(prev){return prev.filter(function(w){return normWordKey(w.word)!==normWordKey(wordStr);});}); }
   function addWord(wObj){ setWords(function(prev){return prev.concat([{word:wObj.word,clue:wObj.clue,pot:1}]);}); }
+  function toggleOpen(id){ setOpenCh(function(prev){ var n=Object.assign({},prev); n[id]=!n[id]; return n; }); }
   function save(){
     setSaving(true);
     var wordsJson = JSON.stringify(words);
@@ -1816,6 +1828,48 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
         onSave(Object.assign({},run,{words:words,word_count:words.length,target_date:targetDate||null,target_pct:targetPct||100}));
       })
       .catch(function(){setSaving(false);});
+  }
+  function renderChapterNode(ch, depth){
+    var kids=(byParent[ch.id]||[]).slice().sort(naturalSort);
+    var hasKids=kids.length>0;
+    var allWords=collectWords(ch.id);
+    var inCount=allWords.filter(function(w){return isInRun(w);}).length;
+    var allIn=allWords.length>0 && inCount===allWords.length;
+    var someIn=!allIn && inCount>0;
+    var open=!!openCh[ch.id];
+    return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px 7px '+(12+(depth-1)*16)+'px',cursor:'pointer'}} onClick={function(){toggleOpen(ch.id);}}>
+        <div onClick={function(e){e.stopPropagation();toggleChapter(ch.id);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(allIn?ch.color:someIn?ch.color:G200),background:allIn?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
+          {allIn&&<span style={{color:'white',fontSize:10}}>✓</span>}
+          {someIn&&<span style={{color:ch.color,fontSize:12}}>−</span>}
+        </div>
+        <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
+        <span style={{fontSize:10,color:G400}}>{inCount}/{allWords.length}</span>
+        <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
+      </div>
+      {open&&hasKids&&<div style={{background:'#fafafa'}}>
+        {kids.map(function(kid){ return renderChapterNode(kid, depth+1); })}
+      </div>}
+      {open&&!hasKids&&<div style={{background:'#fafafa'}}>
+        {safeWords(ch.words).map(function(w,i){
+          var inRun=isInRun(w);
+          var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
+          var typeLabels={verb:'Verb',noun:'Subst.',adjective:'Adj.',phrase:'Phrase',other:'Sonst.'};
+          var tc=typeColors[w.type]||null; var tl=typeLabels[w.type]||null;
+          return <div key={i} style={{display:'flex',alignItems:'center',gap:8,
+            padding:'7px 12px 7px '+(28+(depth-1)*16)+'px',background:i%2===0?'white':G50,
+            borderBottom:'1px solid '+G100}}>
+            <input type='checkbox' checked={inRun}
+              onChange={function(){inRun?removeWord(w.word):addWord(w);}}
+              style={{width:15,height:15,cursor:'pointer',accentColor:T,flexShrink:0}}/>
+            {w.important&&<span style={{fontSize:11,color:AM,flexShrink:0}}>⭐</span>}
+            <span style={{flex:1,fontWeight:'bold',color:G900,fontSize:13}}>{w.word}</span>
+            <span style={{color:G400,fontSize:11}}>{w.clue}</span>
+            {tl&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44',whiteSpace:'nowrap'}}>{tl}</span>}
+          </div>;
+        })}
+      </div>}
+    </div>;
   }
   var topLevel=rootsOf(chapters).slice().sort(naturalSort);
   return(
@@ -1837,44 +1891,10 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
         </div>
       </div>
       {topLevel.map(function(kap){
-        var children=chapters.filter(function(c){return c.parent_id===kap.id;});
+        var children=(byParent[kap.id]||[]).slice().sort(naturalSort);
         return <div key={kap.id} style={{marginBottom:8,border:'1px solid '+G200,borderRadius:10,overflow:'hidden'}}>
           <div style={{padding:'8px 12px',background:G50,fontWeight:'bold',fontSize:12,color:kap.color||T}}>{kap.icon} {kap.title}</div>
-          {children.map(function(ch){
-            var allIn=safeWords(ch.words).every(function(w){return isInRun(w);});
-            var someIn=!allIn&&safeWords(ch.words).some(function(w){return isInRun(w);});
-            var open=openCh===ch.id;
-            return <div key={ch.id} style={{borderTop:'1px solid '+G100}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer'}} onClick={function(){setOpenCh(open?null:ch.id);}}>
-                <div onClick={function(e){e.stopPropagation();toggleChapter(ch);}} style={{width:18,height:18,borderRadius:4,border:'2px solid '+(allIn?ch.color:someIn?ch.color:G200),background:allIn?ch.color:'white',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-                  {allIn&&<span style={{color:'white',fontSize:10}}>✓</span>}
-                  {someIn&&<span style={{color:ch.color,fontSize:12}}>−</span>}
-                </div>
-                <span style={{fontSize:12,fontWeight:'bold',color:ch.color,flex:1}}>{ch.icon} {ch.title}</span>
-                <span style={{fontSize:10,color:G400}}>{safeWords(ch.words).filter(function(w){return isInRun(w);}).length}/{safeWords(ch.words).length}</span>
-                <span style={{fontSize:10,color:G400,marginLeft:4}}>{open?'▲':'▼'}</span>
-              </div>
-              {open&&<div style={{background:'#fafafa'}}>
-                {safeWords(ch.words).map(function(w,i){
-                  var inRun=isInRun(w);
-                  var typeColors={verb:'#7c3aed',noun:'#0369a1',adjective:'#b45309',phrase:'#15803d',other:G600};
-                  var typeLabels={verb:'Verb',noun:'Subst.',adjective:'Adj.',phrase:'Phrase',other:'Sonst.'};
-                  var tc=typeColors[w.type]||null; var tl=typeLabels[w.type]||null;
-                  return <div key={i} style={{display:'flex',alignItems:'center',gap:8,
-                    padding:'7px 12px 7px 28px',background:i%2===0?'white':G50,
-                    borderBottom:'1px solid '+G100}}>
-                    <input type='checkbox' checked={inRun}
-                      onChange={function(){inRun?removeWord(w.word):addWord(w);}}
-                      style={{width:15,height:15,cursor:'pointer',accentColor:T,flexShrink:0}}/>
-                    {w.important&&<span style={{fontSize:11,color:AM,flexShrink:0}}>⭐</span>}
-                    <span style={{flex:1,fontWeight:'bold',color:G900,fontSize:13}}>{w.word}</span>
-                    <span style={{color:G400,fontSize:11}}>{w.clue}</span>
-                    {tl&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:10,background:tc+'18',color:tc,fontWeight:'bold',flexShrink:0,border:'1px solid '+tc+'44',whiteSpace:'nowrap'}}>{tl}</span>}
-                  </div>;
-                })}
-              </div>}
-            </div>;
-          })}
+          {children.map(function(ch){ return renderChapterNode(ch, 1); })}
         </div>;
       })}
       <div style={{display:'flex',gap:8,marginTop:10}}>
