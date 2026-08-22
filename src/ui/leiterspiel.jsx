@@ -656,23 +656,32 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
         </div>
-        {copyBox('Tippe die markierte Lösung an — zählt als „nicht gewusst".')}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-          {quizOptions.map(function(opt){
-            var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
-            var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
-            var istLoesung=copyMode&&normWordKey(opt.word)===normWordKey(current.word);
-            var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):istLoesung?'#fef3c7':copyMode?G50:'white';
-            var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):istLoesung?'#f59e0b':G200;
-            return <button key={opt.word} onClick={function(){ if(copyMode){ if(istLoesung) finishCopy(); return; } handleQuizAnswer(opt); }}
-              disabled={!!quizChosen||(copyMode&&!istLoesung)}
-              style={{padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
-                textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation',
-                opacity:copyMode&&!istLoesung?0.5:1}}>
-              {opt.word}
-            </button>;
-          })}
-        </div>
+        {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
+        {copyMode ? (
+          <div style={{display:'flex',gap:8,marginBottom:12}}>
+            <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+              onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
+              autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
+              placeholder='Lösung abschreiben…'
+              style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #f59e0b',borderRadius:10,outline:'none'}}/>
+            <button onClick={submitTyped} style={BtnStyle('#f59e0b','white',{padding:'12px 16px',fontSize:15})}>✓</button>
+          </div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
+            {quizOptions.map(function(opt){
+              var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
+              var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
+              var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
+              var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
+              return <button key={opt.word} onClick={function(){ handleQuizAnswer(opt); }}
+                disabled={!!quizChosen}
+                style={{padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
+                  textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation'}}>
+                {opt.word}
+              </button>;
+            })}
+          </div>
+        )}
         {skipButton()}
       </div>
     );
@@ -687,8 +696,17 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
           <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
         </div>
-        {copyBox('Lege die Lösung mit den Buchstaben — zählt als „nicht gewusst".')}
-        {current&&<T2LetterField key={'t2_'+current.word} word={wordDisplay(current)} onCorrect={function(){
+        {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
+        {copyMode ? (
+          <div style={{display:'flex',gap:8,marginBottom:8}}>
+            <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
+              onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
+              autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
+              placeholder='Lösung abschreiben…'
+              style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #f59e0b',borderRadius:10,outline:'none'}}/>
+            <button onClick={submitTyped} style={BtnStyle('#f59e0b','white',{padding:'12px 16px',fontSize:15})}>✓</button>
+          </div>
+        ) : current&&<T2LetterField key={'t2_'+current.word} word={wordDisplay(current)} onCorrect={function(){
           if(copyMode){ finishCopy(); return; }
           var newData=JSON.parse(JSON.stringify(data));
           var potArr=(newData.pots[2]||[]);
