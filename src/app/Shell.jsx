@@ -101,10 +101,15 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       sbGet('settings','key=eq.review_policy&select=value'),
       sbGet('repeat_runs','player_id=eq.'+player.id+'&select=created_at&order=created_at.desc&limit=1'),
       sbGet('ls_progress','player_id=eq.'+player.id+'&select=run_id,data'),
-      lsGetRunsForPlayer(player.id)
+      lsGetRunsForPlayer(player.id),
+      sbGet('review_skip_requests','player_id=eq.'+player.id+'&status=eq.approved&select=resolved_at&order=resolved_at.desc&limit=1')
     ]).then(function(res){
       var policy = (res[0]&&res[0][0]&&res[0][0].value) || null;
-      var last = (res[1]&&res[1][0]&&res[1][0].created_at) || null;
+      var lastRun = (res[1]&&res[1][0]&&res[1][0].created_at) || null;
+      var lastSkip = (res[4]&&res[4][0]&&res[4][0].resolved_at) || null;
+      // Eine von Papa freigegebene Skip-Anfrage zählt wie ein erledigter Lauf:
+      // sie setzt den Takt zurück, ohne dass Vokabeln wirklich abgefragt wurden.
+      var last = (Date.parse(lastSkip||0)||0) > (Date.parse(lastRun||0)||0) ? lastSkip : lastRun;
       // Über alle Klassen und Sprachen: die Wiederholung prüft den gesamten
       // gelernten Bestand. Vorher zählte nur die gewählte Klasse — nach dem
       // Wechsel auf Klasse 6 war der Klasse-5-Wortschatz aus der Fälligkeit
@@ -312,7 +317,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
     if(screen==='crossword') return <CrosswordGame chapters={scopeTree} player={player} onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} scope={scope} allUsers={allUsers}
-      reviewInfo={reviewInfo} onReview={function(){go('wiederholung');}}
+      reviewInfo={reviewInfo} onReview={function(){go('wiederholung');}} onReviewSkipApproved={loadReview}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;

@@ -1,6 +1,7 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
 import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -1226,7 +1227,58 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) 
   );
 }
 
-function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, reviewInfo, onReview }) {
+// Statt der Wiederholung: Papa per Pushover um Freigabe bitten, das Leiterspiel
+// diesmal trotzdem zu öffnen. Bleibt beim Warten auf demselben Bildschirm, auch
+// nach einem Reload — die offene Anfrage steckt in localStorage. Sobald Papa
+// zustimmt, holt `onApproved` (= Shells loadReview) den neuen Stand — die Sperre
+// fällt dann von selbst, weil review_skip_requests jetzt als „last" mitzählt.
+function ReviewSkipRequest({ player, reviewInfo, onApproved }){
+  var lsKey = 'ls_skip_req_'+(player&&player.id);
+  var [reqId, setReqId] = useState(function(){ try{ return localStorage.getItem(lsKey)||null; }catch(e){ return null; } });
+  var [status, setStatus] = useState(reqId ? 'pending' : 'idle'); // idle|sending|pending|approved|denied|error
+  var pollRef = useRef(null);
+
+  function stopPoll(){ if(pollRef.current){ clearInterval(pollRef.current); pollRef.current=null; } }
+  function check(id){
+    getReviewSkipStatus(id).then(function(st){
+      if(st==='approved'){ setStatus('approved'); stopPoll(); try{localStorage.removeItem(lsKey);}catch(e){} if(onApproved) onApproved(); }
+      else if(st==='denied'){ setStatus('denied'); stopPoll(); try{localStorage.removeItem(lsKey);}catch(e){} }
+      else if(st==='pending'){ setStatus('pending'); }
+    });
+  }
+  useEffect(function(){
+    if(reqId && (status==='pending')){
+      check(reqId);
+      pollRef.current = setInterval(function(){ check(reqId); }, 5000);
+    }
+    return stopPoll;
+  }, [reqId]);
+
+  function ask(){
+    setStatus('sending');
+    requestReviewSkip(player.id, player.name, reviewInfo.reason, reviewInfo.dueCount).then(function(res){
+      if(!res.ok || !res.data || !res.data.id){ setStatus('error'); return; }
+      setReqId(res.data.id);
+      try{ localStorage.setItem(lsKey, res.data.id); }catch(e){}
+      setStatus(res.data.status==='approved'?'approved':res.data.status==='denied'?'denied':'pending');
+    }).catch(function(){ setStatus('error'); });
+  }
+
+  if(status==='idle') return <button onClick={ask}
+    style={BtnStyle(G100,G600,{width:'100%',padding:'11px',fontSize:12,marginTop:8})}>🙋 Papa fragen, ob's heute ohne geht</button>;
+  if(status==='sending') return <div style={{marginTop:10,fontSize:12,color:G400}}>Sende Anfrage…</div>;
+  if(status==='pending') return <div style={{marginTop:10,padding:'10px 12px',background:G50,borderRadius:10,fontSize:12,color:G600}}>
+    ⏳ Warte auf Papas Freigabe — er hat eine Nachricht bekommen.</div>;
+  if(status==='approved') return <div style={{marginTop:10,padding:'10px 12px',background:TL,color:TD,borderRadius:10,fontSize:12,fontWeight:'bold'}}>
+    ✅ Papa hat zugestimmt — einen Moment…</div>;
+  if(status==='denied') return <div style={{marginTop:10}}>
+    <div style={{padding:'10px 12px',background:'#fef2f2',color:RE,borderRadius:10,fontSize:12,marginBottom:6}}>❌ Papa möchte, dass du die Wiederholung machst.</div>
+  </div>;
+  return <div style={{marginTop:10,fontSize:12,color:RE}}>Anfrage fehlgeschlagen — versuch's nochmal.
+    <button onClick={function(){setStatus('idle');}} style={BtnStyle(G100,G600,{padding:'6px 12px',fontSize:11,marginLeft:8})}>↺</button></div>;
+}
+
+function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, reviewInfo, onReview, onReviewSkipApproved }) {
   var [runs, setRuns] = useState([]);
   var [loading, setLoading] = useState(true);
   var [streakSettings, setStreakSettings] = useState(null);
@@ -1280,7 +1332,8 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
           {reviewInfo.runSize||reviewInfo.policy.count} Vokabeln · {reviewInfo.dueCount} von {reviewInfo.poolSize} gelernten sind dran
         </div>
         <button onClick={onReview} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>🔁 Wiederholung starten</button>
-        <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
+        <ReviewSkipRequest player={player} reviewInfo={reviewInfo} onApproved={onReviewSkipApproved}/>
+        <button onClick={function(){onDone(true);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
       </div>
     </div>
   );

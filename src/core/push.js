@@ -47,4 +47,22 @@ function sendTestPush(playerId, title, body) {
   }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); });
 }
 
-export { pushSupported, subscribeToPush, sendTestPush };
+// Wiederholung überspringen — schickt Papa per Pushover eine Freigabe-Anfrage
+// mit zwei Links (Freigeben/Ablehnen). Der Server entscheidet über das Ergebnis,
+// hier wird nur angefragt und der Stand abgefragt.
+function requestReviewSkip(playerId, playerName, reason, dueCount) {
+  return fetch(PUSH_URL + '/skip-request', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_id: playerId, player_name: playerName, reason: reason, due_count: dueCount }),
+    mode: 'cors', credentials: 'omit'
+  }).then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); });
+}
+
+function getReviewSkipStatus(id) {
+  return fetch(PUSH_URL + '/skip-status?id=' + encodeURIComponent(id), { mode: 'cors', credentials: 'omit' })
+    .then(function(r) { return r.json(); })
+    .then(function(j) { return j && j.status; })
+    .catch(function() { return null; });
+}
+
+export { pushSupported, subscribeToPush, sendTestPush, requestReviewSkip, getReviewSkipStatus };
