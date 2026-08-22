@@ -104,41 +104,85 @@ function DailyLearnChart({ sessions, run, pacing }) {
   </div>;
 }
 
-function GameBreakdown({ sessions, title }) {
+function GameBreakdown({ sessions, title, events }) {
+  var [openGame, setOpenGame] = useState(null);
   var byGame={};
   (sessions||[]).forEach(function(s){
-    var sec=s.active_seconds||0; if(sec<=0) return;
+    var sec=s.active_seconds||0;
+    var cor=s.correct_count||0, wrong=s.wrong_count||0;
+    if(sec<=0 && cor<=0 && wrong<=0) return;
     var g=gameOf(s);
-    if(!byGame[g]) byGame[g]={sec:0,n:0};
-    byGame[g].sec+=sec; byGame[g].n++;
+    if(!byGame[g]) byGame[g]={sec:0,n:0,cor:0,wrong:0};
+    byGame[g].sec+=sec; byGame[g].n++; byGame[g].cor+=cor; byGame[g].wrong+=wrong;
   });
-  var arr=Object.keys(byGame).map(function(k){return {key:k,sec:byGame[k].sec,n:byGame[k].n};});
+  var arr=Object.keys(byGame).map(function(k){return Object.assign({key:k},byGame[k]);});
   if(arr.length===0) return null;
   arr.sort(function(a,b){return b.sec-a.sec;});
   var total=arr.reduce(function(s,x){return s+x.sec;},0);
   var max=arr[0].sec||1;
+  var expandable = !!events;
   return <div>
     {title&&<div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{title}</div>}
     <div style={{background:'white',borderRadius:8,border:'1px solid '+G200,padding:'10px 12px'}}>
       {arr.map(function(x){
         var meta=GAME_META[x.key]||GAME_META.sonstiges;
-        var pct=Math.round(x.sec/total*100);
-        return <div key={x.key} style={{marginBottom:8}}>
+        var pct=total>0?Math.round(x.sec/total*100):0;
+        var ans=x.cor+x.wrong;
+        var successPct=ans>0?Math.round(x.cor/ans*100):null;
+        var successCol=successPct==null?G400:successPct>=80?T:successPct>=50?AM:RE;
+        var isOpen=expandable && openGame===x.key;
+        return <div key={x.key} style={{marginBottom:8,cursor:expandable?'pointer':'default'}} onClick={expandable?function(){setOpenGame(isOpen?null:x.key);}:undefined}>
           <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,marginBottom:3}}>
             <span style={{fontSize:14}}>{meta.icon}</span>
             <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{meta.label}</span>
+            {ans>0&&<span style={{fontWeight:'bold',color:successCol,fontSize:11}}>{successPct}%</span>}
             <span style={{color:G600}}>{fmtDuration(x.sec)}</span>
             <span style={{color:G400,fontSize:9,width:30,textAlign:'right'}}>{pct}%</span>
+            {expandable&&<span style={{color:G400,fontSize:10}}>{isOpen?'▲':'▼'}</span>}
           </div>
           <div style={{height:6,background:G100,borderRadius:3,overflow:'hidden'}}>
             <div style={{height:'100%',width:Math.round(x.sec/max*100)+'%',background:T,borderRadius:3}}/>
           </div>
+          {ans>0&&<div style={{fontSize:9,color:G400,marginTop:2}}>{ans} Antworten · ✓ {x.cor} · ✗ {x.wrong}</div>}
+          {isOpen&&<GameWordDetail game={x.key} events={events}/>}
         </div>;
       })}
       <div style={{borderTop:'1px solid '+G100,marginTop:4,paddingTop:8,fontSize:12,fontWeight:'bold',color:G900,display:'flex',justifyContent:'space-between'}}>
         <span>⏱️ Gesamt</span><span>{fmtDuration(total)}</span>
       </div>
     </div>
+  </div>;
+}
+
+// Wort-Detail je Spiel — welche Vokabel, richtig/falsch, welcher Topf.
+// `events` ist bereits auf den Tag gefiltert (siehe TagesDetail); hier nur
+// noch auf das angeklickte Spiel eingrenzen und je Wort zusammenfassen.
+function GameWordDetail({ game, events }){
+  var list = (events||[]).filter(function(e){ return e.game===game; });
+  if(list.length===0) return <div style={{fontSize:10,color:G400,marginTop:6,paddingTop:6,borderTop:'1px solid '+G100}}>
+    Keine Wort-Details für dieses Spiel an diesem Tag — wird seit dem 21.08.2026 mitgeschrieben.
+  </div>;
+  var byWord = {};
+  list.forEach(function(e){
+    var k = e.word;
+    if(!byWord[k]) byWord[k] = {word:e.word, clue:e.clue, c:0, f:0, pot:null};
+    if(e.correct) byWord[k].c++; else byWord[k].f++;
+    if(e.pot!=null) byWord[k].pot = e.pot;
+  });
+  var words = Object.keys(byWord).map(function(k){ return byWord[k]; });
+  words.sort(function(a,b){ return (b.f-b.c)-(a.f-a.c) || (b.c+b.f)-(a.c+a.f); });
+  return <div style={{marginTop:7,borderTop:'1px solid '+G100,paddingTop:6}} onClick={function(e){e.stopPropagation();}}>
+    {words.map(function(w,i){
+      return <div key={i} style={{padding:'3px 0',borderBottom:i<words.length-1?'1px solid '+G100:'none'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11}}>
+          <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+          {w.clue&&<span style={{color:G400,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>}
+          {w.c>0&&<span style={{color:T,fontWeight:'bold'}}>✓{w.c}</span>}
+          {w.f>0&&<span style={{color:RE,fontWeight:'bold'}}>✗{w.f}</span>}
+          {w.pot!=null&&<span style={{color:G400,fontSize:9}}>{w.pot===6?'gelernt':'Topf '+w.pot}</span>}
+        </div>
+      </div>;
+    })}
   </div>;
 }
 
@@ -281,9 +325,21 @@ function TagesLeiterspiel({ progressRows, runs, day }){
   </div>;
 }
 
-function TagesDetail({ sessions, progressRows, runs }) {
+function TagesDetail({ sessions, progressRows, runs, playerId }) {
   var today = dayKey();
   var [sel,setSel] = useState(today);
+  var [wordEvents,setWordEvents] = useState(null);
+  useEffect(function(){
+    setWordEvents(null);
+    var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if(!playerId || !UUID.test(playerId)){ setWordEvents([]); return; }
+    // 60 Tage passend zu DAY_WORDS_KEEP im Leiterspiel-Log — genug für den
+    // Tage-Umblätterer, ohne bei jedem Tageswechsel neu zu laden.
+    var since = new Date(); since.setDate(since.getDate()-60);
+    sbGet('word_events','player_id=eq.'+playerId+'&created_at=gte.'+since.toISOString()+'&select=game,word,clue,correct,pot,created_at&order=created_at.asc&limit=8000')
+      .then(function(rows){ setWordEvents(Array.isArray(rows)?rows:[]); })
+      .catch(function(){ setWordEvents([]); });
+  },[playerId]);
   var withTime = (sessions||[]).filter(function(s){ return s.started_at && (s.active_seconds||0)>0; });
   var earliest = withTime.length
     ? withTime.map(function(s){return String(s.started_at).slice(0,10);}).reduce(function(a,b){return a<b?a:b;})
@@ -327,7 +383,8 @@ function TagesDetail({ sessions, progressRows, runs }) {
         </div>}
       </div>
       {daySec>0
-        ? <GameBreakdown sessions={daySessions} title="Was an diesem Tag gelernt wurde"/>
+        ? <GameBreakdown sessions={daySessions} title="Was an diesem Tag gelernt wurde"
+            events={(wordEvents||[]).filter(function(e){ return String(e.created_at).slice(0,10)===sel; })}/>
         : <div style={{textAlign:'center',color:G400,fontSize:12,padding:'6px 0 10px'}}>An diesem Tag wurde nicht gelernt.</div>}
       <TagesLeiterspiel progressRows={progressRows} runs={runs} day={sel}/>
     </div>
@@ -385,7 +442,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
     <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📈 Deine Lernzeit pro Tag</div>
     <LernVerlaufChart sessions={chartSessions}/>
     <div style={{height:12}}/>
-    <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs}/>
+    <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs} playerId={player&&player.id}/>
     <div style={{height:12}}/>
     <GameBreakdown sessions={sessions} title="🎮 Insgesamt gelernt"/>
   </div>;

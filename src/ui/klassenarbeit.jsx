@@ -1,6 +1,6 @@
 import { sbDel, sbGet, sbPatch, sbPost } from '../core/api.js';
 import { KA_TOPIC_LABELS, buildKaQuestions, isCorrectAnswer, kaGradeFor, kaResultsLoad, kaResultsSave, kaSentenceMatch, loadGrammarPool } from '../core/grammar.js';
-import { lsGetRunsForPlayer, tallyAnswer } from '../core/leitner.js';
+import { lsGetRunsForPlayer, logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T } from '../core/theme.js';
@@ -90,7 +90,9 @@ function KlassenarbeitTest({ player, questions, onDone }) {
       else if(q.kind==='grammar') correct=isCorrectAnswer(q,inp);
       else if(q.kind==='sentence') correct=kaSentenceMatch(inp,q.answer);
     }
-    tallyAnswer(correct);
+    tallyAnswer(correct, skipped);
+    var qClue = q.kind==='grammar' ? q.sentence : q.german;
+    logWordEvent(player&&player.id, 'klassenarbeit', null, q.answer, qClue, correct, null);
     setLastCorrect(correct); setLastExpected(q.answer); setPhase('feedback');
   }
   function commitAnswer(correct){

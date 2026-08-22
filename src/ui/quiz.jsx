@@ -1,11 +1,12 @@
 import { sbGet, sbPatch, sbPost, sbSingle } from '../core/api.js';
+import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { rootsOf } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, TD, TL } from '../core/theme.js';
 import { naturalSort } from '../core/util.js';
 import { makeAllRounds, safeWords } from '../core/words.js';
 
-function QuizSolo({ chapters, globalWords, onDone }) {
+function QuizSolo({ chapters, globalWords, player, onDone }) {
   var allRounds = useMemo(function(){ return makeAllRounds(chapters, globalWords); }, []);
   var [roundIdx, setRoundIdx] = useState(0);
   var [qIdx, setQIdx] = useState(0);
@@ -33,6 +34,8 @@ function QuizSolo({ chapters, globalWords, onDone }) {
     clearInterval(timerRef.current);
     setChosen(word || "__none__");
     var correct = word === currentQ.correct.word;
+    tallyAnswer(correct, !word);
+    logWordEvent(player&&player.id, 'satzquiz', null, currentQ.correct.word, currentQ.correct.clue, correct, null);
     var pts = correct ? (timeLeft > 15 ? 15 : timeLeft > 8 ? 10 : 5) : 0;
     var newRoundScore = roundScore + (correct ? 1 : 0);
     setRoundScore(newRoundScore); setTotalScore(function(s) { return s + pts; });
@@ -529,6 +532,10 @@ function QuizDuel({ chapters, allChapters, globalWords, player, setPlayer, onDon
     setChosen(word||'__none__');
     var correct = word && currentRoundArr && word===currentRoundArr[qIdx]&&currentRoundArr[qIdx].correct&&word===currentRoundArr[qIdx].correct.word;
     if(currentRoundArr&&currentRoundArr[qIdx]) correct = word===currentRoundArr[qIdx].correct.word;
+    tallyAnswer(!!correct, !word);
+    if(currentRoundArr&&currentRoundArr[qIdx]&&currentRoundArr[qIdx].correct){
+      logWordEvent(player&&player.id, 'quizduell', null, currentRoundArr[qIdx].correct.word, currentRoundArr[qIdx].correct.clue, !!correct, null);
+    }
     var newAnswers = myAnswers.concat([{word:word,correct:!!correct}]);
     setMyAnswers(newAnswers);
     setTimeout(function(){

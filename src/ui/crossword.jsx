@@ -1,4 +1,5 @@
 import { SOLS, buildCW } from '../core/crossword.js';
+import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useState } from '../core/react.js';
 import { rootsOf } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, T, TL } from '../core/theme.js';
@@ -6,7 +7,7 @@ import { naturalSort } from '../core/util.js';
 import { safeWords } from '../core/words.js';
 import { Puzzle } from './browse.jsx';
 
-function CrosswordGame({ chapters, onDone }) {
+function CrosswordGame({ chapters, player, onDone }) {
   var [puzzle, setPuzzle] = useState(null);
   var [sel, setSel] = useState({});
   var [filter, setFilter] = useState('all');
@@ -63,7 +64,10 @@ function CrosswordGame({ chapters, onDone }) {
     return (
       <div style={{padding:8}}>
         <button onClick={function(){setPuzzle(null);}} style={{marginBottom:10,background:'none',border:'none',color:T,cursor:'pointer',fontSize:13,touchAction:'manipulation'}}>← Andere Vokabeln wählen</button>
-        <Puzzle data={puzzle.cw} solPhrase={puzzle.sol.phrase} solMsg={puzzle.sol.msg}/>
+        <Puzzle data={puzzle.cw} solPhrase={puzzle.sol.phrase} solMsg={puzzle.sol.msg} onWord={function(r){
+          tallyAnswer(r.correct);
+          logWordEvent(player&&player.id, 'kreuzwort', null, r.word, r.clue, r.correct, null);
+        }}/>
       </div>
     );
   }

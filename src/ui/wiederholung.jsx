@@ -1,5 +1,5 @@
 import { sbGet, sbPost } from '../core/api.js';
-import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
+import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, logWordEvent, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { langFlag, langLabel, langRank, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
@@ -145,6 +145,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     // Nach Tagen ohne Kontakt frei abgerufen — der stärkste Beleg, dass es
     // sitzt. Mit Tipps entsprechend weniger.
     tallyAnswer(correct, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
+    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, correct, correct?(hints>=2?5:6):4);
     var pts = correct ? ptsForHints(hints) : 0;
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
@@ -155,6 +156,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   function giveUp(){
     if(!cur) return;
     tallyAnswer(false, true);
+    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, false, 4);
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:'', correct:false, hints:hints, points:0, skipped:true};
     setLog(function(l){return l.concat([entry]);});
     setResult({correct:false, points:0, answer:wordDisplay(cur), typed:'', hints:hints, skipped:true});

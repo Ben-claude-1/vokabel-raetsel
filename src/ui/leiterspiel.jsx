@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
@@ -191,6 +191,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct, false, CREDIT.pot1);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
     saveAndUpdate(newData);
     var pts=correct?10:0;
     if(pts>0&&onUpdateScore)onUpdateScore(pts);
@@ -223,6 +224,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(false, true);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:1,toPot:1,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:true});
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1);
     saveAndUpdate(newData);
     setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:'',correct:false,partial:false,skipped:true,fromPot:1,toPot:1,pts:0}]);});
     setStreakCount(0);
@@ -272,6 +274,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct, !!skipped, potCredit(fromPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -369,6 +372,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(true, false, potCredit(helperPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:fromPot,toPot:fromPot,
       pctBefore:lsPercent(data), pctAfter:lsPercent(data), rt:rt, wObj:wObj, helped:true});
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, fromPot);
     saveAndUpdate(newData);
     var pts = helperPot*5;
     if(pts>0 && onUpdateScore) onUpdateScore(pts);
@@ -509,13 +513,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       if(l.kind==='sentence') return;
       // Wort-Objekt im Topf suchen, damit „zuletzt gefragt/gekonnt" auch nach
       // einem Test stimmt und der Abstand richtig gemessen wird.
-      var wObj = null;
+      var wObj = null, wPot = null;
       [1,2,3,4,5,6].forEach(function(p){
         if(wObj) return;
-        wObj = (nd.pots[p]||[]).find(function(x){ return normWordKey(x.word)===normWordKey(l.word); }) || null;
+        var found = (nd.pots[p]||[]).find(function(x){ return normWordKey(x.word)===normWordKey(l.word); }) || null;
+        if(found){ wObj = found; wPot = p; }
       });
       lsLogAnswer(nd,{word:l.word, clue:l.clue, correct:!!l.correct, fromPot:null, toPot:null,
         pctBefore:pctNow, pctAfter:pctNow, rt:l.rt, wObj:wObj, skipped:!!l.skipped});
+      logWordEvent(player&&player.id, 'leiterspiel_test', run.id, l.word, l.clue, !!l.correct, wPot);
     });
     saveAndUpdate(nd);
   }
@@ -705,6 +711,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           tallyAnswer(true, false, CREDIT.pot2);
           lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:2,toPot:moveTo,
             pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
+          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, moveTo);
           saveAndUpdate(newData);
           var pts=10;
           if(onUpdateScore)onUpdateScore(pts);
@@ -728,6 +735,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           tallyAnswer(false);
           lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:2,toPot:1,
             pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
+          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1);
           saveAndUpdate(newData);
           setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:typed,correct:false,partial:false,fromPot:2,toPot:1,pts:0}]);});
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});
@@ -1068,13 +1076,18 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone 
     var res=checkAnswer(typed,answer);
     var ok=res==='correct'||res==='partial';
     tallyAnswer(ok);
+    logWordEvent(player&&player.id, 'satzmeister', runId, answer, sent.clue, ok, null);
     var pts=ok?calcPts():0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     setTotal(function(t){return t+pts;});
     setLastOk(ok); setLastPts(pts); setLastSkip(false); setGPhase('a');
   }
 
-  function skip(){ setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a'); }
+  function skip(){
+    tallyAnswer(false, true);
+    logWordEvent(player&&player.id, 'satzmeister', runId, answer, sent.clue, false, null);
+    setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a');
+  }
 
   function next(){
     setIdx(function(i){return i+1;});
@@ -1176,6 +1189,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) 
     var res=checkAnswer(opt,answer);
     var ok=res==='correct'||res==='partial';
     tallyAnswer(ok, false, CREDIT.choice);
+    logWordEvent(player&&player.id, 'satzquiz', runId, answer, sent.clue, ok, null);
     var pts=ok?10:0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     setTotal(function(t){return t+pts;});
@@ -1622,6 +1636,54 @@ function KapitelProgress({ player, chapters, onDone }) {
   return <ProgressStats chapters={chapters} player={player} allCategories={[]} />;
 }
 
+// Vor einer Klassenarbeit: Pflicht-Wiederholung bis zu einem Stichtag aussetzen,
+// damit die Übungszeit ganz dem neuen Stoff gehört. Das Datum läuft von selbst
+// ab — deshalb ein Datum und kein Schalter, der sonst aus bliebe.
+function ReviewPauseRow({ pol, setPol }){
+  var heute = dayKey();
+  var aktiv = !!(pol.pauseUntil && pol.pauseUntil >= heute);
+  var abgelaufen = !!(pol.pauseUntil && pol.pauseUntil < heute);
+  function inTagen(n){
+    var d = new Date(); d.setDate(d.getDate()+n); return dayKey(d);
+  }
+  function setzen(bis, notiz){
+    setPol(Object.assign({}, pol, {pauseUntil:bis, pauseNote: notiz==null ? (pol.pauseNote||'') : notiz}));
+  }
+  function lang(iso){
+    if(!iso) return '';
+    var p = iso.split('-');
+    return p[2]+'.'+p[1]+'.'+p[0];
+  }
+  var Quick = function(props){
+    return <button onClick={props.onClick}
+      style={BtnStyle(G100, G600, {padding:'5px 10px',fontSize:11})}>{props.children}</button>;
+  };
+  return <div style={{padding:'10px 0',borderBottom:'1px solid '+G100}}>
+    <div style={{fontSize:12,color:G600,fontWeight:'bold'}}>⏸️ Pause bis (z. B. vor einer Klassenarbeit)</div>
+    <div style={{fontSize:10,color:G400,marginBottom:8}}>
+      Bis einschließlich diesem Tag kommt keine Pflicht-Wiederholung und das Leiterspiel bleibt offen.
+      Danach greift die Regel automatisch wieder — der Rückstand geht nicht verloren, er wird nur später aufgeholt.
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+      <input type='date' value={pol.pauseUntil||''} min={heute}
+        onChange={function(e){ setzen(e.target.value||''); }}
+        style={{padding:'6px 8px',fontSize:13,border:'1px solid '+G200,borderRadius:6}}/>
+      <Quick onClick={function(){ setzen(inTagen(7)); }}>+7 Tage</Quick>
+      <Quick onClick={function(){ setzen(inTagen(14)); }}>+14 Tage</Quick>
+      {pol.pauseUntil && <Quick onClick={function(){ setzen('', ''); }}>✕ Aufheben</Quick>}
+    </div>
+    <input type='text' value={pol.pauseNote||''} placeholder='Wofür? z. B. „Spanisch-Test"'
+      onChange={function(e){ setzen(pol.pauseUntil||'', e.target.value); }}
+      style={{width:'100%',boxSizing:'border-box',marginTop:8,padding:'6px 8px',fontSize:12,border:'1px solid '+G200,borderRadius:6}}/>
+    {aktiv && <div style={{marginTop:8,padding:'7px 10px',background:TL,color:TD,borderRadius:6,fontSize:11}}>
+      Ausgesetzt bis <b>{lang(pol.pauseUntil)}</b>{pol.pauseNote?' — '+pol.pauseNote:''}. Solange wird nur neu gelernt.
+    </div>}
+    {abgelaufen && <div style={{marginTop:8,fontSize:11,color:G400}}>
+      Pause vom {lang(pol.pauseUntil)} ist abgelaufen — die Wiederholung läuft wieder normal.
+    </div>}
+  </div>;
+}
+
 function ReviewPolicySettings(){
   var [pol,setPol]=useState(REVIEW_DEFAULT);
   var [saving,setSaving]=useState(false);
@@ -1677,6 +1739,7 @@ function ReviewPolicySettings(){
       value={pol.maxCount} onChange={function(v){ setPol(Object.assign({},pol,{maxCount:v})); }}/>
     <Row label="Erst ab … gelernten Vokabeln" hint="Vorher wird nicht gesperrt" min={1} max={500}
       value={pol.minPool} onChange={function(v){ setPol(Object.assign({},pol,{minPool:v})); }}/>
+    <ReviewPauseRow pol={pol} setPol={setPol}/>
     {msg&&<div style={{padding:'8px 0',color:T,fontSize:12}}>{msg}</div>}
     <button onClick={save} disabled={saving} style={BtnStyle(T,'white',{width:'100%',padding:'11px',marginTop:10})}>{saving?'…':'💾 Wiederholungs-Regel speichern'}</button>
   </div>;

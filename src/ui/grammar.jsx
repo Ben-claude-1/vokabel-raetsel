@@ -1,6 +1,6 @@
 import { sbGet, sbPatch } from '../core/api.js';
 import { buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, saveGrammarPool } from '../core/grammar.js';
-import { tallyAnswer } from '../core/leitner.js';
+import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, TD } from '../core/theme.js';
 
@@ -260,6 +260,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
     if(!q||result) return;
     var correct=isCorrectAnswer(q,opt);
     tallyAnswer(correct);
+    logWordEvent(player&&player.id, 'grammatik', null, q.answer||q.sentence, q.sentence, correct, null);
     var newRes={q:q,input:opt,correct:correct};
     setChosen(opt);
     setResults(function(r){return r.concat([newRes]);});

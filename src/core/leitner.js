@@ -127,7 +127,13 @@ function lsLogAnswer(d, e){
 // aufholt.
 var REVIEW_DEFAULT = {enabled:true, days:3, count:20, minPool:20,
   answersTrigger:80,   // so viele Lernantworten bis zum nächsten Lauf
-  maxCount:30};        // Obergrenze, wenn viel Rückstand aufgelaufen ist
+  maxCount:30,         // Obergrenze, wenn viel Rückstand aufgelaufen ist
+  // Vor einer Klassenarbeit soll der ganze Übungsplatz dem neuen Stoff gehören.
+  // `pauseUntil` (Tag 'JJJJ-MM-TT', einschließlich) setzt die Pflicht-Wiederholung
+  // bis dahin aus; danach greift sie ohne Zutun wieder. Bewusst ein Datum und
+  // kein Schalter — ein Schalter bleibt aus, wenn niemand daran denkt.
+  pauseUntil:'',
+  pauseNote:''};       // wofür pausiert wird, nur zur Anzeige
 
 var REVIEW_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -176,7 +182,17 @@ function reviewPolicyOf(raw){
   p.minPool = Math.max(1, Number(p.minPool)||REVIEW_DEFAULT.minPool);
   p.answersTrigger = Math.max(10, Number(p.answersTrigger)||REVIEW_DEFAULT.answersTrigger);
   p.maxCount = Math.max(p.count, Number(p.maxCount)||REVIEW_DEFAULT.maxCount);
+  p.pauseUntil = /^\d{4}-\d{2}-\d{2}$/.test(p.pauseUntil||'') ? p.pauseUntil : '';
+  p.pauseNote = String(p.pauseNote||'').slice(0,80);
   return p;
+}
+
+// Läuft die Pause noch? Verglichen wird der Tagesschlüssel als Zeichenkette —
+// 'JJJJ-MM-TT' sortiert lexikografisch wie chronologisch, und der Vergleich
+// bleibt damit in derselben Zeitzone wie der restliche Lernstand.
+function reviewPaused(policy, today){
+  var p = reviewPolicyOf(policy);
+  return !!(p.pauseUntil && (today || lsToday()) <= p.pauseUntil);
 }
 
 // Umfang des nächsten Laufs: Standardgröße, bei Rückstand mehr — aber gedeckelt,
@@ -194,8 +210,10 @@ function reviewRunSize(policy, dueCount){
 function reviewLockState(policy, lastReviewIso, poolSize, stats){
   var p = reviewPolicyOf(policy);
   var s = stats || {};
-  var out = {locked:false, policy:p, daysSince:null, reason:null,
+  var out = {locked:false, policy:p, daysSince:null, reason:null, paused:false, pausedUntil:'',
     dueCount:s.dueCount||0, answersSince:s.answersSince||0, runSize:reviewRunSize(p, s.dueCount)};
+  // Pause vor allem anderen: in der Testwoche zählt der neue Stoff, nicht der alte.
+  if(reviewPaused(p)){ out.paused = true; out.pausedUntil = p.pauseUntil; return out; }
   if(!p.enabled || poolSize < p.minPool) return out;
   if(!(s.dueCount>0)) return out;   // nichts fällig → nichts zu prüfen
   var last = lastReviewIso ? Date.parse(lastReviewIso) : 0;
@@ -250,6 +268,20 @@ function lsDayStats(data, day){
   (d.sessions||[]).forEach(function(s){ if(s && s.d < day && s.pct!=null) before = s.pct; });
   var last = sess[sess.length-1];
   return {ans:ans, cor:cor, p0:before!=null?before:null, p1:last.pct!=null?last.pct:null, learned:null, words:null, exact:false};
+}
+
+var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Ein Datensatz je Antwort, spielübergreifend (Tabelle `word_events`) — davon
+// hängt die Tagesansicht "welche Vokabel wo, richtig/falsch, welcher Topf" ab.
+// Bewusst fire-and-forget (wie updatePresence): eine verlorene Zeile darf das
+// Spiel nie blockieren oder verlangsamen.
+function logWordEvent(playerId, game, runId, word, clue, correct, pot){
+  if(!playerId || !UUID_RE.test(playerId) || !word) return;
+  sbPost('word_events', {player_id:playerId, game:game,
+    run_id:(runId && UUID_RE.test(runId)) ? runId : null,
+    word:word, clue:clue||null, correct:!!correct,
+    pot:(pot==null?null:pot)}).catch(function(){});
 }
 
 function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
@@ -571,4 +603,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

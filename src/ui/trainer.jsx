@@ -1,5 +1,5 @@
 import { sbGet } from '../core/api.js';
-import { tallyAnswer } from '../core/leitner.js';
+import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { rootsOf } from '../core/scope.js';
 import { PROGRESS } from '../core/store.js';
@@ -7,7 +7,8 @@ import { AM, BtnStyle, COLOR_BG, COLOR_FG, G100, G200, G400, G50, G600, G900, GR
 import { shuffleArr } from '../core/util.js';
 import { checkAnswer, getWordColor, parseData, safeWords, selectWorkoutWords } from '../core/words.js';
 
-function VokabelTrainer({ words, player, onDone, title }) {
+function VokabelTrainer({ words, player, onDone, title, game }) {
+  var gameKey = game || 'vokabeltrainer';
   var shuffled = useMemo(function(){ return shuffleArr(words); }, []);
   var [idx, setIdx] = useState(0);
   var [input, setInput] = useState('');
@@ -31,7 +32,9 @@ function VokabelTrainer({ words, player, onDone, title }) {
     }
     var status = checkAnswer(input, answer);
     var res = {status:status, correct:answer, typed:input, word:current.word, clue:current.clue, chapId:current.chapterId};
-    tallyAnswer(status==='correct'||status==='partial');
+    var ok = status==='correct'||status==='partial';
+    tallyAnswer(ok);
+    logWordEvent(player&&player.id, gameKey, null, current.word, current.clue, ok, null);
     setResult(res); setResults(function(prev){ return prev.concat([res]); });
     if (player && player.id) PROGRESS.set(player.id, current.word, current.clue, current.chapterId, status==='correct');
   }
@@ -170,7 +173,7 @@ function WorkoutSetup({ chapters, player, onStart }) {
 }
 
 function WorkoutSession({ words, player, progressMap, onDone }) {
-  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" />;
+  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" game="workout" />;
 }
 
 function SentenceLearner({ chapters, player, onDone }) {
@@ -236,7 +239,9 @@ function SentenceLearner({ chapters, player, onDone }) {
     }
     var status=checkAnswer(input,answer);
     var res={status:status,en:current.text,de:current.translation,typed:input};
-    tallyAnswer(status==='correct'||status==='partial');
+    var ok=status==='correct'||status==='partial';
+    tallyAnswer(ok);
+    logWordEvent(player&&player.id, 'satzmeister', null, current.text, current.translation, ok, null);
     setResult(res); setResults(function(p){return p.concat([res]);});
   }
   return(

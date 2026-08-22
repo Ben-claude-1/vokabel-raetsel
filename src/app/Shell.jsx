@@ -120,7 +120,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       var st = reviewLockState(policy, last, cnt.pool,
         {dueCount:cnt.due, answersSince:answersSinceReview(mine, last)});
       setReviewInfo({locked:st.locked, policy:st.policy, poolSize:cnt.pool, daysSince:st.daysSince,
-        reason:st.reason, dueCount:st.dueCount, answersSince:st.answersSince});
+        reason:st.reason, dueCount:st.dueCount, answersSince:st.answersSince,
+        paused:st.paused, pausedUntil:st.pausedUntil});
     }).catch(function(){});
   }, [player&&player.id]);
   useEffect(function(){ loadReview(); }, [loadReview]);
@@ -290,16 +291,26 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   }, [chapters, scopeTree]);
   var isEnglish = !scope || scope.language === 'en';
 
+  // Untertitel der Wiederholungs-Kachel: fällig, pausiert (vor einer Arbeit)
+  // oder normal. Zwei Kacheln zeigen ihn — deshalb einmal berechnet.
+  var reviewSub = reviewInfo.locked
+    ? 'Jetzt fällig — Leiterspiel ist bis dahin gesperrt'
+    : reviewInfo.paused
+      ? 'Pause bis '+(reviewInfo.pausedUntil||'').split('-').reverse().join('.')+
+        (reviewInfo.policy&&reviewInfo.policy.pauseNote ? ' ('+reviewInfo.policy.pauseNote+')' : '')+
+        ' — üben kannst du trotzdem'
+      : 'Gelerntes festigen · Punkte pro Lauf';
+
   function renderContent() {
     if(screen==='vocab_trainer'&&screenData) return <VokabelTrainer words={screenData} player={player} onDone={function(){go('learn');}} title="Vokabeln"/>;
     if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}}/>;
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
-    if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} onDone={function(){go('quiz_duel_menu');}}/>;}
+    if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} player={player} onDone={function(){go('quiz_duel_menu');}}/>;}
     if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} setAllUsers={setAllUsers} setPlayer={setPlayer} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} onDone={function(){go('quiz_duel_menu');}}/>;}
     if(screen==='quiz_duel_menu') return <QuizDuelMenu chapters={scopeTree} allChapters={childChapters} player={player} allUsers={allUsers} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} setQuizScoring={setQuizScoring} onDone={function(){go('games');}}/>;
 
     if(screen==='puzzle') return <div style={{padding:8}}><BrowseChapter ch={screenData||childChapters[0]}/></div>;
-    if(screen==='crossword') return <CrosswordGame chapters={scopeTree} onDone={function(){go('games');}}/>;
+    if(screen==='crossword') return <CrosswordGame chapters={scopeTree} player={player} onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_menu') return <LeitersSpielMenu player={player} chapters={chapters} scope={scope} allUsers={allUsers}
       reviewInfo={reviewInfo} onReview={function(){go('wiederholung');}}
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
@@ -370,7 +381,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               reviewDue={reviewInfo.locked} refreshKey={homeVisits}
               onGo={function(s, lang){ if(lang) switchLang(lang); go(s); }} onReward={handleUpdateScore}/>
             {[
-              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
+              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🪜',title:'Leiterspiel'+(reviewInfo.locked?' 🔒':''),sub:reviewInfo.locked?'Gesperrt — erst die Wiederholung machen':'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
@@ -403,7 +414,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
 
           {screen==='games'&&(<div>
             {[
-              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':''),sub:reviewInfo.locked?'Jetzt fällig — Leiterspiel ist bis dahin gesperrt':'Gelerntes festigen · Punkte pro Lauf',action:function(){go('wiederholung');}},
+              {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
