@@ -41,12 +41,13 @@ function tallyAnswer(correct, skipped, credit){
   if(skipped) ANSWER_TALLY.skip++;
 }
 
-// Höchstens so viele Vokabeln lassen sich pro Runde einfach überspringen.
-// Danach wird die Lösung gezeigt und muss einmal geschrieben werden — es zählt
-// weiter wie „nicht gewusst", kostet aber Aufmerksamkeit statt eines Klicks.
-// Hintergrund: am 12.08.2026 waren 83 von 86 Antworten reine Überspringer bei
-// 0,6 s Antwortzeit — die Sitzung sah nach Lernen aus und war keines.
-var SKIP_LIMIT = 3;
+// So viele Vokabeln lassen sich pro Runde einfach überspringen, bevor die
+// Lösung gezeigt wird und einmal geschrieben werden muss — beides zählt
+// weiter wie „nicht gewusst", der Abschreib-Schritt kostet aber Aufmerksamkeit
+// statt eines Klicks. Hintergrund: am 12.08.2026 waren 83 von 86 Antworten
+// reine Überspringer bei 0,6 s Antwortzeit — die Sitzung sah nach Lernen aus
+// und war keines. Deshalb 0: jeder Überspringer geht sofort zum Abschreiben.
+var SKIP_LIMIT = 0;
 
 var DAY_LOG_KEEP = 180;   // Tage mit Kennzahlen
 
