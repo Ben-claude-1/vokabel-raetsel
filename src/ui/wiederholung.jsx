@@ -6,6 +6,7 @@ import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../c
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
 import { RepeatRunHistory } from './progress.jsx';
+import { SpeakButton } from './widgets.jsx';
 
 function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; }
 
@@ -332,7 +333,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
       <div style={{fontSize:14,fontWeight:'bold',color:result.correct?'#065f46':'#991b1b'}}>
         {result.correct?('Richtig! +'+result.points+' Punkte'):(result.skipped?'Übersprungen':'Leider falsch')}
       </div>
-      {!result.correct&&<div style={{fontSize:12,color:'#991b1b',marginTop:8}}>Richtig wäre: <b>{result.answer}</b></div>}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:2,marginTop:8}}>
+        {!result.correct&&<span style={{fontSize:12,color:'#991b1b'}}>Richtig wäre: <b>{result.answer}</b></span>}
+        <SpeakButton text={result.answer} lang={cur&&cur.lang}/>
+      </div>
       {!result.correct&&!result.skipped&&result.typed&&<div style={{fontSize:11,color:G600,marginTop:4}}>Deine Eingabe: „{result.typed}"</div>}
       <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
     </div>

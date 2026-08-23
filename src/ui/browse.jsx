@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, T, TD, TL } from '../core/theme.js';
 import { safeWords } from '../core/words.js';
+import { SpeakButton } from './widgets.jsx';
 
 function Puzzle({ data, solPhrase, solMsg, onWord, chapId }) {
   var grid = data.grid, nums = data.nums, across = data.across, down = data.down, rows = data.rows, cols = data.cols, solCells = data.solCells;
@@ -133,7 +134,10 @@ function BrowseChapter({ ch }) {
           <button onClick={function(){setShowSent(true);}} style={{flex:1,padding:'5px',borderRadius:6,border:'2px solid '+(showSent?ch.color:G200),background:showSent?ch.color+'15':'white',cursor:'pointer',fontSize:11,fontWeight:'bold',color:showSent?ch.color:G600}}>💬 Sätze ({sentCount})</button>
         </div>)}
         {!showSent&&ch.words.slice().sort(function(a,b){return (a.word||'').toLowerCase().localeCompare((b.word||'').toLowerCase());}).map(function(w,i){
-          return(<div key={i} style={{display:'flex',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}><span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span><span style={{color:G400}}>{w.clue}</span></div>);
+          return(<div key={i} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 0',borderBottom:'1px solid '+G100,fontSize:12}}>
+            <span style={{display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:w.important?'bold':'normal'}}>{w.important?'⭐ ':''}{w.word}</span><SpeakButton text={w.word} lang={ch.language}/></span>
+            <span style={{color:G400}}>{w.clue}</span>
+          </div>);
         })}
         {showSent&&(ch.sentences||[]).map(function(s,i){ return(<div key={i} style={{padding:'6px 0',borderBottom:'1px solid '+G100}}><div style={{fontSize:12,fontWeight:s.important?'bold':'normal'}}>{s.important?'⭐ ':''}{s.text}</div><div style={{fontSize:11,color:G400}}>{s.translation}</div></div>); })}
       </div>)}

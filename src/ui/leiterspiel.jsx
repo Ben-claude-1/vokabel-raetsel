@@ -3,15 +3,16 @@ import { SB_URL } from '../core/config.js';
 import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { filterRunsByScope, rootsOf, scopeText } from '../core/scope.js';
+import { filterRunsByScope, rootsOf, runScope, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
-import { CelebrationPopup, LernVerlaufChart, T2LetterField } from './widgets.jsx';
+import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
 
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
+  var lang = useMemo(function(){ return runScope(run, chapters).language; }, [run, chapters]);
   var [data, setData] = useState(null);
   var [dataLoading, setDataLoading] = useState(true);
   var [phase, setPhase] = useState('pick');
@@ -673,12 +674,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
               var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
               var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
               var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
-              return <button key={opt.word} onClick={function(){ handleQuizAnswer(opt); }}
-                disabled={!!quizChosen}
-                style={{padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
+              return <div key={opt.word} onClick={quizChosen?undefined:function(){ handleQuizAnswer(opt); }}
+                style={{display:'flex',alignItems:'center',gap:4,padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
                   textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation'}}>
-                {opt.word}
-              </button>;
+                <span style={{flex:1}}>{opt.word}</span>
+                <SpeakButton text={opt.word} lang={lang} style={{fontSize:15,padding:'0 2px'}}/>
+              </div>;
             })}
           </div>
         )}
@@ -862,7 +863,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.helped?'#1d4ed8':result.correct?'#065f46':'#991b1b',marginBottom:6}}>
               {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
-            <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
+            <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span><SpeakButton text={result.word||result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
             {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
             {result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} bleibt {POT_LABEL[result.fromPot]}</span>
@@ -921,7 +922,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
               {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
-            <div style={{fontSize:14,color:G900,marginBottom:4}}><span style={{fontWeight:'bold'}}>{result.answer}</span>{result.clue&&<span style={{color:G600,marginLeft:8,fontSize:12}}>({result.clue})</span>}</div>
+            <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.answer}</span><SpeakButton text={result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
             {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
           </div>
         )}

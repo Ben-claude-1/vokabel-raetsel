@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, dailyGoalMin, dailyGoalSec } from '../core/theme.js';
+import { speak, ttsSupported } from '../core/tts.js';
 import { dayKey, shuffleArr } from '../core/util.js';
 import { buildT2Layout } from '../core/words.js';
+
+function SpeakButton({ text, lang, style }) {
+  if(!ttsSupported() || !text) return null;
+  return <button type="button" onClick={function(e){ if(e&&e.stopPropagation)e.stopPropagation(); speak(text, lang); }}
+    aria-label="Aussprache anhören"
+    style={Object.assign({border:'none',background:'transparent',cursor:'pointer',fontSize:16,lineHeight:1,padding:'2px 5px',color:T,flexShrink:0,touchAction:'manipulation'}, style)}>
+    🔊
+  </button>;
+}
 
 function T2LetterField({ word, onCorrect, onWrong }) {
   var layout = useMemo(function(){ return buildT2Layout(word); }, [word]);
@@ -190,4 +200,4 @@ function LernVerlaufChart({ sessions, todayExtraSec, requiredMinPerDay, targetDa
   );
 }
 
-export { T2LetterField, GradeDisplay, CelebrationPopup, LernVerlaufChart };
+export { T2LetterField, GradeDisplay, CelebrationPopup, LernVerlaufChart, SpeakButton };

@@ -307,8 +307,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       : 'Gelerntes festigen · Punkte pro Lauf';
 
   function renderContent() {
-    if(screen==='vocab_trainer'&&screenData) return <VokabelTrainer words={screenData} player={player} onDone={function(){go('learn');}} title="Vokabeln"/>;
-    if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}}/>;
+    if(screen==='vocab_trainer'&&screenData) return <VokabelTrainer words={screenData} player={player} onDone={function(){go('learn');}} title="Vokabeln" lang={scope&&scope.language}/>;
+    if(screen==='workout'&&screenData) return <WorkoutSession words={screenData.words} player={player} progressMap={screenData.progressMap} onDone={function(){go('learn');}} lang={scope&&scope.language}/>;
     if(screen==='sentence_learner') return <SentenceLearner chapters={childChapters} player={player} onDone={function(){go('learn');}}/>;
     if(screen==='quiz_solo'){var gwSolo=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwSolo.push(Object.assign({},w));});});return <QuizSolo chapters={screenData&&screenData.chapters||childChapters} globalWords={gwSolo} player={player} onDone={function(){go('quiz_duel_menu');}}/>;}
     if(screen==='quiz_duel'){var gwDuel=[];childChapters.forEach(function(ch){(ch.words||[]).forEach(function(w){gwDuel.push(Object.assign({},w));});});var duelChs=screenData&&screenData.chapters||childChapters;return <QuizDuel chapters={duelChs} allChapters={childChapters} globalWords={gwDuel} player={player} allUsers={allUsers} setAllUsers={setAllUsers} setPlayer={setPlayer} allCategories={allCategories} onlineIds={onlineIds} quizScoring={quizScoring} onDone={function(){go('quiz_duel_menu');}}/>;}

@@ -6,8 +6,9 @@ import { PROGRESS } from '../core/store.js';
 import { AM, BtnStyle, COLOR_BG, COLOR_FG, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { checkAnswer, getWordColor, parseData, safeWords, selectWorkoutWords } from '../core/words.js';
+import { SpeakButton } from './widgets.jsx';
 
-function VokabelTrainer({ words, player, onDone, title, game }) {
+function VokabelTrainer({ words, player, onDone, title, game, lang }) {
   var gameKey = game || 'vokabeltrainer';
   var shuffled = useMemo(function(){ return shuffleArr(words); }, []);
   var [idx, setIdx] = useState(0);
@@ -79,9 +80,16 @@ function VokabelTrainer({ words, player, onDone, title, game }) {
       </div>
       <div style={{textAlign:'center',padding:'30px 20px',background:resultBg,borderRadius:16,marginBottom:12,border:'2px solid '+(result?resultColor:G200),transition:'all .3s'}}>
         <div style={{fontSize:11,color:G400,marginBottom:8,textTransform:'uppercase',letterSpacing:1}}>{qLabel}</div>
-        <div style={{fontSize:28,fontWeight:'bold',color:G900,marginBottom:result?12:0}}>{question}</div>
+        <div style={{fontSize:28,fontWeight:'bold',color:G900,marginBottom:result?12:0,display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+          <span>{question}</span>
+          {direction==='en2de'&&<SpeakButton text={question} lang={lang}/>}
+        </div>
         {result&&<div style={{fontSize:18,fontWeight:'bold',color:resultColor}}>{result.status==='correct'?'✓ Richtig!':result.status==='partial'?'~ Fast richtig':'✗ Falsch'}</div>}
-        {result&&<div style={{fontSize:13,color:G600,marginTop:4}}>Richtig: <strong>{result.correct}</strong>{result.typed&&result.status!=='correct'?'  (du: '+result.typed+')':''}</div>}
+        {result&&<div style={{fontSize:13,color:G600,marginTop:4,display:'flex',alignItems:'center',justifyContent:'center',gap:2}}>
+          <span>Richtig: <strong>{result.correct}</strong></span>
+          {direction==='de2en'&&<SpeakButton text={result.correct} lang={lang}/>}
+          {result.typed&&result.status!=='correct'?<span>&nbsp;(du: {result.typed})</span>:null}
+        </div>}
       </div>
       {!result&&(
         <div style={{display:'flex',gap:8,marginBottom:12}}>
@@ -172,8 +180,8 @@ function WorkoutSetup({ chapters, player, onStart }) {
   );
 }
 
-function WorkoutSession({ words, player, progressMap, onDone }) {
-  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" game="workout" />;
+function WorkoutSession({ words, player, progressMap, onDone, lang }) {
+  return <VokabelTrainer words={words} player={player} onDone={onDone} title="🏋️ Workout" game="workout" lang={lang} />;
 }
 
 function SentenceLearner({ chapters, player, onDone }) {
