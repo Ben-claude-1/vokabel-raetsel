@@ -7,6 +7,7 @@ import { buildDayStats, calcStreakFromStats, dayCounts } from '../core/goal.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, RE, T, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, getWeekDays, naturalSort } from '../core/util.js';
 import { aiCategorizeWords, normWordKey, parseData, quickDetectType, safeWords, translateSentenceEN2DE } from '../core/words.js';
+import { ChatAdmin } from './chat.jsx';
 import { GrammarAdmin } from './grammar.jsx';
 import { KlassenarbeitAdmin } from './klassenarbeit.jsx';
 import { LeitersSpielCreate, LeitersSpielStreakSettings, RunEditor } from './leiterspiel.jsx';
@@ -1093,7 +1094,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA'],['push','🔔 Push']].map(function(t){
+        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA'],['push','🔔 Push'],['chat','💬 Chat']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -1738,6 +1739,9 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
       </div>)}
       {tab==='push'&&(<div>
         <PushAdmin player={player}/>
+      </div>)}
+      {tab==='chat'&&(<div>
+        <ChatAdmin chapters={chapters} scope={scope}/>
       </div>)}
     </div>
   );
