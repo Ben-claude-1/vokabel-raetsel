@@ -186,9 +186,11 @@ function GameWordDetail({ game, events }){
   </div>;
 }
 
-function LeiterspielFortschritt({ progressRows, runs, title }){
+function LeiterspielFortschritt({ progressRows, runs, sessions, title }){
   var today = dayKey();
   var cutoff = shiftDay(today,-6);
+  var secByRun = {};
+  (sessions||[]).forEach(function(s){ if(s.run_id) secByRun[s.run_id]=(secByRun[s.run_id]||0)+(s.active_seconds||0); });
   var list = (progressRows||[]).map(function(r){
     var run = (runs||[]).find(function(x){ return x.id===r.run_id; });
     if(!run) return null;
@@ -198,7 +200,7 @@ function LeiterspielFortschritt({ progressRows, runs, title }){
     if(total===0) return null;
     var pct = Math.round(lsPercent(d));
     return {run:run, pct:pct, delta:lsDeltaSince(d, cutoff), total:total,
-      learned:(pots[6]||[]).length, almost:(pots[5]||[]).length,
+      learned:(pots[6]||[]).length, almost:(pots[5]||[]).length, sec:secByRun[r.run_id]||0,
       answers:lsAnswersSince(d, cutoff), newLearned:lsLearnedInRange(d, cutoff)};
   }).filter(Boolean);
   if(list.length===0) return null;
@@ -230,6 +232,7 @@ function LeiterspielFortschritt({ progressRows, runs, title }){
           <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,marginBottom:3}}>
             <span style={{fontSize:14}}>{x.run.icon||'🪜'}</span>
             <span style={{fontWeight:'bold',color:G900,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{x.run.name}</span>
+            {x.sec>0&&<span style={{color:G600,fontSize:10}}>⏱ {fmtDuration(x.sec)}</span>}
             {x.delta!==0&&<span style={{color:x.delta>0?T:RE,fontWeight:'bold',fontSize:10}}>{x.delta>0?'▲ +':'▼ '}{x.delta}%</span>}
             <span style={{color:col,fontWeight:'bold'}}>{x.pct}%</span>
           </div>
@@ -435,7 +438,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
       <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={dayCounts(today, tagesStand[today])?T:'#d97706'}/>
       <Stat value={activeDays} label="Aktive Tage"/>
     </div>
-    <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} title="🪜 Dein Leiterspiel-Fortschritt"/>
+    <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} sessions={sessions} title="🪜 Dein Leiterspiel-Fortschritt"/>
     <div style={{height:12}}/>
     <BehaltensKurve progressRows={scopedProgress}/>
     <div style={{height:12}}/>

@@ -42,9 +42,20 @@ function kaResultsLoad() {
   });
 }
 
+function isPolitenessQuestion(sentence) {
+  var s=(sentence||'').toLowerCase().trim();
+  return /^(can|could) i (have|borrow|get|take)\b/.test(s) || /^would you like\b/.test(s) || /please\??$/.test(s);
+}
+
 function loadGrammarPool(topic) {
   return sbGet('settings','key=eq.'+GRAMMAR_KEYS[topic]).then(function(d){
-    if(d&&d[0]){try{return JSON.parse(d[0].value);}catch(e){return [];}}
+    if(d&&d[0]){
+      try{
+        var pool=JSON.parse(d[0].value);
+        if(topic==='sa') pool=pool.filter(function(q){ return !isPolitenessQuestion(q.sentence); });
+        return pool;
+      }catch(e){return [];}
+    }
     return [];
   });
 }

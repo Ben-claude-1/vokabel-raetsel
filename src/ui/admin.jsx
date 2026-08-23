@@ -102,20 +102,21 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
     var d = parseData(row.data);
     return (d && d.sessions) || [];
   }
+  // Zeit bevorzugt aus learn_sessions (deckt alle Spielmodi ab, aktueller
+  // Stand); nur ohne solche Einträge (vor der run_id-Instrumentierung) auf
+  // die ältere ls_progress.data.sessions zurückfallen — sonst würden zwei
+  // Admin-Ansichten unterschiedliche Zeiten für denselben Run zeigen.
   function secondsForPlayerRun(playerId, runId){
-    var sessions = progressSessionsFor(playerId, runId);
-    return sessions.reduce(function(s,sess){return s+(sess.dur||0);},0);
+    var ls = (allSessions||[]).filter(function(s){return s.player_id===playerId && s.run_id===runId;});
+    if(ls.length>0) return ls.reduce(function(s,x){return s+(x.active_seconds||0);},0);
+    return progressSessionsFor(playerId, runId).reduce(function(s,sess){return s+(sess.dur||0);},0);
   }
   function secondsForPlayerTotal(playerId){
-    var s = 0;
-    (allProgress||[]).forEach(function(p){
-      if(p.player_id !== playerId) return;
-      var d = parseData(p.data);
-      ((d && d.sessions) || []).forEach(function(sess){ s += sess.dur || 0; });
-    });
-    (allSessions||[]).forEach(function(r){
-      if(r.player_id===playerId && !r.run_id) s += (r.active_seconds||0);
-    });
+    var runIds = {};
+    (allProgress||[]).forEach(function(p){ if(p.player_id===playerId) runIds[p.run_id]=1; });
+    (allSessions||[]).forEach(function(r){ if(r.player_id===playerId && r.run_id) runIds[r.run_id]=1; });
+    var s = Object.keys(runIds).reduce(function(sum,rid){ return sum+secondsForPlayerRun(playerId, rid); },0);
+    (allSessions||[]).forEach(function(r){ if(r.player_id===playerId && !r.run_id) s += (r.active_seconds||0); });
     return s;
   }
   function fmtMin(sec){ var m=Math.round(sec/60); if(m<60) return m+' Min'; var h=Math.floor(m/60); return h+'h '+(m%60)+'m'; }
@@ -1548,13 +1549,26 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
               var nearestTarget=runs.filter(function(r){return r.target_date;}).map(function(r){return r.target_date;}).sort()[0];
 
               // ── Leiterspiel-Status ──────────────────────────────
+              // Zeit bevorzugt aus learn_sessions (deckt alle Spielmodi ab, siehe
+              // Lernzeit-Chart oben) — nur wenn dafür nichts vorliegt (vor der
+              // run_id-Instrumentierung), auf die ältere ls_progress.data.sessions
+              // zurückfallen. So zeigt diese Sektion dieselbe Zahl wie "Fortschritt
+              // je Leiterspiel" oben, statt eine zweite, abweichende Zeit.
+              var learnByRun = {};
+              learnSess.forEach(function(s){ if(s.run_id){ (learnByRun[s.run_id]||(learnByRun[s.run_id]=[])).push(s); } });
               var lsStatus = rows.map(function(r){
                 var d=parseData(r.data), run=runs.find(function(rn){return rn.id===r.run_id;});
                 if(!run) return null;
                 var pct=lsPercent(d,DEFAULT_STREAK);
                 var sess=d.sessions||[];
-                var totalMin=Math.round(sess.reduce(function(s,x){return s+(x.dur||0);},0)/60);
-                var lastD=sess.length>0?sess[sess.length-1].d:null;
+                var runLearnSess=learnByRun[r.run_id]||[];
+                var totalMin=runLearnSess.length>0
+                  ? Math.round(runLearnSess.reduce(function(s,x){return s+(x.active_seconds||0);},0)/60)
+                  : Math.round(sess.reduce(function(s,x){return s+(x.dur||0);},0)/60);
+                var lastD=runLearnSess.length>0
+                  ? runLearnSess.reduce(function(m,x){return x.started_at&&(!m||x.started_at>m)?x.started_at:m;},null)
+                  : (sess.length>0?sess[sess.length-1].d:null);
+                if(lastD&&lastD.length>10) lastD=lastD.slice(0,10);
                 var potPct=Math.round(pct);
                 return {run,pct:potPct,totalMin,lastD,words:run.word_count||0,pots:d.pots||{}};
               }).filter(Boolean);
@@ -1583,7 +1597,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
                 {/* Fortschritt je Leiterspiel inkl. Zuwachs der letzten 7 Tage */}
                 {rows.length>0&&<div style={{marginTop:10}}>
                   <SectionHead>🪜 Fortschritt je Leiterspiel</SectionHead>
-                  <LeiterspielFortschritt progressRows={rows} runs={runs}/>
+                  <LeiterspielFortschritt progressRows={rows} runs={runs} sessions={learnSess}/>
                 </div>}
 
                 {/* Tag für Tag: Zeit, Antworten, gelernte Vokabeln */}
