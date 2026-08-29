@@ -122,22 +122,15 @@ function VerbFieldsPanel({current, mode, onSubmit}) {
 }
 
 function VerbReversePanel({current, showForm, onSubmit}) {
-  var isChicken = current.pattern === 'chicken';
   var shownFull = showForm==='pastParticiple' ? current.pastParticiple : current.pastSimple;
-  var missingKey = showForm==='pastParticiple' ? 'pastSimple' : 'pastParticiple';
-  var missingLabel = showForm==='pastParticiple' ? 'Simple Past' : 'Past Participle';
   var shownDisplay = primaryForm(shownFull).replace(/^(\S+)$/, '$1'); // nur zur Klarheit, keine Änderung
-  // Chicken: die gezeigte Form ist textgleich mit Grundform UND der fehlenden
-  // Form — "Grundform"/"other" abzufragen hieße nur, den bereits sichtbaren
-  // Text nochmal abzuschreiben. Einzig sinnvoller Test bleibt die Bedeutung.
+  // Grundform und die jeweils andere Form werden bereits in Topf 2/3 komplett
+  // abgefragt — hier nochmal beides zu verlangen prüft nichts Neues. Einzig
+  // sinnvoller Test beim Rückwärts-Blick auf eine Vergangenheitsform bleibt,
+  // ob die Bedeutung sitzt (analog zur normalen Vokabelkarte, Topf 4/5).
   var fieldsMeta = useMemo(function(){
-    if(isChicken) return [
-      {key:'meaning', label:'Bedeutung (Deutsch)', expectedFull: current.meaning}
-    ];
     return [
-      {key:'grundform', label:'Grundform', expectedFull: wordDisplay(current)},
-      {key:'meaning', label:'Bedeutung (Deutsch)', expectedFull: current.meaning},
-      {key:'other', label:missingLabel, expectedFull: current[missingKey]}
+      {key:'meaning', label:'Bedeutung (Deutsch)', expectedFull: current.meaning}
     ];
   }, [current.word, showForm]);
   return <div style={{padding:'16px',background:'#fff7ed',borderRadius:14,border:'2px solid #fdba74'}}>
