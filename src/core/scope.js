@@ -2,9 +2,20 @@ import { safeWords } from './words.js';
 
 var SCOPE_KEY = 'lernapp_scope';
 
-var LANGS = { en:{label:'Englisch', flag:'🇬🇧'}, es:{label:'Spanisch', flag:'🇪🇸'}, fr:{label:'Französisch', flag:'🇫🇷'}, la:{label:'Latein', flag:'🏛️'} };
+var LANGS = {
+  en:{label:'Englisch', flag:'🇬🇧', adj:'Englische', adjN:'Englisches', adjM:'Englischer'},
+  es:{label:'Spanisch', flag:'🇪🇸', adj:'Spanische', adjN:'Spanisches', adjM:'Spanischer'},
+  fr:{label:'Französisch', flag:'🇫🇷', adj:'Französische', adjN:'Französisches', adjM:'Französischer'},
+  la:{label:'Latein', flag:'🏛️', adj:'Lateinische', adjN:'Lateinisches', adjM:'Lateinischer'}
+};
 
 function langLabel(l){ return (LANGS[l]||{}).label || (l||'').toUpperCase(); }
+
+// Adjektivform für Fragetexte wie "Übersetze ins ___" / "___ Wort…" / "___ Satz…" —
+// sprachneutral, damit z.B. das Leiterspiel bei Spanisch nicht "auf Englisch" fragt.
+function langAdj(l){ return (LANGS[l]||{}).adj || LANGS.en.adj; }
+function langAdjN(l){ return (LANGS[l]||{}).adjN || LANGS.en.adjN; }
+function langAdjM(l){ return (LANGS[l]||{}).adjM || LANGS.en.adjM; }
 
 // Reihenfolge, in der Sprachen abgearbeitet werden — im Wiederholungslauf wird
 // nicht zwischen Sprachen hin- und hergesprungen: erst Englisch, dann Spanisch.
@@ -111,4 +122,4 @@ function filterRunsByScope(runs, chapters, sc){
   return sortRunsForDisplay((runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); }), chapters);
 }
 
-export { SCOPE_KEY, LANGS, LANG_ORDER, langLabel, langRank, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };
+export { SCOPE_KEY, LANGS, LANG_ORDER, langLabel, langAdj, langAdjN, langAdjM, langRank, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };

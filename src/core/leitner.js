@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from './api.js';
 import { HW_POST, SB_URL } from './config.js';
-import { chGrade, chLang, inScope } from './scope.js';
+import { chGrade, chLang, inScope, langLabel } from './scope.js';
 import { dayKey, naturalSort, shuffleArr } from './util.js';
 import { normWordKey, parseData, safeWords } from './words.js';
 
@@ -427,11 +427,12 @@ function canPromote(wObj, today){ return (wObj.pd||'') !== (today||lsToday()); }
 
 function markPromoted(wObj, today){ wObj.pd = today||lsToday(); }
 
-function generateSentences(words, runName, forceNew) {
+function generateSentences(words, runName, forceNew, lang) {
+  var langName = langLabel(lang||'en');
   var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
   var wordList = picked.map(function(w){return '"'+w.word+'" ('+w.clue+')';}).join(', ');
-  var prompt = 'Erstelle für jede dieser englischen Vokabeln genau einen kurzen einfachen englischen Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"englisches Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
-  var cacheKey = 'satz_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
+  var prompt = 'Erstelle für jede dieser '+langName+'-Vokabeln genau einen kurzen einfachen '+langName+'-Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"'+langName+'es Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
+  var cacheKey = 'satz_' + (lang||'en') + '_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
   function callApi(key) {
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',

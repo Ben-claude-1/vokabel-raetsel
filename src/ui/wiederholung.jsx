@@ -1,7 +1,7 @@
 import { sbGet, sbPost } from '../core/api.js';
 import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, logWordEvent, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { langFlag, langLabel, langRank, runScope } from '../core/scope.js';
+import { langAdj, langAdjN, langFlag, langLabel, langRank, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
@@ -12,10 +12,8 @@ function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',p
 
 // Der Pool ist sprachübergreifend — in der Frage muss deshalb stehen, in welche
 // Sprache übersetzt werden soll.
-var ZIEL = {en:['Englische','Englisches'], es:['Spanische','Spanisches'],
-            fr:['Französische','Französisches'], la:['Lateinische','Lateinisches']};
-function zielSprache(l){ return (ZIEL[l]||ZIEL.en)[0]; }
-function zielWort(l){ return (ZIEL[l]||ZIEL.en)[1]+' Wort…'; }
+function zielSprache(l){ return langAdj(l); }
+function zielWort(l){ return langAdjN(l)+' Wort…'; }
 
 function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompleted }){
   var [phase,setPhase]=useState('loading'); // loading, empty, intro, q, show, done

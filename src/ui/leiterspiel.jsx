@@ -3,10 +3,11 @@ import { SB_URL } from '../core/config.js';
 import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { filterRunsByScope, rootsOf, runScope, scopeText } from '../core/scope.js';
+import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
+import { PATTERN_META, buildVerbPlan, verbPlanToday } from '../core/verbplan.js';
 import { ProgressStats } from './trainer.jsx';
 import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
@@ -887,7 +888,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf Englisch?</div>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf {langLabel(lang)}?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:10}}>{current&&current.clue}</div>
           {dashBoxes(dashLayout, input)}
           <div style={{fontSize:11,color:G400,marginTop:6}}>{dashLetterCount} Buchstaben</div>
@@ -897,7 +898,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
             autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
-            placeholder={copyMode?'Lösung abschreiben…':('Englisch ('+dashLetterCount+' Buchstaben)…')}
+            placeholder={copyMode?'Lösung abschreiben…':(langLabel(lang)+' ('+dashLetterCount+' Buchstaben)…')}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+(copyMode?'#f59e0b':T),borderRadius:10,outline:'none'}}/>
           <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
@@ -917,7 +918,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <div style={{padding:8}}>
           {liveChip}
           <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
-            <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf {helperPot} — Wie heißt das auf Englisch?</div>
+            <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf {helperPot} — Wie heißt das auf {langLabel(lang)}?</div>
             <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:showDashHint?10:4}}>{current&&current.clue}</div>
             {showDashHint && dashBoxes(hLayout, input)}
             {showDashHint && <div style={{fontSize:11,color:G400,marginTop:6}}>{hLetterCount} Buchstaben</div>}
@@ -926,7 +927,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
               onKeyDown={function(e){if(e.key==='Enter')submitHelpTyped();}}
               autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false'
-              placeholder={showDashHint?('Englisch ('+hLetterCount+' Buchstaben)…'):'Englisch…'}
+              placeholder={showDashHint?(langLabel(lang)+' ('+hLetterCount+' Buchstaben)…'):(langLabel(lang)+'…')}
               style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #3b82f6',borderRadius:10,outline:'none'}}/>
             <button onClick={submitHelpTyped} style={BtnStyle('#3b82f6','white',{padding:'12px 16px',fontSize:15})}>✓</button>
           </div>
@@ -939,7 +940,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
-          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':'Wie heißt das auf Englisch?'}</div>
+          <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':('Wie heißt das auf '+langLabel(lang)+'?')}</div>
           <div style={{fontSize:24,fontWeight:'bold',color:G900,marginBottom:4}}>{current&&(current.pot===5?current.word:current.clue)}</div>
         </div>
         {copyBox('Schreib die Lösung einmal ab — dann geht es weiter. Zählt als „nicht gewusst".')}
@@ -947,7 +948,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitTyped();}}
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
-            placeholder={copyMode?'Lösung abschreiben…':(current&&current.pot===5?'Deutsch…':'Englisch…')}
+            placeholder={copyMode?'Lösung abschreiben…':(current&&current.pot===5?'Deutsch…':(langLabel(lang)+'…'))}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid '+(copyMode?'#f59e0b':T),borderRadius:10,outline:'none'}}/>
           <button onClick={submitTyped} style={BtnStyle(copyMode?'#f59e0b':T,'white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
@@ -999,7 +1000,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {testChip}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#faf5ff',borderRadius:14,marginBottom:12,border:'2px solid #d8b4fe'}}>
-          <div style={{fontSize:10,color:'#7c3aed',marginBottom:4,textTransform:'uppercase',letterSpacing:1,fontWeight:'bold'}}>{twIsSent?'Test — Übersetze ins Englische':'Test — Wie heißt das auf Englisch?'}</div>
+          <div style={{fontSize:10,color:'#7c3aed',marginBottom:4,textTransform:'uppercase',letterSpacing:1,fontWeight:'bold'}}>{twIsSent?('Test — Übersetze ins '+langAdj(lang)):('Test — Wie heißt das auf '+langLabel(lang)+'?')}</div>
           <div style={{fontSize:twIsSent?18:24,fontWeight:'bold',color:G900,lineHeight:1.3}}>{tw&&(twIsSent?tw.translation:tw.clue)}</div>
           {twIsSent&&<div style={{fontSize:10,color:G400,marginTop:6}}>💬 Beispielsatz · Vokabel: {tw.wordRef}</div>}
         </div>
@@ -1007,7 +1008,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <input ref={inputRef} value={input} onChange={function(e){setInput(e.target.value);}}
             onKeyDown={function(e){if(e.key==='Enter')submitTestAnswer();}}
             autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck="false"
-            placeholder={twIsSent?'Englischer Satz…':'Englisch…'}
+            placeholder={twIsSent?(langAdjM(lang)+' Satz…'):(langLabel(lang)+'…')}
             style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #a855f7',borderRadius:10,outline:'none'}}/>
           <button onClick={submitTestAnswer} style={BtnStyle('#a855f7','white',{padding:'12px 16px',fontSize:15})}>✓</button>
         </div>
@@ -1111,7 +1112,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzmeisterGame words={smW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   if(phase==='satzquiz'){
     var sqW=(function(){
@@ -1120,12 +1121,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
       return w;
     })();
-    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
+    return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   return null;
 }
 
-function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone }) {
+function SatzmeisterGame({ words, runId, runName, lang, player, onUpdateScore, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [loadErr, setLoadErr] = useState('');
   var [idx, setIdx] = useState(0);
@@ -1144,7 +1145,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone 
     setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setRevealed([]); setGPhase('q');
     function start(ws) {
       if(!ws||!ws.length){setLoadErr('Keine Vokabeln (v4, words='+JSON.stringify((words||[]).length)+', runId='+runId+')');setSentences([]);return;}
-      generateSentences(ws, runName, regenKey>0).then(function(s){setSentences(s);})
+      generateSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
         .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
     }
     if(words&&words.length){start(words);return;}
@@ -1255,7 +1256,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone 
       </div>
       <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:12}}>🇩🇪 {sent.clue}</div>
       <div style={{display:'flex',gap:8,marginBottom:10}}>
-        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder="Englische Antwort…" style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
         <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
       </div>
       <div style={{display:'flex',gap:8}}>
@@ -1269,7 +1270,7 @@ function SatzmeisterGame({ words, runId, runName, player, onUpdateScore, onDone 
   );
 }
 
-function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) {
+function SatzquizGame({ words, runId, runName, lang, player, onUpdateScore, onDone }) {
   var [sentences, setSentences] = useState(null);
   var [allOpts, setAllOpts] = useState(null);
   var [loadErr, setLoadErr] = useState('');
@@ -1282,7 +1283,7 @@ function SatzquizGame({ words, runId, runName, player, onUpdateScore, onDone }) 
     setSentences(null); setAllOpts(null); setLoadErr(''); setIdx(0); setTotal(0); setChosen(null);
     function start(ws) {
       if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);setAllOpts([]);return;}
-      generateSentences(ws, runName, regenKey>0).then(function(sents){
+      generateSentences(ws, runName, regenKey>0, lang).then(function(sents){
         var opts=sents.map(function(s){
           var ans=(s.answer||'').trim();
           var dists=shuffleArr(ws.filter(function(w){return w.word.toLowerCase()!==ans.toLowerCase();})).slice(0,3).map(function(w){return w.word;});
@@ -1432,6 +1433,21 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
       }).catch(function(){});
     }
   },[]);
+  // Lernplan für den Verben-Trainer — muss vor jedem frühen `return` stehen
+  // (Rules of Hooks), deshalb hier statt weiter unten bei den anderen Runs.
+  var verbSchedule = useMemo(function(){
+    var verbPlanRuns = filterRunsByScope(runs, chapters, scope).map(function(r){
+      var words = safeWords(r.words);
+      var pattern = words.length && words[0].pattern;
+      return pattern ? {pattern:pattern, words:words, created_at:r.created_at} : null;
+    }).filter(Boolean);
+    if(!verbPlanRuns.length) return null;
+    var startDate = verbPlanRuns.reduce(function(min,r){
+      var d = (r.created_at||'').slice(0,10);
+      return (d && (!min || d<min)) ? d : min;
+    }, '');
+    return startDate ? buildVerbPlan(verbPlanRuns, {startDate:startDate}) : null;
+  }, [runs, chapters, scope]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   // Pflicht-Wiederholung: solange sie offen ist, bleibt das Leiterspiel zu.
   if(reviewInfo && reviewInfo.locked) return(
@@ -1467,10 +1483,34 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     Noch keine Runs für {scopeText(scope)}.{runs.length>0?' In einer anderen Klasse/Sprache gibt es welche — oben in der Kopfzeile umschalten.':' Bitte Admin fragen.'}
   </div>;
   var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
+  // Rein informativ, sperrt nichts — siehe verbSchedule-Berechnung oben (vor
+  // den frühen Returns, wegen Rules of Hooks).
+  var verbToday = verbSchedule ? verbPlanToday(verbSchedule, dayKey()) : null;
+  var verbTodayRun = (verbToday && verbToday.type==='new') ? scopedRuns.find(function(r){
+    var words = safeWords(r.words);
+    return words.length && words[0].pattern===verbToday.pattern;
+  }) : null;
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:2}}>Leiterspiel — Run wählen</div>
       <div style={{fontSize:11,color:G400,marginBottom:12}}>{scopeText(scope)}</div>
+      {verbToday && (function(){
+        var pm = PATTERN_META[verbToday.pattern] || {};
+        return <div style={{padding:'12px 14px',marginBottom:12,borderRadius:12,background:verbToday.type==='new'?'#f0fdfa':verbToday.type==='test'?'#fdf2f8':'#fffbeb',border:'2px solid '+(verbToday.type==='new'?T:verbToday.type==='test'?'#ec4899':'#f59e0b')}}>
+          <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>📅 Verben-Lernplan · Tag {verbToday.day} von {verbToday.total}</div>
+          {verbToday.type==='new' && <div style={{fontSize:13,color:G900}}>
+            {pm.emoji} Heute neu ({pm.label}): <strong>{verbToday.words.map(function(w){return w.word;}).join(', ')}</strong>
+          </div>}
+          {verbToday.type==='review' && <div style={{fontSize:13,color:G900}}>
+            🔁 Wiederholungstag — keine neuen Verben, {verbToday.patterns.map(function(p){return (PATTERN_META[p]||{}).emoji;}).join(' ')} festigen
+          </div>}
+          {verbToday.type==='test' && <div style={{fontSize:13,color:G900}}>
+            🏆 Abschlusstest — alle Muster einmal durchtesten, letzter Tag vor der Klassenarbeit!
+          </div>}
+          {verbTodayRun && <button onClick={function(){onStart(verbTodayRun,gs);}} style={BtnStyle(T,'white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>▶ Los geht's</button>}
+          {verbToday.type==='review' && onReview && <button onClick={onReview} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
+        </div>;
+      })()}
       {scopedRuns.map(function(run){
         var wordCount = safeWords(run.words).length || run.word_count || 0;
         var prog = progressMap[run.id];
