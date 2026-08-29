@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, canPromote, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -202,9 +202,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var newStreak=correct?(wObj.streak||0)+1:0;
     var moveTo=1;
     if(correct&&newStreak>=reqStreak){
-      // Höchstens eine Stufe pro Tag — sonst ist „gelernt" nur ein guter Nachmittag.
-      if(canPromote(wObj)){ moveTo=2; newStreak=0; markPromoted(wObj); }
-      else newStreak=reqStreak;   // hält die Stufe: morgen reicht eine richtige Antwort
+      // markPromoted stempelt den Tag, damit lsPickWord/urgency() das Wort für
+      // den Rest des Tages seltener zieht (Abstand statt Sperre) — mehrere
+      // Aufstiege am selben Tag bleiben erlaubt.
+      moveTo=2; newStreak=0; markPromoted(wObj);
     }
     wObj.streak=newStreak; wObj.correct=(wObj.correct||0)+(correct?1:0); wObj.wrong=(wObj.wrong||0)+(!correct?1:0);
     trackPot(wObj,1,correct);
@@ -279,11 +280,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var newStreak = correct ? (wObj.streak||0)+1 : 0;
     var moveTo = fromPot;
     if(correct && newStreak>=reqStreak){
-      // Höchstens eine Stufe pro Tag — sonst ist „gelernt" nur ein guter Nachmittag.
-      if(canPromote(wObj)){
-        moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot;
-        newStreak = 0; markPromoted(wObj);
-      } else newStreak = reqStreak;   // hält die Stufe: morgen reicht eine richtige Antwort
+      // markPromoted stempelt den Tag, damit lsPickWord/urgency() das Wort für
+      // den Rest des Tages seltener zieht (Abstand statt Sperre) — mehrere
+      // Aufstiege am selben Tag bleiben erlaubt.
+      moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot;
+      newStreak = 0; markPromoted(wObj);
     } else if(!correct && fromPot>1){
       moveTo = fromPot-1; newStreak=0;
     }
@@ -331,15 +332,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var wObj = wIdx>=0 ? potArr.splice(wIdx,1)[0] : Object.assign({}, current, {streak:0});
     var newStreak = correct ? (wObj.streak||0)+1 : 0;
     var moveTo = fromPot;
-    // Bewusst OHNE canPromote/markPromoted (anders als submitAnswer/handleQuizAnswer):
-    // die Verben-Pattern-Läufe haben nur 3-8 Wörter (Chicken/Hamburger), die
-    // Ein-Topf-pro-Tag-Bremse aus core/leitner.js hat sie nach wenigen Minuten
-    // Übung komplett eingefroren — 4x richtig hintereinander und trotzdem in
-    // Topf 2 stecken geblieben. Der Verben-Lernplan (core/verbplan.js) verlangt
-    // ohnehin Topf 3 pro Tagespensum, was mit der Bremse nie am selben Tag
-    // erreichbar wäre.
     if(correct && newStreak>=reqStreak){
-      moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot; newStreak=0;
+      // markPromoted stempelt den Tag, damit lsPickWord/urgency() das Wort für
+      // den Rest des Tages seltener zieht (Abstand statt Sperre) — mehrere
+      // Aufstiege am selben Tag bleiben erlaubt.
+      moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot; newStreak=0; markPromoted(wObj);
     } else if(!correct && fromPot>1){
       moveTo = fromPot-1; newStreak=0;
     }
@@ -830,9 +827,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           trackPot(wObj,2,true);
           var moveTo=2;
           if(wObj.streak>=reqStreak){
-            // Höchstens eine Stufe pro Tag.
-            if(canPromote(wObj)){ moveTo=3; wObj.streak=0; markPromoted(wObj); }
-            else wObj.streak=reqStreak;
+            // markPromoted stempelt den Tag, damit lsPickWord/urgency() das
+            // Wort für den Rest des Tages seltener zieht (Abstand statt Sperre).
+            moveTo=3; wObj.streak=0; markPromoted(wObj);
           }
           if(!newData.pots[moveTo])newData.pots[moveTo]=[];
           newData.pots[moveTo].push(wObj);

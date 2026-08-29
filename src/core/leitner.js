@@ -420,11 +420,12 @@ function lsPickWord(progress, lastWord, opts) {
   return flat(pick.w, pick.pot);
 }
 
-// Eine Stufe pro Wort und Tag. Ohne diese Schranke klettert ein Wort in einer
-// einzigen Sitzung von „neu" auf „gelernt" (2 richtige für Topf 1, je 1 für die
-// Töpfe 2–5) — der Prozentwert misst dann einen guten Nachmittag, nicht Behalten.
-function canPromote(wObj, today){ return (wObj.pd||'') !== (today||lsToday()); }
-
+// Aufstiege werden nicht gesperrt (ein kleiner Wörter-Pool wie ein
+// Verben-Muster mit 3-8 Wörtern wäre sonst nach wenigen Minuten komplett
+// eingefroren), aber der Tag wird gestempelt: `retiredToday`/`urgency()` oben
+// ziehen ein heute schon aufgestiegenes Wort danach nur noch stark
+// abgeschwächt (Faktor 0.15), es rutscht also möglichst weit nach hinten statt
+// gleich wieder dranzukommen — Abstand statt Sperre.
 function markPromoted(wObj, today){ wObj.pd = today||lsToday(); }
 
 function generateSentences(words, runName, forceNew, lang) {
@@ -608,4 +609,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, canPromote, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
