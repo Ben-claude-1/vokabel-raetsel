@@ -7,7 +7,7 @@ import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, sco
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
-import { PATTERN_META, buildVerbPlan, verbPlanToday } from '../core/verbplan.js';
+import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, verbPlanProgress } from '../core/verbplan.js';
 import { ProgressStats } from './trainer.jsx';
 import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
@@ -1435,19 +1435,22 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
   },[]);
   // Lernplan für den Verben-Trainer — muss vor jedem frühen `return` stehen
   // (Rules of Hooks), deshalb hier statt weiter unten bei den anderen Runs.
-  var verbSchedule = useMemo(function(){
-    var verbPlanRuns = filterRunsByScope(runs, chapters, scope).map(function(r){
+  var [verbAckTick, setVerbAckTick] = useState(0);
+  var verbPlanRuns = useMemo(function(){
+    return filterRunsByScope(runs, chapters, scope).map(function(r){
       var words = safeWords(r.words);
       var pattern = words.length && words[0].pattern;
-      return pattern ? {pattern:pattern, words:words, created_at:r.created_at} : null;
+      return pattern ? {id:r.id, pattern:pattern, words:words, created_at:r.created_at} : null;
     }).filter(Boolean);
+  }, [runs, chapters, scope]);
+  var verbSchedule = useMemo(function(){
     if(!verbPlanRuns.length) return null;
     var startDate = verbPlanRuns.reduce(function(min,r){
       var d = (r.created_at||'').slice(0,10);
       return (d && (!min || d<min)) ? d : min;
     }, '');
     return startDate ? buildVerbPlan(verbPlanRuns, {startDate:startDate}) : null;
-  }, [runs, chapters, scope]);
+  }, [verbPlanRuns]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   // Pflicht-Wiederholung: solange sie offen ist, bleibt das Leiterspiel zu.
   if(reviewInfo && reviewInfo.locked) return(
@@ -1483,32 +1486,59 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     Noch keine Runs für {scopeText(scope)}.{runs.length>0?' In einer anderen Klasse/Sprache gibt es welche — oben in der Kopfzeile umschalten.':' Bitte Admin fragen.'}
   </div>;
   var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
-  // Rein informativ, sperrt nichts — siehe verbSchedule-Berechnung oben (vor
-  // den frühen Returns, wegen Rules of Hooks).
-  var verbToday = verbSchedule ? verbPlanToday(verbSchedule, dayKey()) : null;
-  var verbTodayRun = (verbToday && verbToday.type==='new') ? scopedRuns.find(function(r){
+  // Der aktuelle Tag wird über den echten Fortschritt ermittelt (Topf 3 =
+  // "Abfrage" erreicht), nicht über das Kalenderdatum — sonst würde Tag 4
+  // angezeigt, auch wenn Tag 1 noch gar nicht fertig ist. Siehe
+  // verbSchedule/verbPlanRuns oben (vor den frühen Returns, Rules of Hooks).
+  var verbCurrent = null;
+  if(verbSchedule){
+    var doneKeysByPattern = {};
+    verbPlanRuns.forEach(function(r){
+      var pots = (progressMap[r.id]&&progressMap[r.id].pots) || {};
+      var set = {};
+      [3,4,5,6].forEach(function(p){ (pots[p]||[]).forEach(function(w){ set[normWordKey(w.word)]=true; }); });
+      doneKeysByPattern[r.pattern] = set;
+    });
+    var verbAckDays = loadVerbAck(player.id);
+    verbCurrent = verbPlanProgress(verbSchedule, function(pattern, word){
+      var set = doneKeysByPattern[pattern];
+      return !!(set && set[normWordKey(word)]);
+    }, verbAckDays);
+  }
+  var verbTodayRun = (verbCurrent && verbCurrent.type==='new') ? scopedRuns.find(function(r){
     var words = safeWords(r.words);
-    return words.length && words[0].pattern===verbToday.pattern;
+    return words.length && words[0].pattern===verbCurrent.pattern;
   }) : null;
+  function ackVerbPlanDay(){
+    ackVerbDay(player.id, verbCurrent.day);
+    setVerbAckTick(function(t){return t+1;});
+  }
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:2}}>Leiterspiel — Run wählen</div>
       <div style={{fontSize:11,color:G400,marginBottom:12}}>{scopeText(scope)}</div>
-      {verbToday && (function(){
-        var pm = PATTERN_META[verbToday.pattern] || {};
-        return <div style={{padding:'12px 14px',marginBottom:12,borderRadius:12,background:verbToday.type==='new'?'#f0fdfa':verbToday.type==='test'?'#fdf2f8':'#fffbeb',border:'2px solid '+(verbToday.type==='new'?T:verbToday.type==='test'?'#ec4899':'#f59e0b')}}>
-          <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>📅 Verben-Lernplan · Tag {verbToday.day} von {verbToday.total}</div>
-          {verbToday.type==='new' && <div style={{fontSize:13,color:G900}}>
-            {pm.emoji} Heute neu ({pm.label}): <strong>{verbToday.words.map(function(w){return w.word;}).join(', ')}</strong>
+      {verbCurrent && verbCurrent.type==='finished' && (
+        <div style={{padding:'12px 14px',marginBottom:12,borderRadius:12,background:'#f0fdf4',border:'2px solid #86efac'}}>
+          <div style={{fontSize:13,color:G900}}>🎉 Verben-Lernplan komplett geschafft — alle Muster sitzen!</div>
+        </div>
+      )}
+      {verbCurrent && verbCurrent.type!=='finished' && (function(){
+        var pm = PATTERN_META[verbCurrent.pattern] || {};
+        return <div style={{padding:'12px 14px',marginBottom:12,borderRadius:12,background:verbCurrent.type==='new'?'#f0fdfa':verbCurrent.type==='test'?'#fdf2f8':'#fffbeb',border:'2px solid '+(verbCurrent.type==='new'?T:verbCurrent.type==='test'?'#ec4899':'#f59e0b')}}>
+          <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:4}}>📅 Verben-Lernplan · Tag {verbCurrent.day} von {verbCurrent.total}</div>
+          {verbCurrent.type==='new' && <div style={{fontSize:13,color:G900}}>
+            {pm.emoji} Heutiges Pensum ({pm.label}) — {verbCurrent.doneCount} von {verbCurrent.words.length} geschafft: <strong>{verbCurrent.words.map(function(w){return w.word;}).join(', ')}</strong>
           </div>}
-          {verbToday.type==='review' && <div style={{fontSize:13,color:G900}}>
-            🔁 Wiederholungstag — keine neuen Verben, {verbToday.patterns.map(function(p){return (PATTERN_META[p]||{}).emoji;}).join(' ')} festigen
+          {verbCurrent.type==='review' && <div style={{fontSize:13,color:G900}}>
+            🔁 Wiederholungstag — keine neuen Verben, {verbCurrent.patterns.map(function(p){return (PATTERN_META[p]||{}).emoji;}).join(' ')} festigen, bevor es weitergeht
           </div>}
-          {verbToday.type==='test' && <div style={{fontSize:13,color:G900}}>
+          {verbCurrent.type==='test' && <div style={{fontSize:13,color:G900}}>
             🏆 Abschlusstest — alle Muster einmal durchtesten, letzter Tag vor der Klassenarbeit!
           </div>}
+          {verbCurrent.type==='new' && <div style={{fontSize:11,color:G400,marginTop:4}}>Erst wenn alle hier fertig abgefragt wurden (Topf ✍️ Abfrage), schaltet sich Tag {verbCurrent.day+1} frei.</div>}
           {verbTodayRun && <button onClick={function(){onStart(verbTodayRun,gs);}} style={BtnStyle(T,'white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>▶ Los geht's</button>}
-          {verbToday.type==='review' && onReview && <button onClick={onReview} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
+          {verbCurrent.type==='review' && onReview && <button onClick={function(){ackVerbPlanDay();onReview();}} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
+          {verbCurrent.type!=='new' && <button onClick={ackVerbPlanDay} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:11,marginTop:6})}>✓ Schon erledigt, weiter</button>}
         </div>;
       })()}
       {scopedRuns.map(function(run){

@@ -70,11 +70,42 @@ function buildVerbPlan(patternRuns, opts) {
   });
 }
 
-function verbPlanToday(schedule, todayStr) {
+// Der aktuelle Schritt wird über den echten Fortschritt ermittelt, nicht über
+// das Kalenderdatum — sonst zeigt der Banner "Tag 4" an, obwohl Tag 1 noch gar
+// nicht fertig ist. `isWordDone(pattern, word)` prüft, ob ein Verb Topf 3
+// (Abfrage, frei ohne Hilfe) erreicht hat. `ackDays` (Set/Objekt {day:true})
+// markiert Wiederholungs-/Testtage als "gesehen", weil die selbst keine
+// eigene Wortliste zum Abhaken haben.
+function verbPlanProgress(schedule, isWordDone, ackDays) {
   if (!schedule || !schedule.length) return null;
-  var idx = schedule.findIndex(function(d) { return d.date === todayStr; });
-  if (idx < 0) return null;
-  return Object.assign({total: schedule.length}, schedule[idx]);
+  ackDays = ackDays || {};
+  for (var i = 0; i < schedule.length; i++) {
+    var d = schedule[i];
+    if (d.type === 'new') {
+      var doneCount = d.words.filter(function(w) { return isWordDone(d.pattern, w.word); }).length;
+      if (doneCount < d.words.length) {
+        return Object.assign({total: schedule.length, doneCount: doneCount}, d);
+      }
+    } else if (!ackDays[d.day]) {
+      return Object.assign({total: schedule.length}, d);
+    }
+  }
+  return {type: 'finished', day: schedule.length, total: schedule.length};
 }
 
-export { PATTERN_ORDER, PATTERN_META, DEFAULT_BLOCKS, buildVerbPlan, verbPlanToday, addDays };
+function verbAckKey(playerId) { return 'lernapp_verbplan_ack_' + playerId; }
+
+function loadVerbAck(playerId) {
+  try {
+    var raw = localStorage.getItem(verbAckKey(playerId));
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+
+function ackVerbDay(playerId, day) {
+  var acked = loadVerbAck(playerId);
+  acked[day] = true;
+  try { localStorage.setItem(verbAckKey(playerId), JSON.stringify(acked)); } catch (e) {}
+}
+
+export { PATTERN_ORDER, PATTERN_META, DEFAULT_BLOCKS, buildVerbPlan, verbPlanProgress, loadVerbAck, ackVerbDay, addDays };
