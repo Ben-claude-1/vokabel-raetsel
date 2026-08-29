@@ -1092,21 +1092,36 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var corr3=sessionLog.filter(function(l){return l.correct;}).length;
     var wrong3=sessionLog.filter(function(l){return !l.correct&&!l.skipped;}).length;
     var pct2=lsPercent(data);
+    // Ein Wort kann in einer Sitzung mehrfach drankommen (Töpfe-Aufstieg ohne
+    // Bremse) — pro Antwort eine eigene Zeile hätte bei 3 Vokabeln 8 Zeilen
+    // ergeben und ausgesehen wie "8 verschiedene Vokabeln geschafft". Deshalb
+    // hier pro Vokabel zusammenfassen (Anzahl Antworten + Gesamtpunkte).
+    var wordSummary = (function(){
+      var byWord = {}; var order = [];
+      sessionLog.forEach(function(l){
+        if(!byWord[l.word]){ byWord[l.word]={word:l.word, clue:l.clue, correct:0, wrong:0, skipped:0, pts:0}; order.push(l.word); }
+        var g = byWord[l.word];
+        if(l.correct) g.correct++; else if(l.skipped) g.skipped++; else g.wrong++;
+        g.pts += (l.pts||0);
+      });
+      return order.map(function(w){ return byWord[w]; });
+    })();
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:24,color:'white',textAlign:'center',marginBottom:12}}>
           <div style={{fontSize:40,marginBottom:8}}>{pct2>=80?'🏆':pct2>=60?'👍':'📚'}</div>
           <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>Session beendet</div>
-          <div style={{fontSize:14,opacity:.85}}>{corr3} richtig · {wrong3} falsch</div>
+          <div style={{fontSize:14,opacity:.85}}>{corr3} richtig · {wrong3} falsch · {wordSummary.length} Vokabel{wordSummary.length===1?'':'n'}</div>
           <div style={{marginTop:8,fontSize:16,fontWeight:'bold'}}>{pct2}% Gesamtfortschritt</div>
         </div>
-        {sessionLog.length>0&&<div style={{marginBottom:12}}>
-          {sessionLog.slice(-10).map(function(l,i){
-            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',marginBottom:3,borderRadius:7,background:l.helped?'#dbeafe':l.correct?'#d1fae5':l.skipped?G50:'#fee2e2',fontSize:11}}>
-              <span>{l.helped?'🔽':l.correct?'✓':l.skipped?'⏭':'✗'}</span>
-              <span style={{fontWeight:'bold',flex:1}}>{l.word}</span>
-              <span style={{color:G400}}>{l.clue}</span>
-              {l.pts>0&&<span style={{color:AM,fontWeight:'bold'}}>+{l.pts}</span>}
+        {wordSummary.length>0&&<div style={{marginBottom:12}}>
+          {wordSummary.slice(-10).map(function(g,i){
+            return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 8px',marginBottom:3,borderRadius:7,background:g.wrong===0?'#d1fae5':g.correct===0?'#fee2e2':'#fef9c3',fontSize:11}}>
+              <span>{g.wrong===0?'✓':g.correct===0?'✗':'±'}</span>
+              <span style={{fontWeight:'bold',flex:1}}>{g.word}</span>
+              <span style={{color:G400}}>{g.clue}</span>
+              <span style={{color:G400}}>{g.correct+g.wrong+g.skipped}×</span>
+              {g.pts>0&&<span style={{color:AM,fontWeight:'bold'}}>+{g.pts}</span>}
             </div>;
           })}
         </div>}
@@ -1447,6 +1462,11 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
   var [verbAckTick, setVerbAckTick] = useState(0);
   var [showVerbPlan, setShowVerbPlan] = useState(false);
   var [verbCelebrateDay, setVerbCelebrateDay] = useState(null);
+  // Gruppen-Wiederholung an einem Wiederholungstag: alle bisher gelernten
+  // Muster gepoolt, zufällig gemischt, überall derselbe Ablauf (3 Formen ohne
+  // Tipp) — unabhängig von der Leiter-/Topf-Mechanik der einzelnen Muster-Runs,
+  // deshalb hier lokal und ohne Fortschritts-Speicherung (wie der Testtag).
+  var [verbReview, setVerbReview] = useState(null);
   var verbPlanRuns = useMemo(function(){
     return filterRunsByScope(runs, chapters, scope).map(function(r){
       var words = safeWords(r.words);
@@ -1536,6 +1556,78 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     ackVerbDay(player.id, verbCurrent.day);
     setVerbAckTick(function(t){return t+1;});
   }
+  function startVerbReview(patterns){
+    var pool = [];
+    verbPlanRuns.forEach(function(r){ if(patterns.indexOf(r.pattern)>=0) pool = pool.concat(r.words); });
+    if(!pool.length) return;
+    setVerbReview({words:shuffleArr(pool), idx:0, log:[], result:null, done:false});
+  }
+  function submitVerbReviewAnswer(res){
+    setVerbReview(function(r){
+      if(!r) return r;
+      var w = r.words[r.idx];
+      var entry = {word:w.word, clue:w.clue, correct:!!res.allCorrect, fields:res.fields};
+      return Object.assign({}, r, {log:r.log.concat([entry]), result:entry});
+    });
+  }
+  function advanceVerbReview(){
+    setVerbReview(function(r){
+      if(!r) return r;
+      var nextIdx = r.idx+1;
+      if(nextIdx>=r.words.length) return Object.assign({}, r, {done:true, result:null});
+      return Object.assign({}, r, {idx:nextIdx, result:null});
+    });
+  }
+  function finishVerbReview(){
+    ackVerbPlanDay();
+    setVerbReview(null);
+  }
+  if(verbReview){
+    if(verbReview.done){
+      var reviewByWord = {}; var reviewOrder = [];
+      verbReview.log.forEach(function(l){
+        if(!reviewByWord[l.word]){ reviewByWord[l.word]={word:l.word,clue:l.clue,correct:0,wrong:0}; reviewOrder.push(l.word); }
+        var g = reviewByWord[l.word];
+        if(l.correct) g.correct++; else g.wrong++;
+      });
+      var reviewTotalCorrect = verbReview.log.filter(function(l){return l.correct;}).length;
+      return(
+        <div style={{padding:8}}>
+          <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:24,color:'white',textAlign:'center',marginBottom:12}}>
+            <div style={{fontSize:40,marginBottom:8}}>{reviewTotalCorrect===verbReview.log.length?'🏆':'📚'}</div>
+            <div style={{fontSize:22,fontWeight:'bold',marginBottom:4}}>Wiederholung beendet</div>
+            <div style={{fontSize:14,opacity:.85}}>{reviewTotalCorrect} von {verbReview.log.length} richtig</div>
+          </div>
+          <div style={{marginBottom:12}}>
+            {reviewOrder.map(function(w,i){
+              var g = reviewByWord[w];
+              return <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',marginBottom:3,borderRadius:8,background:g.wrong===0?'#d1fae5':'#fee2e2',fontSize:12}}>
+                <span>{g.wrong===0?'✓':'✗'}</span><span style={{fontWeight:'bold',flex:1}}>{g.word}</span><span style={{color:G400}}>{g.clue}</span>
+              </div>;
+            })}
+          </div>
+          <button onClick={finishVerbReview} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>← Zurück zum Lernplan</button>
+        </div>
+      );
+    }
+    var rw = verbReview.words[verbReview.idx];
+    return(
+      <div style={{padding:8}}>
+        <div style={{textAlign:'center',fontSize:11,color:G400,marginBottom:8}}>🔁 Wiederholung · {verbReview.idx+1}/{verbReview.words.length}</div>
+        {verbReview.result ? (
+          <div>
+            <div style={{padding:16,borderRadius:14,marginBottom:12,background:verbReview.result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(verbReview.result.correct?GR:RE)}}>
+              <div style={{fontSize:16,fontWeight:'bold',color:verbReview.result.correct?'#065f46':'#991b1b',marginBottom:6}}>{verbReview.result.correct?'✓ Richtig':'✗ Nicht ganz'}</div>
+              <VerbResultFields fields={verbReview.result.fields}/>
+            </div>
+            <button onClick={advanceVerbReview} style={BtnStyle(T,'white',{width:'100%',padding:'12px'})}>{verbReview.idx+1>=verbReview.words.length?'→ Auswertung':'→ Weiter'}</button>
+          </div>
+        ) : (
+          <VerbFieldsPanel current={rw} mode='free' forceAllFields={true} onSubmit={submitVerbReviewAnswer}/>
+        )}
+      </div>
+    );
+  }
   return(
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:2}}>Leiterspiel — Run wählen</div>
@@ -1563,7 +1655,7 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
           </div>}
           {verbCurrent.type==='new' && <div style={{fontSize:11,color:G400,marginTop:4}}>Erst wenn alle hier fertig abgefragt wurden (Topf ✍️ Abfrage), schaltet sich Tag {verbCurrent.day+1} frei.</div>}
           {verbTodayRun && <button onClick={function(){onStart(verbTodayRun,gs);}} style={BtnStyle(T,'white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>▶ Los geht's</button>}
-          {verbCurrent.type==='review' && onReview && <button onClick={function(){ackVerbPlanDay();onReview();}} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
+          {verbCurrent.type==='review' && <button onClick={function(){startVerbReview(verbCurrent.patterns);}} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
           {verbCurrent.type!=='new' && <button onClick={ackVerbPlanDay} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:11,marginTop:6})}>✓ Schon erledigt, weiter</button>}
         </div>;
       })()}

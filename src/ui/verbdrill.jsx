@@ -99,12 +99,14 @@ function hintPlaceholder(expectedFull) {
   return p ? p[0]+'…' : '';
 }
 
-function VerbFieldsPanel({current, mode, onSubmit}) {
+function VerbFieldsPanel({current, mode, onSubmit, forceAllFields}) {
   var withHint = mode === 'hint';
   // Chicken: alle 3 Formen sind textgleich — dreimal dieselbe Zeichenkette
   // abtippen prüft nichts (siehe ChatGPT-Vorlage: dort wird das nur einmal
   // schnell im Kopf bestätigt, "cut – cut – cut"), deshalb nur 1 Feld.
-  var isChicken = current.pattern === 'chicken';
+  // In der Gruppen-Wiederholung soll aber bewusst immer derselbe Ablauf gelten
+  // (alle 3 Formen, egal welches Muster) — dort kommt forceAllFields=true rein.
+  var isChicken = current.pattern === 'chicken' && !forceAllFields;
   var fieldsMeta = useMemo(function(){
     if(isChicken) return [
       {key:'grundform', label:'Form (alle 3 gleich)', expectedFull: wordDisplay(current), placeholder: withHint?hintPlaceholder(current.word):''}
