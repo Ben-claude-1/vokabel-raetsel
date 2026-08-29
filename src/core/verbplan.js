@@ -108,4 +108,16 @@ function ackVerbDay(playerId, day) {
   try { localStorage.setItem(verbAckKey(playerId), JSON.stringify(acked)); } catch (e) {}
 }
 
-export { PATTERN_ORDER, PATTERN_META, DEFAULT_BLOCKS, buildVerbPlan, verbPlanProgress, loadVerbAck, ackVerbDay, addDays };
+// Merkt sich, bis zu welcher Tagesnummer die Gratulations-Popup schon gezeigt
+// wurde — sonst poppt sie bei jedem Öffnen des Run-Pickers erneut auf.
+function verbCelebrateKey(playerId) { return 'lernapp_verbplan_celebrated_' + playerId; }
+
+function loadVerbCelebrated(playerId) {
+  try { return parseInt(localStorage.getItem(verbCelebrateKey(playerId)) || '0', 10) || 0; } catch (e) { return 0; }
+}
+
+function saveVerbCelebrated(playerId, day) {
+  try { localStorage.setItem(verbCelebrateKey(playerId), String(day)); } catch (e) {}
+}
+
+export { PATTERN_ORDER, PATTERN_META, DEFAULT_BLOCKS, buildVerbPlan, verbPlanProgress, loadVerbAck, ackVerbDay, loadVerbCelebrated, saveVerbCelebrated, addDays };

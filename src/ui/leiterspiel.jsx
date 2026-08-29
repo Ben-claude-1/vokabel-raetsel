@@ -7,7 +7,7 @@ import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, sco
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
-import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, verbPlanProgress } from '../core/verbplan.js';
+import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, loadVerbCelebrated, saveVerbCelebrated, verbPlanProgress } from '../core/verbplan.js';
 import { ProgressStats } from './trainer.jsx';
 import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
@@ -1436,6 +1436,8 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
   // Lernplan für den Verben-Trainer — muss vor jedem frühen `return` stehen
   // (Rules of Hooks), deshalb hier statt weiter unten bei den anderen Runs.
   var [verbAckTick, setVerbAckTick] = useState(0);
+  var [showVerbPlan, setShowVerbPlan] = useState(false);
+  var [verbCelebrateDay, setVerbCelebrateDay] = useState(null);
   var verbPlanRuns = useMemo(function(){
     return filterRunsByScope(runs, chapters, scope).map(function(r){
       var words = safeWords(r.words);
@@ -1451,6 +1453,37 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     }, '');
     return startDate ? buildVerbPlan(verbPlanRuns, {startDate:startDate}) : null;
   }, [verbPlanRuns]);
+  // Der aktuelle Tag wird über den echten Fortschritt ermittelt (Topf 3 =
+  // "Abfrage" erreicht), nicht über das Kalenderdatum — sonst würde Tag 4
+  // angezeigt, auch wenn Tag 1 noch gar nicht fertig ist.
+  var verbCurrent = useMemo(function(){
+    if(!verbSchedule || !player) return null;
+    var doneKeysByPattern = {};
+    verbPlanRuns.forEach(function(r){
+      var pots = (progressMap[r.id]&&progressMap[r.id].pots) || {};
+      var set = {};
+      [3,4,5,6].forEach(function(p){ (pots[p]||[]).forEach(function(w){ set[normWordKey(w.word)]=true; }); });
+      doneKeysByPattern[r.pattern] = set;
+    });
+    var verbAckDays = loadVerbAck(player.id);
+    return verbPlanProgress(verbSchedule, function(pattern, word){
+      var set = doneKeysByPattern[pattern];
+      return !!(set && set[normWordKey(word)]);
+    }, verbAckDays);
+  }, [verbSchedule, verbPlanRuns, progressMap, player, verbAckTick]);
+  // Gratulation, sobald ein neuer Tag erreicht wird (= der vorige Tag gerade
+  // fertig geworden ist) — einmalig pro Tag, gemerkt in localStorage, damit
+  // ein erneuter Besuch der Seite die Popup nicht nochmal zeigt.
+  useEffect(function(){
+    if(!verbCurrent || !player) return;
+    var completed = verbCurrent.type==='finished' ? verbCurrent.total : verbCurrent.day-1;
+    if(completed<=0) return;
+    var last = loadVerbCelebrated(player.id);
+    if(completed>last){
+      setVerbCelebrateDay(completed);
+      saveVerbCelebrated(player.id, completed);
+    }
+  }, [verbCurrent && verbCurrent.day, verbCurrent && verbCurrent.type, player && player.id]);
   if(loading) return <div style={{textAlign:'center',padding:40,color:G400}}>Lade Runs…</div>;
   // Pflicht-Wiederholung: solange sie offen ist, bleibt das Leiterspiel zu.
   if(reviewInfo && reviewInfo.locked) return(
@@ -1486,25 +1519,6 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     Noch keine Runs für {scopeText(scope)}.{runs.length>0?' In einer anderen Klasse/Sprache gibt es welche — oben in der Kopfzeile umschalten.':' Bitte Admin fragen.'}
   </div>;
   var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
-  // Der aktuelle Tag wird über den echten Fortschritt ermittelt (Topf 3 =
-  // "Abfrage" erreicht), nicht über das Kalenderdatum — sonst würde Tag 4
-  // angezeigt, auch wenn Tag 1 noch gar nicht fertig ist. Siehe
-  // verbSchedule/verbPlanRuns oben (vor den frühen Returns, Rules of Hooks).
-  var verbCurrent = null;
-  if(verbSchedule){
-    var doneKeysByPattern = {};
-    verbPlanRuns.forEach(function(r){
-      var pots = (progressMap[r.id]&&progressMap[r.id].pots) || {};
-      var set = {};
-      [3,4,5,6].forEach(function(p){ (pots[p]||[]).forEach(function(w){ set[normWordKey(w.word)]=true; }); });
-      doneKeysByPattern[r.pattern] = set;
-    });
-    var verbAckDays = loadVerbAck(player.id);
-    verbCurrent = verbPlanProgress(verbSchedule, function(pattern, word){
-      var set = doneKeysByPattern[pattern];
-      return !!(set && set[normWordKey(word)]);
-    }, verbAckDays);
-  }
   var verbTodayRun = (verbCurrent && verbCurrent.type==='new') ? scopedRuns.find(function(r){
     var words = safeWords(r.words);
     return words.length && words[0].pattern===verbCurrent.pattern;
@@ -1517,6 +1531,9 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
     <div style={{padding:8}}>
       <div style={{fontWeight:'bold',fontSize:14,color:G900,marginBottom:2}}>Leiterspiel — Run wählen</div>
       <div style={{fontSize:11,color:G400,marginBottom:12}}>{scopeText(scope)}</div>
+      {verbCelebrateDay && <CelebrationPopup
+        msg={'Tag '+verbCelebrateDay+' geschafft! 💪'}
+        onClose={function(){setVerbCelebrateDay(null);}}/>}
       {verbCurrent && verbCurrent.type==='finished' && (
         <div style={{padding:'12px 14px',marginBottom:12,borderRadius:12,background:'#f0fdf4',border:'2px solid #86efac'}}>
           <div style={{fontSize:13,color:G900}}>🎉 Verben-Lernplan komplett geschafft — alle Muster sitzen!</div>
@@ -1541,6 +1558,28 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
           {verbCurrent.type!=='new' && <button onClick={ackVerbPlanDay} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:11,marginTop:6})}>✓ Schon erledigt, weiter</button>}
         </div>;
       })()}
+      {verbSchedule && verbSchedule.length>0 && <div style={{marginBottom:12}}>
+        <button onClick={function(){setShowVerbPlan(function(v){return !v;});}}
+          style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:11})}>
+          {showVerbPlan?'▲ Arbeitspakete ausblenden':'▼ Alle Arbeitspakete anzeigen ('+verbSchedule.length+')'}
+        </button>
+        {showVerbPlan && <div style={{marginTop:8,border:'2px solid '+G200,borderRadius:12,overflow:'hidden'}}>
+          {verbSchedule.map(function(d, i){
+            var status = !verbCurrent ? 'upcoming' : (d.day<verbCurrent.day || verbCurrent.type==='finished') ? 'done' : d.day===verbCurrent.day ? 'current' : 'upcoming';
+            var pm = d.pattern ? (PATTERN_META[d.pattern]||{}) : null;
+            var label = d.type==='new' ? (pm.emoji+' '+pm.label+' — '+d.words.length+' neu')
+              : d.type==='review' ? '🔁 Wiederholung ('+d.patterns.map(function(p){return (PATTERN_META[p]||{}).emoji;}).join(' ')+')'
+              : '🏆 Abschlusstest';
+            return <div key={d.day} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
+              borderBottom:i<verbSchedule.length-1?'1px solid '+G100:'none',
+              background:status==='current'?'#f0fdfa':'white',opacity:status==='upcoming'?0.5:1}}>
+              <div style={{fontSize:15,width:20,textAlign:'center'}}>{status==='done'?'✅':status==='current'?'▶':'⏳'}</div>
+              <div style={{fontSize:11,color:G400,width:42}}>Tag {d.day}</div>
+              <div style={{fontSize:12,color:G900,flex:1}}>{label}</div>
+            </div>;
+          })}
+        </div>}
+      </div>}
       {scopedRuns.map(function(run){
         var wordCount = safeWords(run.words).length || run.word_count || 0;
         var prog = progressMap[run.id];
