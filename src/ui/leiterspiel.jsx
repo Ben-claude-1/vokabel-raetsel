@@ -327,12 +327,19 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
     var potArr = (newData.pots[fromPot]||[]);
     var wIdx = potArr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(current.word); });
+    if(wIdx<0) wIdx = potArr.findIndex(function(w){ return w.word===current.word; });
     var wObj = wIdx>=0 ? potArr.splice(wIdx,1)[0] : Object.assign({}, current, {streak:0});
     var newStreak = correct ? (wObj.streak||0)+1 : 0;
     var moveTo = fromPot;
+    // Bewusst OHNE canPromote/markPromoted (anders als submitAnswer/handleQuizAnswer):
+    // die Verben-Pattern-Läufe haben nur 3-8 Wörter (Chicken/Hamburger), die
+    // Ein-Topf-pro-Tag-Bremse aus core/leitner.js hat sie nach wenigen Minuten
+    // Übung komplett eingefroren — 4x richtig hintereinander und trotzdem in
+    // Topf 2 stecken geblieben. Der Verben-Lernplan (core/verbplan.js) verlangt
+    // ohnehin Topf 3 pro Tagespensum, was mit der Bremse nie am selben Tag
+    // erreichbar wäre.
     if(correct && newStreak>=reqStreak){
-      if(canPromote(wObj)){ moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot; newStreak=0; markPromoted(wObj); }
-      else newStreak = reqStreak;
+      moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot; newStreak=0;
     } else if(!correct && fromPot>1){
       moveTo = fromPot-1; newStreak=0;
     }
