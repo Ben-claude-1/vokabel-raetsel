@@ -101,7 +101,14 @@ function hintPlaceholder(expectedFull) {
 
 function VerbFieldsPanel({current, mode, onSubmit}) {
   var withHint = mode === 'hint';
+  // Chicken: alle 3 Formen sind textgleich — dreimal dieselbe Zeichenkette
+  // abtippen prüft nichts (siehe ChatGPT-Vorlage: dort wird das nur einmal
+  // schnell im Kopf bestätigt, "cut – cut – cut"), deshalb nur 1 Feld.
+  var isChicken = current.pattern === 'chicken';
   var fieldsMeta = useMemo(function(){
+    if(isChicken) return [
+      {key:'grundform', label:'Form (alle 3 gleich)', expectedFull: wordDisplay(current), placeholder: withHint?hintPlaceholder(current.word):''}
+    ];
     return [
       {key:'grundform', label:'Grundform', expectedFull: wordDisplay(current), placeholder: withHint?hintPlaceholder(current.word):''},
       {key:'simplePast', label:'Simple Past', expectedFull: current.pastSimple, placeholder: withHint?hintPlaceholder(current.pastSimple):''},
@@ -115,11 +122,18 @@ function VerbFieldsPanel({current, mode, onSubmit}) {
 }
 
 function VerbReversePanel({current, showForm, onSubmit}) {
+  var isChicken = current.pattern === 'chicken';
   var shownFull = showForm==='pastParticiple' ? current.pastParticiple : current.pastSimple;
   var missingKey = showForm==='pastParticiple' ? 'pastSimple' : 'pastParticiple';
   var missingLabel = showForm==='pastParticiple' ? 'Simple Past' : 'Past Participle';
   var shownDisplay = primaryForm(shownFull).replace(/^(\S+)$/, '$1'); // nur zur Klarheit, keine Änderung
+  // Chicken: die gezeigte Form ist textgleich mit Grundform UND der fehlenden
+  // Form — "Grundform"/"other" abzufragen hieße nur, den bereits sichtbaren
+  // Text nochmal abzuschreiben. Einzig sinnvoller Test bleibt die Bedeutung.
   var fieldsMeta = useMemo(function(){
+    if(isChicken) return [
+      {key:'meaning', label:'Bedeutung (Deutsch)', expectedFull: current.meaning}
+    ];
     return [
       {key:'grundform', label:'Grundform', expectedFull: wordDisplay(current)},
       {key:'meaning', label:'Bedeutung (Deutsch)', expectedFull: current.meaning},
