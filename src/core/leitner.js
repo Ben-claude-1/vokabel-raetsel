@@ -300,7 +300,10 @@ function lsSaveProgress(pid,rid,data,eid) {
   }).then(function(r){return r.json();}).catch(function(){return {_ok:true};});
 }
 
-function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return{word:w.word,clue:w.clue,type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0};}),2:[],3:[],4:[],5:[],6:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
+// Object.assign statt Feld-Whitelist: Zusatzfelder wie beim Verben-Trainer
+// (pastSimple/pastParticiple/pattern/meaning) müssen den Lernstand überleben,
+// sonst verschwinden sie beim ersten Speichern.
+function lsInitProgress(words,sentences) { return {pots:{1:words.map(function(w){return Object.assign({},w,{type:w.type||'noun',chapterId:w.chapterId||'',streak:0,wrongStreak:0});}),2:[],3:[],4:[],5:[],6:[]},sentences:(sentences||[]).map(function(s){return{text:s.text,translation:s.translation,streak:0};}),bonusStarted:false,history:[],lastWord:null,streak:0}; }
 
 function lsPercent(progress,gs) { var p=progress.pots||{}; var t=(p[1]||[]).length+(p[2]||[]).length+(p[3]||[]).length+(p[4]||[]).length+(p[5]||[]).length+(p[6]||[]).length; if(t===0) return 0; var score=(p[2]||[]).length*17+(p[3]||[]).length*34+(p[4]||[]).length*50+(p[5]||[]).length*67+(p[6]||[]).length*100; var base=Math.round(score/t); if(progress.bonusStarted&&(progress.sentences||[]).length>0){var sl=progress.sentences.filter(function(s){return s.streak>=2;}).length;return Math.min(100,base+Math.round(sl/progress.sentences.length*10));}return base; }
 
@@ -390,8 +393,8 @@ function lsPickWord(progress, lastWord, opts) {
   var today = lsToday();
   var setSize = Math.max(4, opts.workingSet || WORKING_SET);
   var pots = (progress && progress.pots) || {};
-  function flat(w,pot){ return {word:w.word,clue:w.clue,streak:w.streak||0,correct:w.correct||0,
-    wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}; }
+  function flat(w,pot){ return Object.assign({},w,{streak:w.streak||0,correct:w.correct||0,
+    wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}); }
   function avail(pot){ return (pots[pot]||[]).filter(function(w){ return w && !w.disputeId; }); }
   function notLast(w){ return !lastWord || w.word!==lastWord; }
 

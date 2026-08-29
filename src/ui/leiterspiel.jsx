@@ -8,11 +8,20 @@ import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON,
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { ProgressStats } from './trainer.jsx';
+import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
 
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var lang = useMemo(function(){ return runScope(run, chapters).language; }, [run, chapters]);
+  // Verben-Trainer-Runs (unregelmäßige Verben) erkennt man am `pattern`-Feld
+  // der Wörter — daran hängt sowohl die Fragen-Art als auch die Topf-Beschriftung.
+  var isVerbRun = useMemo(function(){
+    try{
+      var rw = typeof run.words==='string' ? JSON.parse(run.words||'[]') : (run.words||[]);
+      return rw.some(function(w){ return !!(w && w.pattern); });
+    }catch(e){ return false; }
+  }, [run]);
   var [data, setData] = useState(null);
   var [dataLoading, setDataLoading] = useState(true);
   var [phase, setPhase] = useState('pick');
@@ -69,7 +78,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       });
       runWords.forEach(function(w){
         var k = normWordKey(w.word);
-        if(!seen[k]) newPots[1].push({word:w.word, clue:w.clue, type:w.type||'noun', chapterId:w.chapterId||'', streak:0, wrongStreak:0});
+        // Object.assign statt Whitelist: Verben-Trainer-Zusatzfelder (pastSimple/
+        // pastParticiple/pattern/meaning) müssen mitkommen, sonst fehlen sie beim
+        // ersten Aufruf eines neuen Runs.
+        if(!seen[k]) newPots[1].push(Object.assign({}, w, {type:w.type||'noun', chapterId:w.chapterId||'', streak:0, wrongStreak:0}));
       });
       return Object.assign({}, d, {pots:newPots});
     }
@@ -135,6 +147,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(!w){ setPhase('done'); return; }
     setCurrent(w); setInput(''); setResult(null); setHelpMode(false);
     qShownAt.current = Date.now();
+    if(w.pattern){
+      // Verben-Trainer-Leiter: 1 Zuordnen (Chicken übersprungen, da alle 3
+      // Formen gleich sind) → 2 mit Hilfe → 3 frei → 4/5 rückwärts.
+      if(w.pot===1 && w.pattern!=='chicken') setPhase('verbmatch');
+      else if(w.pot===1 || w.pot===2) setPhase('verbhint');
+      else if(w.pot===3) setPhase('verbfree');
+      else setPhase('verbreverse');
+      return;
+    }
     if(w.pot===1){
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
@@ -287,6 +308,53 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',skipped:!!skipped,fromPot:fromPot,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
     setResult({correct:correct,partial:status==='partial',skipped:!!skipped,answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+    setPhase('showResult');
+    if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
+  }
+
+  // Verben-Trainer-Antwort: der Verben-Panel hat bereits alle 2-3 Felder
+  // selbst geprüft (siehe verbdrill.jsx) und liefert nur noch das Ergebnis.
+  // Auf-/Abstieg, Tages-Log und Punkte laufen über dieselbe Mechanik wie bei
+  // submitAnswer, nur mit vorgegebenem `correct` statt checkAnswer().
+  function submitVerbAnswer(payload){
+    if(!current) return;
+    var rt = answerMs();
+    var fromPot = current.pot;
+    var correct = !!payload.allCorrect;
+    setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
+    var newData = JSON.parse(JSON.stringify(data));
+    var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
+    var potArr = (newData.pots[fromPot]||[]);
+    var wIdx = potArr.findIndex(function(w){ return normWordKey(w.word)===normWordKey(current.word); });
+    var wObj = wIdx>=0 ? potArr.splice(wIdx,1)[0] : Object.assign({}, current, {streak:0});
+    var newStreak = correct ? (wObj.streak||0)+1 : 0;
+    var moveTo = fromPot;
+    if(correct && newStreak>=reqStreak){
+      if(canPromote(wObj)){ moveTo = fromPot<(streak.pots||6) ? fromPot+1 : fromPot; newStreak=0; markPromoted(wObj); }
+      else newStreak = reqStreak;
+    } else if(!correct && fromPot>1){
+      moveTo = fromPot-1; newStreak=0;
+    }
+    wObj.streak = newStreak;
+    wObj.correct = (wObj.correct||0) + (correct?1:0);
+    wObj.wrong = (wObj.wrong||0) + (!correct?1:0);
+    trackPot(wObj, fromPot, correct);
+    if(!(newData.pots[moveTo])) newData.pots[moveTo]=[];
+    newData.pots[moveTo].push(wObj);
+    if(correct) newData.totalCorrect=(newData.totalCorrect||0)+1;
+    else newData.totalWrong=(newData.totalWrong||0)+1;
+    tallyAnswer(correct, false, potCredit(fromPot));
+    lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
+      pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj});
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
+    saveAndUpdate(newData);
+    var pts = correct ? fromPot*5 : 0;
+    if(pts>0 && onUpdateScore) onUpdateScore(pts);
+    var newSc = correct ? streakCount+1 : 0;
+    setStreakCount(newSc);
+    var log = {word:current.word,clue:current.clue,typed:JSON.stringify(payload.typed||{}),correct:correct,partial:false,fromPot:fromPot,toPot:moveTo,pts:pts};
+    setSessionLog(function(l){return l.concat([log]);});
+    setResult({correct:correct,word:current.word,clue:current.clue,verbFields:payload.fields,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
     setPhase('showResult');
     if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
@@ -574,10 +642,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',justifyContent:'center'}}>
           {[1,2,3,4,5].map(function(p){
             var cnt = (data.pots[p]||[]).length;
+            var pl = isVerbRun ? VERB_POT_LABEL : POT_LABEL;
+            var pi = isVerbRun ? VERB_POT_ICON : POT_ICON;
             return <div key={p} style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:POT_COL[p]+'18',border:'2px solid '+POT_COL[p]+'44',minWidth:52}}>
-              <div style={{fontSize:18}}>{POT_ICON[p]}</div>
+              <div style={{fontSize:18}}>{pi[p]}</div>
               <div style={{fontSize:17,fontWeight:'bold',color:POT_COL[p]}}>{cnt}</div>
-              <div style={{fontSize:9,color:G400}}>{POT_LABEL[p]}</div>
+              <div style={{fontSize:9,color:G400}}>{pl[p]}</div>
             </div>;
           })}
           {learned>0&&<div style={{textAlign:'center',padding:'8px 10px',borderRadius:10,background:GR+'18',border:'2px solid '+GR+'44',minWidth:52}}>
@@ -644,6 +714,37 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           </div>;
         })()}
         <button onClick={function(){var nd=saveSession(data);if(nd!==data){lsSaveProgress(player.id,run.id,nd);}onDone();}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:13})}>← Zurück</button>
+      </div>
+    );
+  }
+
+  if(phase==='verbmatch'){
+    return(
+      <div style={{padding:8}}>
+        {liveChip}
+        {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
+        {current&&<VerbMatchPanel current={current} onSubmit={submitVerbAnswer}/>}
+      </div>
+    );
+  }
+
+  if(phase==='verbhint'||phase==='verbfree'){
+    return(
+      <div style={{padding:8}}>
+        {liveChip}
+        {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
+        {current&&<VerbFieldsPanel current={current} mode={phase==='verbhint'?'hint':'free'} onSubmit={submitVerbAnswer}/>}
+      </div>
+    );
+  }
+
+  if(phase==='verbreverse'){
+    var verbShowForm = current && current.pot===5 ? 'pastParticiple' : 'simplePast';
+    return(
+      <div style={{padding:8}}>
+        {liveChip}
+        {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
+        {current&&<VerbReversePanel current={current} showForm={verbShowForm} onSubmit={submitVerbAnswer}/>}
       </div>
     );
   }
@@ -864,17 +965,22 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
               {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
             </div>
             <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span><SpeakButton text={result.word||result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
-            {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+            {!result.verbFields&&!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+            <VerbResultFields fields={result.verbFields}/>
             {result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} bleibt {POT_LABEL[result.fromPot]}</span>
               {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
             </div>}
-            {!result.skipped&&!result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
-              <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} {POT_LABEL[result.fromPot]}</span>
-              <span style={{fontSize:12,color:G400}}>→</span>
-              <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.toPot]+'22',color:POT_COL[result.toPot],fontWeight:'bold'}}>{POT_ICON[result.toPot]} {POT_LABEL[result.toPot]}</span>
-              {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
-            </div>}
+            {!result.skipped&&!result.helped&&(function(){
+              var pl = result.verbFields ? VERB_POT_LABEL : POT_LABEL;
+              var pi = result.verbFields ? VERB_POT_ICON : POT_ICON;
+              return <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{pi[result.fromPot]} {pl[result.fromPot]}</span>
+                <span style={{fontSize:12,color:G400}}>→</span>
+                <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.toPot]+'22',color:POT_COL[result.toPot],fontWeight:'bold'}}>{pi[result.toPot]} {pl[result.toPot]}</span>
+                {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
+              </div>;
+            })()}
           </div>
         )}
         <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>→ Weiter</button>
