@@ -55,6 +55,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [expandedTestIdx, setExpandedTestIdx] = useState(null);
   var sesLastActive = useRef(null);
   var sesActiveSec = useRef(0);
+  // Die letzten paar gefragten Wörter — lsPickWord wertet sie ab statt sie hart
+  // auszuschließen, sonst zwingt ein kleiner Lauf (2-3 aktive Wörter) eine
+  // feste Wechselreihenfolge statt echter Zufälligkeit.
+  var recentWordsRef = useRef([]);
   var inputRef = useRef();
   var qShownAt = useRef(null); // Zeitpunkt, an dem die Frage erschien → Antwortzeit
   function answerMs(){ var t=qShownAt.current; qShownAt.current=null; return t?Date.now()-t:null; }
@@ -144,8 +148,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function pickWord(){
     if(!sesStart) setSesStart(Date.now());
-    var w = lsPickWord(data, current ? current.word : null, {workingSet:streak.workingSet});
+    var w = lsPickWord(data, recentWordsRef.current, {workingSet:streak.workingSet});
     if(!w){ setPhase('done'); return; }
+    recentWordsRef.current = [w.word].concat(recentWordsRef.current).slice(0,3);
     setCurrent(w); setInput(''); setResult(null); setHelpMode(false);
     qShownAt.current = Date.now();
     if(w.pattern){

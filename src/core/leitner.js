@@ -388,15 +388,27 @@ function weightedPick(list, weightFn){
   return list[list.length-1];
 }
 
-function lsPickWord(progress, lastWord, opts) {
+// Weiche statt harte Abwertung der zuletzt gefragten Wörter: ein harter
+// Ausschluss ("nie das letzte Wort") zwingt bei nur 2 aktiven Wörtern (kleiner
+// Lauf, eins schon gelernt) eine komplett feste Wechselreihenfolge
+// (come, run, come, run, ...) — das wirkt für kleine Läufe wie ein Skript,
+// nicht wie Zufall. Mit der Abwertung bleibt jedes Wort weiterhin wählbar,
+// nur stark unwahrscheinlicher gleich wieder.
+function recentPenalty(word, recentWords){
+  var idx = (recentWords||[]).indexOf(word);
+  if(idx<0) return 1;
+  return [0.08, 0.3, 0.6][idx] || 0.8;
+}
+
+function lsPickWord(progress, recentWords, opts) {
   opts = opts || {};
   var today = lsToday();
   var setSize = Math.max(4, opts.workingSet || WORKING_SET);
   var pots = (progress && progress.pots) || {};
+  var recent = Array.isArray(recentWords) ? recentWords : (recentWords ? [recentWords] : []);
   function flat(w,pot){ return Object.assign({},w,{streak:w.streak||0,correct:w.correct||0,
     wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}); }
   function avail(pot){ return (pots[pot]||[]).filter(function(w){ return w && !w.disputeId; }); }
-  function notLast(w){ return !lastWord || w.word!==lastWord; }
 
   // Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
   // nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
@@ -413,10 +425,9 @@ function lsPickWord(progress, lastWord, opts) {
     fresh.slice(0, setSize - working.length).forEach(function(w){ working.push({w:w, pot:1}); });
   }
 
-  var cands = working.concat(resting).filter(function(x){ return notLast(x.w); });
-  if(!cands.length) cands = working.concat(resting);
+  var cands = working.concat(resting);
   if(!cands.length) return null;   // alles gelernt → der Run ist durch
-  var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today); });
+  var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today) * recentPenalty(x.w.word, recent); });
   return flat(pick.w, pick.pot);
 }
 
