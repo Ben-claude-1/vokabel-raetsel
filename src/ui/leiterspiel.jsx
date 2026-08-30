@@ -12,6 +12,19 @@ import { ProgressStats } from './trainer.jsx';
 import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
 
+// Großen Verben-Mustern (Echo, Sonstige) ist ihre Wortliste auf mehrere
+// gleichnamige Kapitel/Runs aufgeteilt (siehe build_irregular_verbs.py,
+// max. 15 Vokabeln je Run) — `word.pattern` bleibt dabei fürs Kartenlayout
+// unverändert (z.B. "echo"), der Lernplan braucht aber einen je Teil-Run
+// eindeutigen Schlüssel. Der steckt schon im chapterId-Suffix ("echo_1").
+var VERB_CHAPTER_PREFIX = 'ch_klasse6_en_irr_';
+function verbGroupKey(words) {
+  var w = words && words[0];
+  if (!w) return null;
+  var chapterId = w.chapterId || '';
+  return chapterId.indexOf(VERB_CHAPTER_PREFIX) === 0 ? chapterId.slice(VERB_CHAPTER_PREFIX.length) : w.pattern;
+}
+
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var lang = useMemo(function(){ return runScope(run, chapters).language; }, [run, chapters]);
@@ -1539,8 +1552,8 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
   var verbPlanRuns = useMemo(function(){
     return filterRunsByScope(runs, chapters, scope).map(function(r){
       var words = safeWords(r.words);
-      var pattern = words.length && words[0].pattern;
-      return pattern ? {id:r.id, pattern:pattern, words:words, created_at:r.created_at} : null;
+      var groupKey = verbGroupKey(words);
+      return groupKey ? {id:r.id, pattern:groupKey, words:words, created_at:r.created_at} : null;
     }).filter(Boolean);
   }, [runs, chapters, scope]);
   var verbSchedule = useMemo(function(){
@@ -1619,7 +1632,7 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
   var gs = Object.assign({}, DEFAULT_STREAK, streakSettings || {});
   var verbTodayRun = (verbCurrent && verbCurrent.type==='new') ? scopedRuns.find(function(r){
     var words = safeWords(r.words);
-    return words.length && words[0].pattern===verbCurrent.pattern;
+    return verbGroupKey(words)===verbCurrent.pattern;
   }) : null;
   function ackVerbPlanDay(){
     ackVerbDay(player.id, verbCurrent.day);

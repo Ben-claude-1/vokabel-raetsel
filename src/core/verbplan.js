@@ -9,21 +9,29 @@
 // Rein informativ (siehe Session vom 29.08.2026) — nichts wird gesperrt, das
 // ist nur eine Empfehlung im Run-Picker.
 
-var PATTERN_ORDER = ['chicken', 'hamburger', 'echo', 'miau', 'sonstige'];
+var PATTERN_ORDER = ['chicken', 'hamburger', 'echo_1', 'echo_2', 'echo_3', 'miau', 'sonstige_1', 'sonstige_2'];
 
+// Echo (40) und Sonstige (27) sind zu groß für einen Leiterspiel-Run (max. 15
+// Vokabeln, siehe build_irregular_verbs.py) und deshalb auf mehrere Kapitel/
+// Runs "Teil X/Y" aufgeteilt — jeder Teil braucht hier einen eigenen Eintrag,
+// weil er im Lernplan als eigener Schritt auftaucht (siehe verbGroupKey in
+// leiterspiel.jsx).
 var PATTERN_META = {
-  chicken:   {emoji:'🐔', label:'Chicken'},
-  hamburger: {emoji:'🍔', label:'Hamburger'},
-  echo:      {emoji:'📢', label:'Echo'},
-  miau:      {emoji:'🐱', label:'Miau'},
-  sonstige:  {emoji:'🔀', label:'Sonstige'}
+  chicken:    {emoji:'🐔', label:'Chicken'},
+  hamburger:  {emoji:'🍔', label:'Hamburger'},
+  echo_1:     {emoji:'📢', label:'Echo (Teil 1/3)'},
+  echo_2:     {emoji:'📢', label:'Echo (Teil 2/3)'},
+  echo_3:     {emoji:'📢', label:'Echo (Teil 3/3)'},
+  miau:       {emoji:'🐱', label:'Miau'},
+  sonstige_1: {emoji:'🔀', label:'Sonstige (Teil 1/2)'},
+  sonstige_2: {emoji:'🔀', label:'Sonstige (Teil 2/2)'}
 };
 
 // Kleine Muster-Gruppen teilen sich einen Wiederholungstag mit der nächsten
 // Gruppe, statt für 3-8 Verben einen eigenen Tag zu bekommen (Chicken+Hamburger
 // zusammen 11 Verben, Miau+Sonstige zusammen 32) — sonst blieben für die 83
 // Verben in den ~16 Tagen bis zum Test keine Lerntage übrig.
-var DEFAULT_BLOCKS = [['chicken', 'hamburger'], ['echo'], ['miau', 'sonstige']];
+var DEFAULT_BLOCKS = [['chicken', 'hamburger'], ['echo_1', 'echo_2', 'echo_3'], ['miau', 'sonstige_1', 'sonstige_2']];
 
 function addDays(dateStr, n) {
   var p = dateStr.split('-');

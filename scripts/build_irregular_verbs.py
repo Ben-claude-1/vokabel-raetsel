@@ -19,6 +19,7 @@ Mehrdeutige Formen (burnt/burned, was/were) stehen wie gewohnt als
 beides, siehe core/words.js.
 """
 import json
+import math
 import os
 import sys
 import urllib.parse
@@ -28,6 +29,12 @@ BASE = 'https://mac-studio.taild5562c.ts.net/rest/v1'
 PARENT_ID = 'ch_klasse6_en'
 OLD_CHAPTER_ID = 'ch_klasse6_en_irr'
 TARGET_DATE = '2026-09-14'
+# Ein Leiterspiel-Run darf laut Ben maximal 15 Vokabeln haben — Echo (40) und
+# Sonstige (27) werden deshalb in mehrere gleich große Teil-Kapitel/-Runs
+# gesplittet (siehe split_group()). Die alten Einzel-Runs "ch_..._echo" und
+# "ch_..._sonstige" von vor dem Split werden migriert, nicht einfach gelöscht
+# (siehe migrate_split_progress()) — Emma hatte dort schon Fortschritt.
+MAX_RUN_SIZE = 15
 
 PATTERNS = {
     'chicken':   {'title': '🐔 Chicken-Verben (alle 3 Formen gleich)', 'icon': '🐔', 'color': '#b45309'},
@@ -150,6 +157,46 @@ def build_words_by_pattern():
     return by_pattern
 
 
+def split_group(words, max_size=MAX_RUN_SIZE):
+    """Teilt eine Wortliste in möglichst gleich große Chunks von höchstens
+    max_size auf (Größenunterschied maximal 1), Reihenfolge bleibt erhalten."""
+    n = len(words)
+    if n <= max_size:
+        return [words]
+    k = math.ceil(n / max_size)
+    base, extra = divmod(n, k)
+    sizes = [base + 1] * extra + [base] * (k - extra)
+    out = []
+    i = 0
+    for size in sizes:
+        out.append(words[i:i + size])
+        i += size
+    return out
+
+
+def build_groups():
+    """Ein Eintrag pro tatsächlich anzulegendem Kapitel/Run — für kleine Muster
+    (Chicken/Hamburger/Miau) genau einer, für die großen (Echo/Sonstige) mehrere
+    Teile. `word['pattern']` bleibt dabei überall die Basis-Musterkennung
+    (z.B. 'echo'), damit verbdrill.jsx (Chicken-Sonderregel, Muster-Badge)
+    unverändert funktioniert — nur chapter_id/Run-Name/-Titel sind je Teil
+    eindeutig (Suffix `_1`, `_2`, ...), siehe verbGroupKey() in leiterspiel.jsx."""
+    by_pattern = build_words_by_pattern()
+    groups = []
+    for p in ORDER:
+        chunks = split_group(by_pattern[p])
+        n = len(chunks)
+        for i, chunk in enumerate(chunks):
+            key = p if n == 1 else '%s_%d' % (p, i + 1)
+            title = PATTERNS[p]['title'] if n == 1 else '%s · Teil %d/%d' % (PATTERNS[p]['title'], i + 1, n)
+            groups.append({
+                'key': key, 'pattern': p, 'chapter_id': 'ch_klasse6_en_irr_' + key,
+                'title': title, 'icon': PATTERNS[p]['icon'], 'color': PATTERNS[p]['color'],
+                'words': chunk,
+            })
+    return groups
+
+
 def jwt():
     path = os.path.expanduser('~/.local/etc/vokabel/jwts.json')
     return json.load(open(path))['service_role']
@@ -181,28 +228,97 @@ def delete_old():
         print('Altes Kapitel gelöscht:', OLD_CHAPTER_ID)
 
 
+def parse_progress_data(raw):
+    # ls_progress.data ist jsonb, kommt über PostgREST aber teils doppelt
+    # kodiert an (String statt Objekt) — beides abfangen.
+    d = raw
+    if isinstance(d, str):
+        d = json.loads(d)
+    return d
+
+
+EMPTY_POTS = lambda: {str(n): [] for n in range(1, 7)}
+
+
+def migrate_split_progress(groups, key_to_run_id):
+    """Wörter aus dem alten, ungeteilten Echo-/Sonstige-Run (Topf-Stand,
+    Streak, Zähler pro Wort) in die neuen Teil-Runs übernehmen, bevor der
+    alte Run gelöscht wird — sonst geht angefangener Fortschritt verloren
+    (siehe Session vom 30.08.2026, Emma hatte an beiden schon gespielt)."""
+    word_to_group_key = {}
+    for g in groups:
+        if g['key'] == g['pattern']:
+            continue  # nicht gesplittet, kein alter Run zu migrieren
+        for w in g['words']:
+            word_to_group_key[w['word']] = g['key']
+    split_patterns = set(g['pattern'] for g in groups if g['key'] != g['pattern'])
+
+    for pattern in split_patterns:
+        old_chapter_id = 'ch_klasse6_en_irr_' + pattern
+        # Verben-Runs werden bewusst ohne auto_chapter_id angelegt (siehe
+        # Kommentar im Run-Upsert unten) — der einzige verlässliche Anker ist
+        # der unveränderte Titel des alten, ungeteilten Runs.
+        old_run = call('GET', '/ls_runs?select=id,name&name=eq.%s' % urllib.parse.quote(PATTERNS[pattern]['title']))
+        if not old_run:
+            continue
+        old_run_id = old_run[0]['id']
+        rows = call('GET', '/ls_progress?select=player_id,data&run_id=eq.%s' % old_run_id) or []
+        for row in rows:
+            data = parse_progress_data(row['data'])
+            pots = data.get('pots') or {}
+            by_new_group = {}
+            for pot_num, words in pots.items():
+                for w in (words or []):
+                    key = word_to_group_key.get(w.get('word'))
+                    if not key:
+                        continue
+                    by_new_group.setdefault(key, EMPTY_POTS())[pot_num].append(w)
+            for key, new_pots in by_new_group.items():
+                run_id = key_to_run_id.get(key)
+                if not run_id:
+                    continue
+                total_correct = sum(w.get('correct', 0) for words in new_pots.values() for w in words)
+                total_wrong = sum(w.get('wrong', 0) for words in new_pots.values() for w in words)
+                new_data = {'pots': new_pots, 'sentences': [], 'bonusStarted': False, 'history': [],
+                            'lastWord': None, 'streak': 0, 'totalCorrect': total_correct,
+                            'totalWrong': total_wrong, 'days': {}, 'sessions': []}
+                existing = call('GET', '/ls_progress?select=id&player_id=eq.%s&run_id=eq.%s' % (row['player_id'], run_id))
+                body = {'player_id': row['player_id'], 'run_id': run_id, 'data': json.dumps(new_data)}
+                if existing:
+                    call('PATCH', '/ls_progress?id=eq.%s' % existing[0]['id'], {'data': json.dumps(new_data)})
+                else:
+                    call('POST', '/ls_progress', body, prefer='return=minimal')
+                print('  Fortschritt migriert: player %s -> %s (%d Wörter)' %
+                      (row['player_id'], key, sum(len(v) for v in new_pots.values())))
+        call('DELETE', '/ls_progress?run_id=eq.%s' % old_run_id)
+        call('DELETE', '/ls_runs?id=eq.%s' % old_run_id)
+        call('DELETE', '/chapters?id=eq.%s' % old_chapter_id)
+        print('Alter ungeteilter Run migriert & gelöscht:', pattern)
+
+
 def main():
-    by_pattern = build_words_by_pattern()
-    total = sum(len(v) for v in by_pattern.values())
-    print('%d Verben in %d Mustern' % (total, len(by_pattern)))
-    for p in ORDER:
-        print('  %-10s %d Verben' % (p, len(by_pattern[p])))
+    groups = build_groups()
+    total = sum(len(g['words']) for g in groups)
+    print('%d Verben in %d Kapiteln/Runs' % (total, len(groups)))
+    for g in groups:
+        print('  %-14s %2d Verben  (%s)' % (g['key'], len(g['words']), g['title']))
 
     if '--dry-run' in sys.argv:
-        for p in ORDER:
-            print('\n== %s ==' % PATTERNS[p]['title'])
-            for w in by_pattern[p]:
+        for g in groups:
+            print('\n== %s ==' % g['title'])
+            for w in g['words']:
                 print('%-14s | %-20s | %-20s | %s' % (w['word'], w['pastSimple'], w['pastParticiple'], w['meaning']))
         return
 
     if '--no-delete-old' not in sys.argv:
         delete_old()
 
-    for p in ORDER:
-        chapter_id = 'ch_klasse6_en_irr_' + p
-        words = by_pattern[p]
-        payload = {'id': chapter_id, 'title': PATTERNS[p]['title'], 'color': PATTERNS[p]['color'],
-                   'icon': PATTERNS[p]['icon'], 'words': words, 'sentences': [],
+    key_to_run_id = {}
+    for g in groups:
+        chapter_id = g['chapter_id']
+        words = g['words']
+        payload = {'id': chapter_id, 'title': g['title'], 'color': g['color'],
+                   'icon': g['icon'], 'words': words, 'sentences': [],
                    'parent_id': PARENT_ID, 'grade': 6, 'language': 'en', 'is_builtin': False}
         existing = call('GET', '/chapters?id=eq.%s&select=id' % chapter_id)
         if existing:
@@ -217,19 +333,23 @@ def main():
         # chapterId/important/book_page und würde pastSimple/pastParticiple/
         # pattern/meaning beim nächsten Sync stillschweigend wegwerfen.
         run_words = [dict(w, chapterId=chapter_id, pot=1) for w in words]
-        run_name = PATTERNS[p]['title']
+        run_name = g['title']
         runs = call('GET', '/ls_runs?select=id&name=eq.%s' % urllib.parse.quote(run_name))
-        patch = {'name': run_name, 'icon': PATTERNS[p]['icon'], 'words': json.dumps(run_words),
+        patch = {'name': run_name, 'icon': g['icon'], 'words': json.dumps(run_words),
                  'word_count': len(run_words), 'grade': 6, 'language': 'en',
                  'sentences': '[]', 'sentence_count': 0}
         if runs:
             call('PATCH', '/ls_runs?id=eq.%s' % runs[0]['id'], patch)
             print('Run aktualisiert:', runs[0]['id'], run_name)
+            key_to_run_id[g['key']] = runs[0]['id']
         else:
             patch.update({'player_id': None, 'is_admin_run': True,
                           'target_date': TARGET_DATE, 'target_pct': 100})
             res = call('POST', '/ls_runs', patch, prefer='return=representation')
             print('Run angelegt:', res[0]['id'], run_name)
+            key_to_run_id[g['key']] = res[0]['id']
+
+    migrate_split_progress(groups, key_to_run_id)
 
 
 if __name__ == '__main__':
