@@ -98,7 +98,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           var k = normWordKey(w.word);
           if(!runKeys[k] || seen[k]) return;
           seen[k] = 1;
-          newPots[pot].push(w);
+          // Inhaltsfelder (clue/meaning/pastSimple/.../mnemonic) kommen frisch vom
+          // Server, nur die Fortschritts-Felder (correct/wrong/streak/...) bleiben
+          // aus dem gespeicherten Stand — sonst sehen bereits geübte Wörter nie
+          // nachträgliche Datenkorrekturen (z.B. neue Eselsbrücken).
+          newPots[pot].push(Object.assign({}, w, runKeys[k]));
         });
       });
       runWords.forEach(function(w){

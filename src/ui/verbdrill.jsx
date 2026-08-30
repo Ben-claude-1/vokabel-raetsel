@@ -40,10 +40,25 @@ function patternBadge(pattern) {
   </div>;
 }
 
+// Eselsbrücke ist standardmäßig eingeklappt — Topf 3 ("Abfrage — ohne Hilfe")
+// soll wirklich ohne Hilfe bleiben, wer will kann sie sich trotzdem antippen.
+function MnemonicToggle({mnemonic}) {
+  var [open, setOpen] = useState(false);
+  if(!mnemonic) return null;
+  return <div style={{marginTop:6}}>
+    <button onClick={function(){setOpen(!open);}}
+      style={BtnStyle(open?'#fef3c7':G100, open?'#92400e':G600, {padding:'4px 12px',fontSize:11,fontWeight:'bold',borderRadius:20})}>
+      🧠 {open?'Eselsbrücke ausblenden':'Eselsbrücke zeigen'}
+    </button>
+    {open && <div style={{marginTop:6,fontSize:13,color:'#92400e',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:10,padding:'8px 12px',textAlign:'left'}}>{mnemonic}</div>}
+  </div>;
+}
+
 function VerbHeader({current}) {
   return <div style={{textAlign:'center',marginBottom:12}}>
     {patternBadge(current.pattern)}
     <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current.clue}</div>
+    <MnemonicToggle mnemonic={current.mnemonic}/>
   </div>;
 }
 
