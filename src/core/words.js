@@ -155,6 +155,9 @@ function checkAnswer(typed, correct) {
       if(sp[si].length>1) corrects.push(sp[si]); // also as standalone
     }
   });
+  // Falls die Lösung aus mehreren Komma-Alternativen besteht (z.B. "uno, una, un"),
+  // auch den kompletten String als gültige Antwort zulassen, nicht nur die Einzelteile.
+  if (mainAlts.length > 1) corrects.push(correct.trim());
   function isToVerb(c){ return /^to\s+/i.test(c.trim()); }
   function stripTo(c){ return c.replace(/^to\s+/i,'').trim(); }
   var allVariants = [];
