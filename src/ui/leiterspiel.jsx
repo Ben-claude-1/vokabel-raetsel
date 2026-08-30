@@ -34,6 +34,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sessionLog, setSessionLog] = useState([]);
   var [quizOptions, setQuizOptions] = useState([]);
   var [quizChosen, setQuizChosen] = useState(null);
+  var [dragWord, setDragWord] = useState(null);
+  var [dragActive, setDragActive] = useState(false);
+  var [dragPos, setDragPos] = useState({x:0,y:0});
+  var [dragOver, setDragOver] = useState(false);
+  var dragStateRef = useRef(null);
+  var dragSuppressClickRef = useRef(false);
+  var quizDropZoneRef = useRef(null);
   var [sesStart, setSesStart] = useState(null);
   var [sesAns, setSesAns] = useState(0);
   var [sesCor, setSesCor] = useState(0);
@@ -232,6 +239,53 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       setResult({correct:correct,word:current.word,clue:current.clue,answer:current.word,typed:opt.word,fromPot:1,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
       setPhase('showResult');
     }, correct?800:1500);
+  }
+
+  // Topf 1 lässt sich alternativ zum Antippen auch per Finger/Maus auf die
+  // Frage-Box ziehen — Bewegung wird über Pointer Events verfolgt (deckt Touch
+  // und Maus gleichermaßen ab), ein Tap ohne nennenswerte Bewegung bleibt ein
+  // normaler Klick. `dragSuppressClickRef` verhindert, dass ein echter Drop
+  // zusätzlich noch den nachfolgenden Click auslöst.
+  function quizPointerDown(e, opt){
+    if(quizChosen) return;
+    if(e.target && e.target.closest && e.target.closest('button')) return;
+    dragStateRef.current = {startX:e.clientX, startY:e.clientY, opt:opt, moved:false};
+    try{ if(e.pointerId!=null) e.currentTarget.setPointerCapture(e.pointerId); }catch(err){}
+    setDragWord(opt.word); setDragActive(true);
+  }
+  function quizPointerMove(e){
+    var ds = dragStateRef.current;
+    if(!ds) return;
+    var dx = e.clientX-ds.startX, dy = e.clientY-ds.startY;
+    if(!ds.moved && (Math.abs(dx)+Math.abs(dy) > 6)) ds.moved = true;
+    if(!ds.moved) return;
+    setDragPos({x:dx,y:dy});
+    var zone = quizDropZoneRef.current;
+    if(zone){
+      var r = zone.getBoundingClientRect();
+      setDragOver(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom);
+    }
+  }
+  function quizPointerUp(e){
+    var ds = dragStateRef.current;
+    dragStateRef.current = null;
+    if(!ds) return;
+    setDragActive(false); setDragPos({x:0,y:0}); setDragOver(false);
+    setTimeout(function(){ setDragWord(null); }, 180);
+    if(ds.moved){
+      dragSuppressClickRef.current = true;
+      var zone = quizDropZoneRef.current;
+      var dropped = false;
+      if(zone){
+        var r = zone.getBoundingClientRect();
+        dropped = e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom;
+      }
+      if(dropped) handleQuizAnswer(ds.opt);
+    }
+  }
+  function quizTileClick(opt){
+    if(dragSuppressClickRef.current){ dragSuppressClickRef.current=false; return; }
+    handleQuizAnswer(opt);
   }
 
   // „Nicht gewusst" in Topf 1 (Multiple Choice): zählt als falsche Antwort,
@@ -764,7 +818,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       <div style={{padding:8}}>
         {liveChip}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
-        <div style={{textAlign:'center',padding:'16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
+        <div ref={quizDropZoneRef} style={{textAlign:'center',padding:'16px',background:dragOver?'#d1fae5':G50,borderRadius:14,marginBottom:12,
+          border:'2px solid '+(dragOver?GR:G200),transition:'background 0.1s ease,border-color 0.1s ease'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 1 — Welche Übersetzung ist richtig?</div>
           <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current&&current.clue}</div>
         </div>
@@ -779,19 +834,33 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <button onClick={submitTyped} style={BtnStyle('#f59e0b','white',{padding:'12px 16px',fontSize:15})}>✓</button>
           </div>
         ) : (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:12}}>
-            {quizOptions.map(function(opt){
-              var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
-              var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
-              var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
-              var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
-              return <div key={opt.word} onClick={quizChosen?undefined:function(){ handleQuizAnswer(opt); }}
-                style={{display:'flex',alignItems:'center',gap:4,padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
-                  textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'pointer',touchAction:'manipulation'}}>
-                <span style={{flex:1}}>{opt.word}</span>
-                <SpeakButton text={opt.word} lang={lang} style={{fontSize:15,padding:'0 2px'}}/>
-              </div>;
-            })}
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:4}}>
+              {quizOptions.map(function(opt){
+                var isCorrect=quizChosen&&normWordKey(opt.word)===normWordKey(current.word);
+                var isChosen=quizChosen&&normWordKey(opt.word)===normWordKey(quizChosen.word);
+                var bg=quizChosen?(isCorrect?'#d1fae5':isChosen&&!isCorrect?'#fee2e2':G50):'white';
+                var border=quizChosen?(isCorrect?GR:isChosen&&!isCorrect?RE:G200):G200;
+                var isDragging=dragWord===opt.word;
+                return <div key={opt.word}
+                  onPointerDown={quizChosen?undefined:function(e){ quizPointerDown(e, opt); }}
+                  onPointerMove={quizChosen?undefined:quizPointerMove}
+                  onPointerUp={quizChosen?undefined:quizPointerUp}
+                  onPointerCancel={quizChosen?undefined:quizPointerUp}
+                  onClick={quizChosen?undefined:function(){ quizTileClick(opt); }}
+                  style={{display:'flex',alignItems:'center',gap:4,padding:'13px 16px',borderRadius:10,border:'2px solid '+border,background:bg,
+                    textAlign:'left',fontSize:15,fontWeight:'bold',color:G900,cursor:quizChosen?'default':'grab',touchAction:'none',
+                    position:'relative',userSelect:'none',
+                    transform:isDragging?'translate('+dragPos.x+'px,'+dragPos.y+'px) scale(1.05)':'none',
+                    zIndex:isDragging?50:1,
+                    boxShadow:isDragging?'0 8px 20px rgba(0,0,0,0.25)':'none',
+                    transition:(isDragging&&dragActive)?'none':'transform 0.18s ease,box-shadow 0.18s ease'}}>
+                  <span style={{flex:1}}>{opt.word}</span>
+                  <SpeakButton text={opt.word} lang={lang} style={{fontSize:15,padding:'0 2px'}}/>
+                </div>;
+              })}
+            </div>
+            <div style={{fontSize:10,color:G400,textAlign:'center',marginBottom:8}}>🖐️ Ziehen oder antippen</div>
           </div>
         )}
         {skipButton()}
