@@ -135,25 +135,76 @@ function canonAnswer(s){
 
 function stripParens(s){ return String(s||'').replace(/\([^)]*\)/g,'').replace(/[()]/g,'').replace(/\s+/g,' ').trim(); }
 
-function checkAnswer(typed, correct) {
+// Ein einzelnes Token (durch Leerzeichen begrenzt) mit "/"-Alternativen in
+// seine Möglichkeiten auf: "jede/r"→["jede","jeder"], "el/la"→["el","la"],
+// "gato/-a"→["gato","gata"] (Bindestrich-Suffix ersetzt die letzte Silbe).
+// Enthält das Token Klammern, bleibt es unangetastet — Klammer-Optionalität
+// übernimmt wordVariants().
+function expandSlashToken(tok){
+  if(tok.indexOf('(')>=0 || tok.indexOf(')')>=0 || tok.indexOf('/')<0) return [tok];
+  var parts = tok.split('/').map(function(s){return s.trim();}).filter(Boolean);
+  if(parts.length<=1) return [tok];
+  var base = parts[0], alts = [base];
+  for(var i=1;i<parts.length;i++){
+    var suf = parts[i];
+    if(suf[0]==='-'){
+      // "-a" ersetzt die letzte Vokal-Endung ("gato/-a"→"gata"), hängt sich
+      // sonst nur an ("profesor/-a"→"profesora", Basis endet auf Konsonant).
+      var raw = suf.slice(1);
+      var endsVowel = /[aeiouyáéíóúü]$/i.test(base);
+      alts.push(raw.length===1 && endsVowel && base.length>1 ? base.slice(0,-1)+raw : base+raw);
+    } else {
+      if(suf.length<=2 && base.length>=3) alts.push(base+suf); // "jede/r"→"jeder", "ein/e"→"eine"
+      if(suf.length>1) alts.push(suf); // auch als eigenständige Alternative, z.B. "der/die"→"die"
+    }
+  }
+  return alts;
+}
+
+// Eine ganze Komma-Alternative ("el/la gato/-a") tokenweise expandieren und
+// per Kreuzprodukt kombinieren → "el gato","el gata","la gato","la gata".
+// Klammerteile (auch mehrwortig, z.B. "(= el/la profe fam.)") bleiben dabei
+// als Ganzes unangetastet, damit ein "/" in einer Klammer-Erläuterung nicht
+// mit dem eigentlichen Antwort-Slash verwechselt wird.
+function expandSlashAlt(alt){
+  if(alt.indexOf('/')<0) return [];
+  var segments = alt.match(/\([^)]*\)|[^()]+/g) || [alt];
+  var combos = [''];
+  segments.forEach(function(seg){
+    if(seg[0]==='('){ combos = combos.map(function(c){ return c+seg; }); return; }
+    var tokens = seg.split(/(\s+)/);
+    tokens.forEach(function(tk){
+      if(!tk) return;
+      var alts = /^\s+$/.test(tk) ? [tk] : expandSlashToken(tk);
+      var next = [];
+      combos.forEach(function(c){ alts.forEach(function(a){ next.push(c+a); }); });
+      if(next.length<=40) combos = next; // Explosion bei vielen Slashes vermeiden
+    });
+  });
+  return combos.filter(function(c){ return c && c!==alt; });
+}
+
+// `extra`: zusätzlich akzeptierte, wörtliche Antworten (z.B. vom Admin
+// bestätigte Anfechtungen) — werden 1:1 gegen die Eingabe geprüft.
+function checkAnswer(typed, correct, extra) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
   var tCan = canonAnswer(t);
   var tCanNS = tCan.replace(/\s+/g,'');
+  if (extra && extra.length) {
+    for (var ei=0; ei<extra.length; ei++) {
+      var eCan = canonAnswer(String(extra[ei]||''));
+      if (eCan && (eCan === tCan || eCan.replace(/\s+/g,'') === tCanNS)) return 'correct';
+    }
+  }
   // Split by comma first (main alternatives), then expand x/y suffix patterns within each
   var mainAlts = !/\([^)]*,[^)]*\)/.test(correct)
     ? correct.split(',').map(function(s){return s.trim();}).filter(Boolean)
     : [correct.trim()];
   var corrects = [];
   mainAlts.forEach(function(alt){
-    var sp = alt.split(/\/+/).map(function(s){return s.trim();}).filter(Boolean);
-    if(sp.length<=1){corrects.push(alt);return;}
-    corrects.push(sp[0]);
-    for(var si=1;si<sp.length;si++){
-      // Short suffix (1-2 chars) on base ≥3 chars → expand: "jede/r"→"jeder", "ein/e"→"eine"
-      if(sp[si].length<=2&&sp[0].length>=3) corrects.push(sp[0]+sp[si]);
-      if(sp[si].length>1) corrects.push(sp[si]); // also as standalone
-    }
+    corrects.push(alt); // die komplette angezeigte Schreibweise ist immer gültig
+    corrects = corrects.concat(expandSlashAlt(alt));
   });
   // Falls die Lösung aus mehreren Komma-Alternativen besteht (z.B. "uno, una, un"),
   // auch den kompletten String als gültige Antwort zulassen, nicht nur die Einzelteile.

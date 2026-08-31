@@ -83,6 +83,24 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var qShownAt = useRef(null); // Zeitpunkt, an dem die Frage erschien → Antwortzeit
   function answerMs(){ var t=qShownAt.current; qShownAt.current=null; return t?Date.now()-t:null; }
 
+  // Vom Admin akzeptierte Anfechtungen: die getippte Antwort muss ab sofort
+  // (auch bei anderen Spielern) als richtig zählen, nicht nur beim nächsten
+  // Öffnen der App für die Person, die angefochten hat.
+  var [acceptedExtras, setAcceptedExtras] = useState({});
+  useEffect(function(){
+    sbGet('word_disputes','status=eq.accepted&dispute_type=eq.dispute&select=word,typed_answer').then(function(rows){
+      var map={};
+      (rows||[]).forEach(function(d){
+        if(!d.typed_answer) return;
+        var k=normWordKey(d.word);
+        if(!map[k]) map[k]=[];
+        map[k].push(d.typed_answer);
+      });
+      setAcceptedExtras(map);
+    }).catch(function(){});
+  },[]);
+  function extrasFor(word){ return acceptedExtras[normWordKey(word)]||[]; }
+
   useEffect(function(){
     if(!player||!run) return;
     var runWords=[]; try{runWords=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
@@ -343,7 +361,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
-    var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer);
+    var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer, extrasFor(current.word));
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     var newData = JSON.parse(JSON.stringify(data));
@@ -467,7 +485,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
 
   function submitCopy(){
-    var st = checkAnswer(input.trim(), loesung());
+    var st = checkAnswer(input.trim(), loesung(), current?extrasFor(current.word):null);
     if(st==='correct'||st==='partial') finishCopy();
     else setCopyHint(true);
   }
@@ -544,7 +562,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   // das Wort selbst (Topf 5 fragt sonst rückwärts, die Hilfe dreht das um).
   function submitHelpTyped(){
     if(!current) return;
-    var status = checkAnswer(input.trim(), wordDisplay(current));
+    var status = checkAnswer(input.trim(), wordDisplay(current), extrasFor(current.word));
     if(status==='correct'||status==='partial') submitHelped();
     else submitHelpFailed();
   }
@@ -631,7 +649,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var w = testWords[testIdx]; if(!w) return;
     var typed = input.trim();
     var correctAnswer = testItemAnswer(w);
-    var status = checkAnswer(typed, correctAnswer);
+    var status = checkAnswer(typed, correctAnswer, w.kind==='sentence'?null:extrasFor(w.word));
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     tallyAnswer(correct, false, CREDIT.typed);
