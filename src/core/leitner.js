@@ -343,14 +343,19 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
 // weil dafür 6 richtige Antworten in Folge nötig sind. Gleichverteilung ist
 // genau die falsche Zuteilung.
 //
-// Jetzt: ein begrenztes Arbeitsset (Standard 12 Wörter), das erst abgearbeitet
-// wird, bevor neue Wörter nachrücken, plus Gewichtung nach Dringlichkeit.
+// Jetzt: ein begrenztes Arbeitsset, das erst abgearbeitet wird, bevor neue
+// Wörter nachrücken, plus Gewichtung nach Dringlichkeit. Gedeckelt wird nur,
+// wenn der offene Pool (Töpfe 1-5) größer ist als ACTIVE_POOL_SIZE — bei
+// ≤20 offenen Vokabeln ist von Anfang an alles aktiv. Sobald eine Vokabel
+// Topf 6 erreicht, verschwindet sie aus dem offenen Pool und die nächste
+// ungelernte rückt ins Arbeitsset nach.
 //
 // Gelernte Wörter (Topf 6) kommen hier bewusst NICHT vor. Das Leiterspiel ist
 // der Lern-Teil; das Behalten übernimmt der Wiederholungslauf, der sich als
 // eigener Abschnitt dazwischenschiebt.
 
-var WORKING_SET = 12;   // so viele Wörter sind gleichzeitig „in Arbeit"
+var WORKING_SET = 12;   // Fallback-Arbeitsset, falls opts.workingSet erzwungen wird
+var ACTIVE_POOL_SIZE = 20;   // ab so vielen offenen Vokabeln wird das Arbeitsset gedeckelt
 
 var REVIEW6_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -403,12 +408,16 @@ function recentPenalty(word, recentWords){
 function lsPickWord(progress, recentWords, opts) {
   opts = opts || {};
   var today = lsToday();
-  var setSize = Math.max(4, opts.workingSet || WORKING_SET);
   var pots = (progress && progress.pots) || {};
   var recent = Array.isArray(recentWords) ? recentWords : (recentWords ? [recentWords] : []);
   function flat(w,pot){ return Object.assign({},w,{streak:w.streak||0,correct:w.correct||0,
     wrong:w.wrong||0,disputeId:w.disputeId,pot:pot}); }
   function avail(pot){ return (pots[pot]||[]).filter(function(w){ return w && !w.disputeId; }); }
+
+  // Offener Pool = alles, was noch nicht Topf 6 (gelernt) erreicht hat. Erst
+  // ab mehr als ACTIVE_POOL_SIZE davon wird das Arbeitsset gedeckelt.
+  var openPool = [1,2,3,4,5].reduce(function(s,pot){ return s + avail(pot).length; }, 0);
+  var setSize = Math.max(4, opts.workingSet || Math.min(ACTIVE_POOL_SIZE, openPool) || WORKING_SET);
 
   // Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
   // nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
@@ -620,4 +629,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

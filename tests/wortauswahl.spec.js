@@ -173,6 +173,37 @@ test('das Leiterspiel fragt nie gelernte Vokabeln ab — das ist Sache der Wiede
   }
 });
 
+// ── Arbeitsset-Deckel bei großen Runs ───────────────────────────────────────
+
+function makeOpenPool(n) {
+  const pots = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  for (let i = 0; i < n; i++) pots[1].push({ word: 'w' + i, clue: 'k' + i, streak: 0 });
+  return { pots };
+}
+
+test('bei mehr als 20 offenen Vokabeln bleibt das Arbeitsset auf 20 gedeckelt, bis eine gelernt ist', () => {
+  const p = makeOpenPool(30);
+  const touched = new Set();
+  for (let i = 0; i < 300; i++) touched.add(L.lsPickWord(p, null, {}).word);
+  expect(touched.size).toBeLessThanOrEqual(20);
+
+  // Eine der aktiven Vokabeln „lernen" (Topf 6) — sie verschwindet aus dem offenen Pool.
+  const idx = p.pots[1].findIndex(w => touched.has(w.word));
+  p.pots[6].push(p.pots[1].splice(idx, 1)[0]);
+
+  const touched2 = new Set();
+  for (let i = 0; i < 400; i++) touched2.add(L.lsPickWord(p, null, {}).word);
+  const nachgerueckt = [...touched2].filter(w => !touched.has(w));
+  expect(nachgerueckt.length).toBeGreaterThan(0);
+});
+
+test('bei höchstens 20 offenen Vokabeln ist das Arbeitsset von Anfang an unbegrenzt', () => {
+  const p = makeOpenPool(15);
+  const touched = new Set();
+  for (let i = 0; i < 300; i++) touched.add(L.lsPickWord(p, null, {}).word);
+  expect(touched.size).toBe(15);
+});
+
 test('Fälligkeit wächst mit der Stufe 1-3-7-14-30-60', () => {
   const today = L.lsToday();
   expect(L.due6({ word: 'a', lc: daysAgo(0), rl: 0 }, today)).toBeLessThan(0);   // heute gekonnt
