@@ -406,21 +406,17 @@ function recentPenalty(word, recentWords){
 }
 
 // ── Wort des Tages ───────────────────────────────────────────────────────────
-// Eine Vokabel pro Tag und Run, die in urgency() stark bevorzugt wird, damit
-// sie schnell Topf 6 erreicht. Die Auswahl steckt fest in `progress.wordOfDay`
-// (nicht bei jedem Aufruf neu berechnet) — sonst würde jeder Aufstieg eines
-// GANZ ANDEREN Worts den offenen Pool verschieben und die Auswahl bei jedem
-// Aufruf springen lassen. Erreicht das aktuelle Wort des Tages selbst Topf 6,
-// zählt es nicht mehr zum offenen Pool und lsEnsureWordOfDay zieht ein neues.
+// Genau eine Vokabel pro Tag UND SPRACHE (nicht pro Run!) — Emma soll an einem
+// Tag ein englisches und ein spanisches Wort des Tages sehen, nicht in jedem
+// einzelnen Englisch-Run ein anderes. Die Auswahl kommt deshalb nicht aus dem
+// (pro Run unterschiedlichen) Fortschritts-Pool, sondern aus dem gesamten
+// Vokabelbestand der Sprache über alle Kapitel hinweg — der ändert sich nur,
+// wenn ein Admin Kapitel bearbeitet, und ist damit über den ganzen Tag und
+// über alle Runs hinweg stabil. In lsPickWord wird sie in urgency() stark
+// bevorzugt, damit sie schnell Topf 6 erreicht; taucht sie in einem
+// bestimmten Run gar nicht auf oder ist dort schon gelernt, hat sie dort
+// einfach keinen Effekt — andere Runs derselben Sprache zeigen sie trotzdem.
 var WORD_OF_DAY_BOOST = 6;
-
-function openPoolKeys(pots){
-  var out = [];
-  [1,2,3,4,5].forEach(function(pot){ (pots[pot]||[]).forEach(function(w){
-    if(w && !w.disputeId) out.push(normWordKey(w.word));
-  }); });
-  return out;
-}
 
 // Einfacher, deterministischer String-Hash (Java-String.hashCode-Art) — reicht
 // hier, weil es nur um eine stabile, aber unvorhersehbare Zuordnung Tag→Wort
@@ -431,24 +427,29 @@ function hashStr(s){
   return h;
 }
 
-// Sorgt dafür, dass `progress.wordOfDay` für heute eine gültige (noch offene)
-// Vokabel trägt. Gibt true zurück, wenn sich dabei etwas geändert hat (→ muss
-// gespeichert werden). Rein lesende Aufrufe (z.B. Anzeige) können das
-// Rückgabeergebnis ignorieren.
-function lsEnsureWordOfDay(progress, runId){
-  if(!progress) return false;
-  var today = lsToday();
-  var keys = openPoolKeys(progress.pots || {});
-  var wod = progress.wordOfDay;
-  if(wod && wod.date===today && keys.indexOf(wod.key)>=0) return false;
-  if(!keys.length){
-    if(wod){ progress.wordOfDay = null; return true; }
-    return false;
-  }
-  keys.sort();
-  var idx = hashStr(String(runId||'')+'|'+today) % keys.length;
-  progress.wordOfDay = {date:today, key:keys[idx]};
-  return true;
+// Alle Vokabeln einer Sprache über alle Kapitel hinweg, entdoppelt und
+// sortiert — die Kandidatenliste fürs Wort des Tages.
+function wordOfDayPoolKeys(chapters, lang){
+  var seen = {}, out = [];
+  (chapters||[]).forEach(function(c){
+    if(!c || !c.parent_id || chLang(c)!==lang) return;
+    safeWords(c.words).forEach(function(w){
+      if(!w || !w.word) return;
+      var k = normWordKey(w.word);
+      if(!seen[k]){ seen[k] = 1; out.push(k); }
+    });
+  });
+  out.sort();
+  return out;
+}
+
+// Deterministische Wahl für (Sprache, Tag) — dieselbe Sprache liefert am
+// selben Tag überall denselben Schlüssel, unabhängig vom Run.
+function lsWordOfDayKeyForLang(chapters, lang, today){
+  var keys = wordOfDayPoolKeys(chapters, lang);
+  if(!keys.length) return null;
+  var idx = hashStr(String(lang||'')+'|'+(today||lsToday())) % keys.length;
+  return keys[idx];
 }
 
 function lsPickWord(progress, recentWords, opts) {
@@ -465,8 +466,7 @@ function lsPickWord(progress, recentWords, opts) {
   var openPool = [1,2,3,4,5].reduce(function(s,pot){ return s + avail(pot).length; }, 0);
   var setSize = Math.max(4, opts.workingSet || Math.min(ACTIVE_POOL_SIZE, openPool) || WORKING_SET);
 
-  var wod = progress && progress.wordOfDay;
-  var wodKey = (wod && wod.date===today) ? wod.key : null;
+  var wodKey = opts.wordOfDayKey || null;
 
   // Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
   // nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
@@ -694,4 +694,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, lsEnsureWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, wordOfDayPoolKeys, lsWordOfDayKeyForLang, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

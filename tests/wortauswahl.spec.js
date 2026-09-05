@@ -205,44 +205,68 @@ test('bei höchstens 20 offenen Vokabeln ist das Arbeitsset von Anfang an unbegr
 });
 
 // ── Wort des Tages ───────────────────────────────────────────────────────────
+// Ein Wort pro Sprache und Tag, nicht pro Run — deshalb kommt die Auswahl aus
+// dem Kapitel-Wortschatz (sprachübergreifend entdoppelt), nicht aus dem
+// Fortschritts-Pool eines einzelnen Runs.
 
-test('lsEnsureWordOfDay wählt eine Vokabel aus dem offenen Pool und lässt sie stehen', () => {
-  const p = makeOpenPool(10);
-  const changed = L.lsEnsureWordOfDay(p, 'run-1');
-  expect(changed).toBe(true);
-  expect(p.wordOfDay.date).toBe(L.lsToday());
-  expect(p.pots[1].some(w => w.word.toLowerCase() === p.wordOfDay.key)).toBe(true);
+function makeChapters() {
+  return [
+    { id: 'en1', parent_id: 'root', language: 'en', words: [
+      { word: 'Apple', clue: 'Apfel' }, { word: 'Book', clue: 'Buch' }, { word: 'Cat', clue: 'Katze' },
+    ] },
+    { id: 'en2', parent_id: 'root', language: 'en', words: [
+      { word: 'Dog', clue: 'Hund' }, { word: 'Egg', clue: 'Ei' },
+    ] },
+    { id: 'es1', parent_id: 'root', language: 'es', words: [
+      { word: 'Perro', clue: 'Hund' }, { word: 'Gato', clue: 'Katze' },
+    ] },
+  ];
+}
 
-  // Erneuter Aufruf am selben Tag ändert nichts, solange die Vokabel noch offen ist.
-  const before = JSON.stringify(p.wordOfDay);
-  expect(L.lsEnsureWordOfDay(p, 'run-1')).toBe(false);
-  expect(JSON.stringify(p.wordOfDay)).toBe(before);
+test('lsWordOfDayKeyForLang liefert pro Sprache ein eigenes, stabiles Wort', () => {
+  const chapters = makeChapters();
+  const today = L.lsToday();
+  const en = L.lsWordOfDayKeyForLang(chapters, 'en', today);
+  const es = L.lsWordOfDayKeyForLang(chapters, 'es', today);
+  expect(['apple', 'book', 'cat', 'dog', 'egg']).toContain(en);
+  expect(['perro', 'gato']).toContain(es);
+  // Wiederholter Aufruf am selben Tag liefert dasselbe Wort — unabhängig davon,
+  // aus welchem Run/Kapitel heraus es aufgerufen wird.
+  expect(L.lsWordOfDayKeyForLang(chapters, 'en', today)).toBe(en);
+  // Andere Sprache ⇒ eigenes Wort, niemals aus dem falschen Sprachtopf.
+  expect(en).not.toBe(es);
 });
 
-test('lsEnsureWordOfDay zieht ein neues Wort nach, sobald das alte Topf 6 erreicht', () => {
-  const p = makeOpenPool(5);
-  L.lsEnsureWordOfDay(p, 'run-2');
-  const key = p.wordOfDay.key;
-  const idx = p.pots[1].findIndex(w => w.word.toLowerCase() === key);
-  p.pots[6].push(p.pots[1].splice(idx, 1)[0]);
-
-  const changed = L.lsEnsureWordOfDay(p, 'run-2');
-  expect(changed).toBe(true);
-  expect(p.wordOfDay.key).not.toBe(key);
+test('lsWordOfDayKeyForLang kennt keine Runs — zwei Sitzungen mit denselben Kapiteln landen beim gleichen Wort', () => {
+  const chapters = makeChapters();
+  const today = L.lsToday();
+  // Zwei "Runs" (hier: zwei unabhängige Aufrufe, wie sie zwei verschiedene
+  // Leiterspiel-Sessions machen würden) mit derselben Kapitelliste müssen auf
+  // dasselbe Wort kommen — das ist der ganze Punkt der Sprachbindung.
+  const runA = L.lsWordOfDayKeyForLang(chapters, 'en', today);
+  const runB = L.lsWordOfDayKeyForLang(chapters.slice(), 'en', today);
+  expect(runA).toBe(runB);
 });
 
 test('lsPickWord bevorzugt das Wort des Tages deutlich und markiert es', () => {
   const p = makeOpenPool(20);
-  L.lsEnsureWordOfDay(p, 'run-3');
-  const key = p.wordOfDay.key;
+  const key = p.pots[1][3].word.toLowerCase();
   let wodHits = 0, marked = 0;
   for (let i = 0; i < 500; i++) {
-    const w = L.lsPickWord(p, null, {});
+    const w = L.lsPickWord(p, null, { wordOfDayKey: key });
     if (w.word.toLowerCase() === key) { wodHits++; if (w.wod) marked++; }
   }
   // Bei 20 gleich gewichteten Kandidaten wäre der Erwartungswert ohne Bonus ~25.
   expect(wodHits).toBeGreaterThan(80);
   expect(marked).toBe(wodHits);
+});
+
+test('lsPickWord: Wort des Tages ohne Effekt, wenn es im Run gar nicht vorkommt', () => {
+  const p = makeOpenPool(10);
+  for (let i = 0; i < 50; i++) {
+    const w = L.lsPickWord(p, null, { wordOfDayKey: 'nichtindiesemrun' });
+    expect(w.wod).toBeFalsy();
+  }
 });
 
 test('Fälligkeit wächst mit der Stufe 1-3-7-14-30-60', () => {

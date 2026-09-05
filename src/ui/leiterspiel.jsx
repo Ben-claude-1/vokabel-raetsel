@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsEnsureWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsWordOfDayKeyForLang, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -28,6 +28,10 @@ function verbGroupKey(words) {
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var lang = useMemo(function(){ return runScope(run, chapters).language; }, [run, chapters]);
+  // Ein Wort des Tages pro Sprache und Tag, nicht pro Run — sonst hätte jeder
+  // Englisch-Run sein eigenes. Rein aus dem Kapitel-Wortschatz berechnet,
+  // deshalb über alle Runs derselben Sprache identisch.
+  var wordOfDayKey = useMemo(function(){ return lsWordOfDayKeyForLang(chapters, lang, dayKey()); }, [chapters, lang]);
   // Verben-Trainer-Runs (unregelmäßige Verben) erkennt man am `pattern`-Feld
   // der Wörter — daran hängt sowohl die Fragen-Art als auch die Topf-Beschriftung.
   var isVerbRun = useMemo(function(){
@@ -139,21 +143,16 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         var reconciled = reconcile(d);
         var beforeCount = [1,2,3,4,5,6].reduce(function(s,p){return s+((d.pots&&d.pots[p])||[]).length;},0);
         var afterCount = [1,2,3,4,5,6].reduce(function(s,p){return s+reconciled.pots[p].length;},0);
-        var wodChanged = lsEnsureWordOfDay(reconciled, run.id);
         setData(reconciled);
-        if(beforeCount !== afterCount || wodChanged){
+        if(beforeCount !== afterCount){
           lsSaveProgress(player.id, run.id, reconciled);
         }
       } else {
-        var fresh = lsInitProgress(runWords, runSents);
-        lsEnsureWordOfDay(fresh, run.id);
-        setData(fresh);
+        setData(lsInitProgress(runWords, runSents));
       }
       setDataLoading(false);
     }).catch(function(){
-      var fresh = lsInitProgress(runWords, runSents);
-      lsEnsureWordOfDay(fresh, run.id);
-      setData(fresh);
+      setData(lsInitProgress(runWords, runSents));
       setDataLoading(false);
     });
   },[]);
@@ -168,10 +167,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   },[phase]);
 
   function saveAndUpdate(newData){
-    // Nach jedem Aufstieg neu prüfen: verlässt gerade das Wort des Tages den
-    // offenen Pool, zieht lsEnsureWordOfDay sofort ein neues für den Rest des
-    // Tages nach.
-    lsEnsureWordOfDay(newData, run.id);
     lsSaveProgress(player.id, run.id, newData);
     setData(newData);
   }
@@ -199,7 +194,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
   function pickWord(){
     if(!sesStart) setSesStart(Date.now());
-    var w = lsPickWord(data, recentWordsRef.current, {workingSet:streak.workingSet});
+    var w = lsPickWord(data, recentWordsRef.current, {workingSet:streak.workingSet, wordOfDayKey:wordOfDayKey});
     if(!w){ setPhase('done'); return; }
     recentWordsRef.current = [w.word].concat(recentWordsRef.current).slice(0,3);
     setCurrent(w); setInput(''); setResult(null); setHelpMode(false);
@@ -736,12 +731,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     ⭐ Wort des Tages
   </div> : null;
 
-  // Für die Vorschau auf dem Start-Bildschirm: das heutige Wort des Tages
-  // irgendwo in den Töpfen 1-6 finden (dort steht auch die Übersetzung).
+  // Für die Vorschau auf dem Start-Bildschirm: das heutige (sprachweite) Wort
+  // des Tages in den Töpfen dieses Runs suchen (dort steht auch die
+  // Übersetzung) — steckt es hier gar nicht drin, bleibt die Vorschau leer.
   var wordOfDayEntry = null;
-  if(data.wordOfDay && data.wordOfDay.date===dayKey()){
+  if(wordOfDayKey){
     [1,2,3,4,5,6].some(function(p){
-      var hit = (data.pots[p]||[]).find(function(w){ return normWordKey(w.word)===data.wordOfDay.key; });
+      var hit = (data.pots[p]||[]).find(function(w){ return normWordKey(w.word)===wordOfDayKey; });
       if(hit){ wordOfDayEntry = {w:hit, pot:p}; return true; }
       return false;
     });
