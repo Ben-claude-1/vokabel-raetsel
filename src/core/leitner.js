@@ -406,50 +406,47 @@ function recentPenalty(word, recentWords){
 }
 
 // ── Wort des Tages ───────────────────────────────────────────────────────────
-// Genau eine Vokabel pro Tag UND SPRACHE (nicht pro Run!) — Emma soll an einem
-// Tag ein englisches und ein spanisches Wort des Tages sehen, nicht in jedem
-// einzelnen Englisch-Run ein anderes. Die Auswahl kommt deshalb nicht aus dem
-// (pro Run unterschiedlichen) Fortschritts-Pool, sondern aus dem gesamten
-// Vokabelbestand der Sprache über alle Kapitel hinweg — der ändert sich nur,
-// wenn ein Admin Kapitel bearbeitet, und ist damit über den ganzen Tag und
-// über alle Runs hinweg stabil. In lsPickWord wird sie in urgency() stark
-// bevorzugt, damit sie schnell Topf 6 erreicht; taucht sie in einem
-// bestimmten Run gar nicht auf oder ist dort schon gelernt, hat sie dort
-// einfach keinen Effekt — andere Runs derselben Sprache zeigen sie trotzdem.
+// Genau eine Vokabel pro Tag, Spieler UND SPRACHE (nicht pro Run!) — Emma soll
+// an einem Tag ein englisches und ein spanisches Wort des Tages sehen, nicht
+// in jedem einzelnen Englisch-Run ein anderes. Quelle ist der offene Pool
+// desjenigen Runs, der als erstes an diesem Tag für diese Sprache geöffnet
+// wird — damit ist garantiert, dass die Vokabel dort auch wirklich vorkommt
+// und noch nicht gelernt ist. Später am selben Tag geöffnete Runs derselben
+// Sprache lesen denselben, in `settings` abgelegten Wert; taucht das Wort dort
+// gar nicht auf, hat der Bonus in urgency() dort einfach keinen Effekt.
 var WORD_OF_DAY_BOOST = 6;
 
-// Einfacher, deterministischer String-Hash (Java-String.hashCode-Art) — reicht
-// hier, weil es nur um eine stabile, aber unvorhersehbare Zuordnung Tag→Wort
-// geht, keine Kryptografie.
-function hashStr(s){
-  var h = 0;
-  for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
-  return h;
-}
+function wordOfDaySettingsKey(playerId, lang){ return 'wod_'+String(playerId||'')+'_'+String(lang||''); }
 
-// Alle Vokabeln einer Sprache über alle Kapitel hinweg, entdoppelt und
-// sortiert — die Kandidatenliste fürs Wort des Tages.
-function wordOfDayPoolKeys(chapters, lang){
-  var seen = {}, out = [];
-  (chapters||[]).forEach(function(c){
-    if(!c || !c.parent_id || chLang(c)!==lang) return;
-    safeWords(c.words).forEach(function(w){
-      if(!w || !w.word) return;
-      var k = normWordKey(w.word);
-      if(!seen[k]){ seen[k] = 1; out.push(k); }
-    });
-  });
-  out.sort();
+// Offener Pool (Töpfe 1-5) als normalisierte Wortschlüssel — die Kandidaten
+// für einen Claim, falls dieser Run das Wort des Tages als erster festlegt.
+function openPoolKeys(pots){
+  var out = [];
+  [1,2,3,4,5].forEach(function(pot){ ((pots||{})[pot]||[]).forEach(function(w){
+    if(w && !w.disputeId) out.push(normWordKey(w.word));
+  }); });
   return out;
 }
 
-// Deterministische Wahl für (Sprache, Tag) — dieselbe Sprache liefert am
-// selben Tag überall denselben Schlüssel, unabhängig vom Run.
-function lsWordOfDayKeyForLang(chapters, lang, today){
-  var keys = wordOfDayPoolKeys(chapters, lang);
-  if(!keys.length) return null;
-  var idx = hashStr(String(lang||'')+'|'+(today||lsToday())) % keys.length;
-  return keys[idx];
+// Liest das Wort des Tages für (Spieler, Sprache); legt es fest, falls heute
+// noch keins existiert. `candidateKeys` ist der offene Pool DIESES Runs — nur
+// relevant, falls er den Claim gewinnt (erster Aufruf des Tages).
+function lsClaimWordOfDay(playerId, lang, today, candidateKeys){
+  if(!playerId || !lang) return Promise.resolve(null);
+  today = today || lsToday();
+  var key = wordOfDaySettingsKey(playerId, lang);
+  return sbGet('settings','key=eq.'+encodeURIComponent(key)).then(function(rows){
+    var row = rows && rows[0];
+    var v = null;
+    if(row){ try{ v = JSON.parse(row.value); }catch(e){} }
+    if(v && v.d===today && v.key) return v.key;
+    if(!candidateKeys || !candidateKeys.length) return null;
+    var pick = candidateKeys[Math.floor(Math.random()*candidateKeys.length)];
+    var val = JSON.stringify({d:today, key:pick});
+    var save = row ? sbPatch('settings',{value:val},'key=eq.'+encodeURIComponent(key))
+                   : sbPost('settings',{key:key, value:val});
+    return save.then(function(){ return pick; }).catch(function(){ return pick; });
+  }).catch(function(){ return null; });
 }
 
 function lsPickWord(progress, recentWords, opts) {
@@ -694,4 +691,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, wordOfDayPoolKeys, lsWordOfDayKeyForLang, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

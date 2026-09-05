@@ -205,47 +205,76 @@ test('bei höchstens 20 offenen Vokabeln ist das Arbeitsset von Anfang an unbegr
 });
 
 // ── Wort des Tages ───────────────────────────────────────────────────────────
-// Ein Wort pro Sprache und Tag, nicht pro Run — deshalb kommt die Auswahl aus
-// dem Kapitel-Wortschatz (sprachübergreifend entdoppelt), nicht aus dem
-// Fortschritts-Pool eines einzelnen Runs.
-
-function makeChapters() {
-  return [
-    { id: 'en1', parent_id: 'root', language: 'en', words: [
-      { word: 'Apple', clue: 'Apfel' }, { word: 'Book', clue: 'Buch' }, { word: 'Cat', clue: 'Katze' },
-    ] },
-    { id: 'en2', parent_id: 'root', language: 'en', words: [
-      { word: 'Dog', clue: 'Hund' }, { word: 'Egg', clue: 'Ei' },
-    ] },
-    { id: 'es1', parent_id: 'root', language: 'es', words: [
-      { word: 'Perro', clue: 'Hund' }, { word: 'Gato', clue: 'Katze' },
-    ] },
-  ];
+// Ein Wort pro Spieler, Sprache und Tag, nicht pro Run — der zuerst geöffnete
+// Run des Tages legt es aus seinem eigenen offenen Pool fest (`lsClaimWordOfDay`,
+// serverseitig in `settings` abgelegt), spätere Runs derselben Sprache
+// übernehmen denselben Wert. Die Netzwerkschicht (sbGet/sbPost/sbPatch) wird
+// hier über `global.fetch` durch einen In-Memory-Store ersetzt — echte Calls
+// gingen sonst gegen die Produktions-API.
+function mockSettingsFetch() {
+  const store = new Map();
+  const original = global.fetch;
+  global.fetch = async (url, opts) => {
+    const u = new URL(url);
+    if (!u.pathname.includes('/rest/v1/settings')) throw new Error('unerwarteter fetch: ' + url);
+    const method = (opts && opts.method) || 'GET';
+    const m = /key=eq\.([^&]+)/.exec(u.search);
+    const k = m && decodeURIComponent(m[1]);
+    if (method === 'GET') {
+      const row = k && store.get(k);
+      return { ok: true, text: async () => JSON.stringify(row ? [row] : []) };
+    }
+    if (method === 'POST') {
+      const body = JSON.parse(opts.body);
+      store.set(body.key, body);
+      return { ok: true, text: async () => JSON.stringify([body]) };
+    }
+    if (method === 'PATCH') {
+      const body = JSON.parse(opts.body);
+      store.set(k, Object.assign({}, store.get(k) || { key: k }, body));
+      return { ok: true, text: async () => '' };
+    }
+    return { ok: true, text: async () => '[]' };
+  };
+  return { store, restore: () => { global.fetch = original; } };
 }
 
-test('lsWordOfDayKeyForLang liefert pro Sprache ein eigenes, stabiles Wort', () => {
-  const chapters = makeChapters();
-  const today = L.lsToday();
-  const en = L.lsWordOfDayKeyForLang(chapters, 'en', today);
-  const es = L.lsWordOfDayKeyForLang(chapters, 'es', today);
-  expect(['apple', 'book', 'cat', 'dog', 'egg']).toContain(en);
-  expect(['perro', 'gato']).toContain(es);
-  // Wiederholter Aufruf am selben Tag liefert dasselbe Wort — unabhängig davon,
-  // aus welchem Run/Kapitel heraus es aufgerufen wird.
-  expect(L.lsWordOfDayKeyForLang(chapters, 'en', today)).toBe(en);
-  // Andere Sprache ⇒ eigenes Wort, niemals aus dem falschen Sprachtopf.
-  expect(en).not.toBe(es);
+test('lsClaimWordOfDay: der erste Run des Tages legt das Wort fest, spätere übernehmen es', async () => {
+  const { restore } = mockSettingsFetch();
+  try {
+    const today = L.lsToday();
+    // Run A (Theme 1) ist zuerst dran und bringt seine eigenen Kandidaten mit.
+    const keyA = await L.lsClaimWordOfDay('spieler-1', 'en', today, ['apple', 'book', 'cat']);
+    expect(['apple', 'book', 'cat']).toContain(keyA);
+    // Run B (Theme 2, andere Vokabeln) fragt später am selben Tag an — bekommt
+    // trotzdem Run As Wort zurück, nicht eines aus den eigenen Kandidaten.
+    const keyB = await L.lsClaimWordOfDay('spieler-1', 'en', today, ['dog', 'egg']);
+    expect(keyB).toBe(keyA);
+  } finally { restore(); }
 });
 
-test('lsWordOfDayKeyForLang kennt keine Runs — zwei Sitzungen mit denselben Kapiteln landen beim gleichen Wort', () => {
-  const chapters = makeChapters();
-  const today = L.lsToday();
-  // Zwei "Runs" (hier: zwei unabhängige Aufrufe, wie sie zwei verschiedene
-  // Leiterspiel-Sessions machen würden) mit derselben Kapitelliste müssen auf
-  // dasselbe Wort kommen — das ist der ganze Punkt der Sprachbindung.
-  const runA = L.lsWordOfDayKeyForLang(chapters, 'en', today);
-  const runB = L.lsWordOfDayKeyForLang(chapters.slice(), 'en', today);
-  expect(runA).toBe(runB);
+test('lsClaimWordOfDay: andere Sprache und anderer Spieler bekommen ihr eigenes Wort', async () => {
+  const { restore } = mockSettingsFetch();
+  try {
+    const today = L.lsToday();
+    const en = await L.lsClaimWordOfDay('spieler-1', 'en', today, ['apple', 'book']);
+    const es = await L.lsClaimWordOfDay('spieler-1', 'es', today, ['perro', 'gato']);
+    const otherPlayer = await L.lsClaimWordOfDay('spieler-2', 'en', today, ['apple', 'book']);
+    expect(['perro', 'gato']).toContain(es);
+    expect(en).not.toBe(es);
+    // Andere Spieler haben ihren eigenen Fortschritt und damit ihr eigenes Wort.
+    expect(['apple', 'book']).toContain(otherPlayer);
+  } finally { restore(); }
+});
+
+test('lsClaimWordOfDay: an einem neuen Tag wird neu gezogen', async () => {
+  const { restore } = mockSettingsFetch();
+  try {
+    const gestern = await L.lsClaimWordOfDay('spieler-1', 'en', '2020-01-01', ['apple']);
+    expect(gestern).toBe('apple');
+    const heute = await L.lsClaimWordOfDay('spieler-1', 'en', '2020-01-02', ['book']);
+    expect(heute).toBe('book');
+  } finally { restore(); }
 });
 
 test('lsPickWord bevorzugt das Wort des Tages deutlich und markiert es', () => {

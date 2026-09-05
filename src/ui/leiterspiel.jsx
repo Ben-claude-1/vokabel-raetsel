@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, lsWordOfDayKeyForLang, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -28,10 +28,12 @@ function verbGroupKey(words) {
 function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, streak: streakProp }) {
   var streak = Object.assign({}, DEFAULT_STREAK, streakProp || {});
   var lang = useMemo(function(){ return runScope(run, chapters).language; }, [run, chapters]);
-  // Ein Wort des Tages pro Sprache und Tag, nicht pro Run — sonst hätte jeder
-  // Englisch-Run sein eigenes. Rein aus dem Kapitel-Wortschatz berechnet,
-  // deshalb über alle Runs derselben Sprache identisch.
-  var wordOfDayKey = useMemo(function(){ return lsWordOfDayKeyForLang(chapters, lang, dayKey()); }, [chapters, lang]);
+  // Ein Wort des Tages pro Spieler, Sprache und Tag, nicht pro Run — sonst
+  // hätte jeder Englisch-Run sein eigenes. Der Run, der als erster an diesem
+  // Tag für diese Sprache geöffnet wird, legt es aus seinem eigenen offenen
+  // Pool fest (siehe useEffect unten); später geöffnete Runs derselben
+  // Sprache übernehmen denselben Wert.
+  var [wordOfDayKey, setWordOfDayKey] = useState(null);
   // Verben-Trainer-Runs (unregelmäßige Verben) erkennt man am `pattern`-Feld
   // der Wörter — daran hängt sowohl die Fragen-Art als auch die Topf-Beschriftung.
   var isVerbRun = useMemo(function(){
@@ -156,6 +158,19 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       setDataLoading(false);
     });
   },[]);
+
+  // Wort des Tages: erst versuchen, sobald der Fortschritt geladen ist — der
+  // offene Pool DIESES Runs ist die Kandidatenquelle, falls er der erste
+  // geöffnete Run des Tages für diese Sprache ist (lsClaimWordOfDay klärt
+  // das serverseitig; später geöffnete Runs bekommen denselben Wert zurück).
+  useEffect(function(){
+    if(dataLoading || !data || !player || !lang) return;
+    var cancelled = false;
+    lsClaimWordOfDay(player.id, lang, dayKey(), openPoolKeys(data.pots)).then(function(key){
+      if(!cancelled) setWordOfDayKey(key);
+    });
+    return function(){ cancelled = true; };
+  },[dataLoading, lang, player && player.id]);
 
   useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes'||phase==='test_q')) inputRef.current.focus(); },[phase,testIdx]);
 
