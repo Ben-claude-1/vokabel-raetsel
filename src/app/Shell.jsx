@@ -6,6 +6,7 @@ import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, same
 import { BUILTIN } from '../core/store.js';
 import { dayGoalHint, dayGoalState } from '../core/goal.js';
 import { BtnStyle, G100, G200, G400, G600, G900, T, TD, screenGame } from '../core/theme.js';
+import { collectVerbs } from '../core/verbsort.js';
 import { normWordKey, parseData } from '../core/words.js';
 import { GoalTracker, LoginScreen, RegisterScreen } from '../ui/auth.jsx';
 import { LeitersSpielCreate, LeitersSpielMenu, LeitersSpielSession } from '../ui/leiterspiel.jsx';
@@ -26,6 +27,7 @@ const KlassenarbeitTest = React.lazy(function(){ return import('../ui/klassenarb
 const QuizDuel = React.lazy(function(){ return import('../ui/quiz.jsx').then(function(m){ return {default:m.QuizDuel}; }); });
 const QuizDuelMenu = React.lazy(function(){ return import('../ui/quiz.jsx').then(function(m){ return {default:m.QuizDuelMenu}; }); });
 const QuizSolo = React.lazy(function(){ return import('../ui/quiz.jsx').then(function(m){ return {default:m.QuizSolo}; }); });
+const VerbSortGame = React.lazy(function(){ return import('../ui/verbsort.jsx').then(function(m){ return {default:m.VerbSortGame}; }); });
 
 function ScopeSwitcher({ scopes, scope, onChange, compact }) {
   var [open, setOpen] = useState(false);
@@ -295,6 +297,10 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     return scopeTree.filter(function(c){ return !hasKid[c.id]; });
   }, [chapters, scopeTree]);
   var isEnglish = !scope || scope.language === 'en';
+  // Der Muster-Detektiv braucht Verben mit `pattern` (die Muster-Kapitel der
+  // unregelmäßigen Verben) — ohne die bleibt die Kachel weg, statt in ein
+  // leeres Spiel zu führen.
+  var verbSortCount = useMemo(function(){ return collectVerbs(scopeTree).length; }, [scopeTree]);
 
   // Untertitel der Wiederholungs-Kachel: fällig, pausiert (vor einer Arbeit)
   // oder normal. Zwei Kacheln zeigen ihn — deshalb einmal berechnet.
@@ -321,6 +327,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       onStart={function(run,streak){setLsRun(run);setLsStreak(streak);go('leiterspiel_play');}}
       onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_play'&&lsRun) return <LeitersSpielSession run={lsRun} player={player} chapters={chapters} streak={lsStreak} onUpdateScore={handleUpdateScore} onDone={function(){go('leiterspiel_menu');}}/>;
+    if(screen==='verbsort') return <VerbSortGame player={player} chapters={scopeTree} onUpdateScore={handleUpdateScore} onDone={function(){go('games');}}/>;
     if(screen==='leiterspiel_create') return <LeitersSpielCreate player={player} chapters={scopeTree} scope={scope} onDone={function(){go('games');}}/>;
     if(screen==='grammar') return <GrammarGame player={player} setPlayer={setPlayer} onDone={function(){go('games');}}/>;
     if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters}
@@ -345,6 +352,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     vocab_trainer:'📝 Vokabeltrainer',workout:'🏋️ Workout',workout_setup:'🏋️ Workout',sentence_learner:'💬 Sätze',
     quiz_solo:'🎯 Quiz Solo',quiz_duel:'⚔️ Quiz Duell',quiz_duel_menu:'🎯 Quiz',crossword:'🧩 Kreuzworträtsel',browse:'📖 Vokabeln',
     leiterspiel_menu:'🪜 Leiterspiel',leiterspiel_play:'🪜 Leiterspiel',leiterspiel_create:'➕ Run erstellen',
+    verbsort:'🕵️ Muster-Detektiv',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
     scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit',
     wiederholung:'🔁 Wiederholung'
@@ -389,6 +397,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🪜',title:'Leiterspiel'+(reviewInfo.locked?' 🔒':''),sub:reviewInfo.locked?'Gesperrt — erst die Wiederholung machen':'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
+              ...(verbSortCount>0?[{icon:'🕵️',title:'Muster-Detektiv',sub:'Unregelmäßige Verben ihrer Gruppe zuordnen',action:function(){go('verbsort');}}]:[]),
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell spielen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               ...(isEnglish?[{icon:'✏️',title:'Grammar Trainer',sub:'Englische Grammatik üben',action:function(){go('grammar');}}]:[]),
@@ -423,6 +432,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
+              ...(verbSortCount>0?[{icon:'🕵️',title:'Muster-Detektiv',sub:'Unregelmäßige Verben ihrer Gruppe zuordnen',action:function(){go('verbsort');}}]:[]),
               ...(isEnglish?[{icon:'✏️',title:'Grammar Trainer',sub:'Grammatik mit KI-Feedback',action:function(){go('grammar');}}]:[]),
               {icon:'📋',title:'Klassenarbeit',sub:'Vorbereitung auf die Klassenarbeit',action:function(){go('klassenarbeit_player');}},
               ...(isAdmin?[{icon:'➕',title:'Run erstellen',sub:'Neuen Leiterspiel-Run erstellen',action:function(){go('leiterspiel_create');}}]:[]),
@@ -470,7 +480,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
         {showBack&&<button onClick={function(){
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
             word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
-            leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',
+            leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',verbsort:'games',
             grammar:'games',klassenarbeit_player:'games',klassenarbeit_play:'klassenarbeit_player',
             stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';

@@ -45,6 +45,7 @@ var SCREEN_GAME = {
   grammar:'grammatik',
   klassenarbeit_play:'klassenarbeit',
   wiederholung:'wiederholung',
+  verbsort:'verbmuster',
   puzzle:'puzzle'
 };
 
@@ -61,6 +62,7 @@ var GAME_META = {
   grammatik:{icon:'✏️',label:'Grammatik'},
   klassenarbeit:{icon:'📋',label:'Klassenarbeit'},
   wiederholung:{icon:'🔁',label:'Wiederholung'},
+  verbmuster:{icon:'🕵️',label:'Muster-Detektiv'},
   puzzle:{icon:'🧩',label:'Puzzle'},
   sonstiges:{icon:'⏱️',label:'Sonstiges'}
 };
