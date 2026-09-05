@@ -405,6 +405,52 @@ function recentPenalty(word, recentWords){
   return [0.08, 0.3, 0.6][idx] || 0.8;
 }
 
+// ── Wort des Tages ───────────────────────────────────────────────────────────
+// Eine Vokabel pro Tag und Run, die in urgency() stark bevorzugt wird, damit
+// sie schnell Topf 6 erreicht. Die Auswahl steckt fest in `progress.wordOfDay`
+// (nicht bei jedem Aufruf neu berechnet) — sonst würde jeder Aufstieg eines
+// GANZ ANDEREN Worts den offenen Pool verschieben und die Auswahl bei jedem
+// Aufruf springen lassen. Erreicht das aktuelle Wort des Tages selbst Topf 6,
+// zählt es nicht mehr zum offenen Pool und lsEnsureWordOfDay zieht ein neues.
+var WORD_OF_DAY_BOOST = 6;
+
+function openPoolKeys(pots){
+  var out = [];
+  [1,2,3,4,5].forEach(function(pot){ (pots[pot]||[]).forEach(function(w){
+    if(w && !w.disputeId) out.push(normWordKey(w.word));
+  }); });
+  return out;
+}
+
+// Einfacher, deterministischer String-Hash (Java-String.hashCode-Art) — reicht
+// hier, weil es nur um eine stabile, aber unvorhersehbare Zuordnung Tag→Wort
+// geht, keine Kryptografie.
+function hashStr(s){
+  var h = 0;
+  for(var i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i)) >>> 0; }
+  return h;
+}
+
+// Sorgt dafür, dass `progress.wordOfDay` für heute eine gültige (noch offene)
+// Vokabel trägt. Gibt true zurück, wenn sich dabei etwas geändert hat (→ muss
+// gespeichert werden). Rein lesende Aufrufe (z.B. Anzeige) können das
+// Rückgabeergebnis ignorieren.
+function lsEnsureWordOfDay(progress, runId){
+  if(!progress) return false;
+  var today = lsToday();
+  var keys = openPoolKeys(progress.pots || {});
+  var wod = progress.wordOfDay;
+  if(wod && wod.date===today && keys.indexOf(wod.key)>=0) return false;
+  if(!keys.length){
+    if(wod){ progress.wordOfDay = null; return true; }
+    return false;
+  }
+  keys.sort();
+  var idx = hashStr(String(runId||'')+'|'+today) % keys.length;
+  progress.wordOfDay = {date:today, key:keys[idx]};
+  return true;
+}
+
 function lsPickWord(progress, recentWords, opts) {
   opts = opts || {};
   var today = lsToday();
@@ -418,6 +464,9 @@ function lsPickWord(progress, recentWords, opts) {
   // ab mehr als ACTIVE_POOL_SIZE davon wird das Arbeitsset gedeckelt.
   var openPool = [1,2,3,4,5].reduce(function(s,pot){ return s + avail(pot).length; }, 0);
   var setSize = Math.max(4, opts.workingSet || Math.min(ACTIVE_POOL_SIZE, openPool) || WORKING_SET);
+
+  var wod = progress && progress.wordOfDay;
+  var wodKey = (wod && wod.date===today) ? wod.key : null;
 
   // Arbeitsset: angefangene Wörter. Was heute schon aufgestiegen ist, zählt
   // nicht mit — sonst blockiert es den Nachschub und die Sitzung dreht sich
@@ -435,9 +484,25 @@ function lsPickWord(progress, recentWords, opts) {
   }
 
   var cands = working.concat(resting);
+
+  // Das Wort des Tages muss immer wählbar sein, auch wenn es (noch) nicht im
+  // regulär nachgerückten Arbeitsset steckt — sonst müsste es erst normal an
+  // die Reihe kommen, und genau das soll die Auszeichnung ja umgehen.
+  if(wodKey && !cands.some(function(x){ return normWordKey(x.w.word)===wodKey; })){
+    for(var p=1; p<=5 && !cands.some(function(x){ return normWordKey(x.w.word)===wodKey; }); p++){
+      var hit = avail(p).filter(function(w){ return normWordKey(w.word)===wodKey; })[0];
+      if(hit) cands.push({w:hit, pot:p});
+    }
+  }
+
   if(!cands.length) return null;   // alles gelernt → der Run ist durch
-  var pick = weightedPick(cands, function(x){ return urgency(x.w, x.pot, today) * recentPenalty(x.w.word, recent); });
-  return flat(pick.w, pick.pot);
+  var pick = weightedPick(cands, function(x){
+    var u = urgency(x.w, x.pot, today) * recentPenalty(x.w.word, recent);
+    return (wodKey && normWordKey(x.w.word)===wodKey) ? u*WORD_OF_DAY_BOOST : u;
+  });
+  var picked = flat(pick.w, pick.pot);
+  if(wodKey && normWordKey(picked.word)===wodKey) picked.wod = true;
+  return picked;
 }
 
 // Aufstiege werden nicht gesperrt (ein kleiner Wörter-Pool wie ein
@@ -629,4 +694,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, lsEnsureWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

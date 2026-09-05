@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsEnsureWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -139,16 +139,21 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         var reconciled = reconcile(d);
         var beforeCount = [1,2,3,4,5,6].reduce(function(s,p){return s+((d.pots&&d.pots[p])||[]).length;},0);
         var afterCount = [1,2,3,4,5,6].reduce(function(s,p){return s+reconciled.pots[p].length;},0);
+        var wodChanged = lsEnsureWordOfDay(reconciled, run.id);
         setData(reconciled);
-        if(beforeCount !== afterCount){
+        if(beforeCount !== afterCount || wodChanged){
           lsSaveProgress(player.id, run.id, reconciled);
         }
       } else {
-        setData(lsInitProgress(runWords, runSents));
+        var fresh = lsInitProgress(runWords, runSents);
+        lsEnsureWordOfDay(fresh, run.id);
+        setData(fresh);
       }
       setDataLoading(false);
     }).catch(function(){
-      setData(lsInitProgress(runWords, runSents));
+      var fresh = lsInitProgress(runWords, runSents);
+      lsEnsureWordOfDay(fresh, run.id);
+      setData(fresh);
       setDataLoading(false);
     });
   },[]);
@@ -163,6 +168,10 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   },[phase]);
 
   function saveAndUpdate(newData){
+    // Nach jedem Aufstieg neu prüfen: verlässt gerade das Wort des Tages den
+    // offenen Pool, zieht lsEnsureWordOfDay sofort ein neues für den Rest des
+    // Tages nach.
+    lsEnsureWordOfDay(newData, run.id);
     lsSaveProgress(player.id, run.id, newData);
     setData(newData);
   }
@@ -720,6 +729,24 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     <span style={{opacity:0.85}}>✅ {liveLearned}/{liveTotal}</span>
   </div> : null;
 
+  // Wort des Tages: current.wod kommt direkt von lsPickWord — dieses Banner
+  // erscheint egal in welcher Topf-Phase gerade gefragt wird.
+  var wordOfDayBanner = (current && current.wod) ? <div style={{textAlign:'center',marginBottom:10,padding:'7px 10px',borderRadius:10,
+    background:'linear-gradient(135deg,#fde68a,#f59e0b)',color:'#78350f',fontWeight:'bold',fontSize:12,letterSpacing:0.5}}>
+    ⭐ Wort des Tages
+  </div> : null;
+
+  // Für die Vorschau auf dem Start-Bildschirm: das heutige Wort des Tages
+  // irgendwo in den Töpfen 1-6 finden (dort steht auch die Übersetzung).
+  var wordOfDayEntry = null;
+  if(data.wordOfDay && data.wordOfDay.date===dayKey()){
+    [1,2,3,4,5,6].some(function(p){
+      var hit = (data.pots[p]||[]).find(function(w){ return normWordKey(w.word)===data.wordOfDay.key; });
+      if(hit){ wordOfDayEntry = {w:hit, pot:p}; return true; }
+      return false;
+    });
+  }
+
   if(phase==='pick'){
     var pct = lsPercent(data, streak);
     var grade = lsGrade(pct, streak);
@@ -738,6 +765,14 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
             <div style={{height:'100%',width:pct+'%',background:'white',borderRadius:3}}/>
           </div>
         </div>
+        {wordOfDayEntry && wordOfDayEntry.pot!==6 && <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,padding:'10px 14px',borderRadius:12,
+          background:'linear-gradient(135deg,#fde68a,#f59e0b)',color:'#78350f'}}>
+          <span style={{fontSize:22}}>⭐</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:1,opacity:.85}}>Wort des Tages</div>
+            <div style={{fontSize:16,fontWeight:'bold'}}>{wordOfDayEntry.w.word} <span style={{fontWeight:'normal',opacity:.85}}>— {wordOfDayEntry.w.clue}</span></div>
+          </div>
+        </div>}
         <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',justifyContent:'center'}}>
           {[1,2,3,4,5].map(function(p){
             var cnt = (data.pots[p]||[]).length;
@@ -821,6 +856,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         {current&&<VerbMatchPanel current={current} onSubmit={submitVerbAnswer}/>}
       </div>
@@ -831,6 +867,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         {current&&<VerbFieldsPanel current={current} mode={phase==='verbhint'?'hint':'free'} onSubmit={submitVerbAnswer}/>}
       </div>
@@ -842,6 +879,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         {current&&<VerbReversePanel current={current} showForm={verbShowForm} onSubmit={submitVerbAnswer}/>}
       </div>
@@ -852,6 +890,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div ref={quizDropZoneRef} style={{textAlign:'center',padding:'16px',background:dragOver?'#d1fae5':G50,borderRadius:14,marginBottom:12,
           border:'2px solid '+(dragOver?GR:G200),transition:'background 0.1s ease,border-color 0.1s ease'}}>
@@ -907,6 +946,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
           <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>Topf 2 — Buchstaben sortieren</div>
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
@@ -985,6 +1025,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(helpMode) return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
           <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf 2 — Buchstaben sortieren</div>
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
@@ -999,6 +1040,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:'#f0fdf4',borderRadius:14,marginBottom:12,border:'2px solid #86efac'}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf 3 — Wie heißt das auf {langLabel(lang)}?</div>
@@ -1030,6 +1072,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       return(
         <div style={{padding:8}}>
           {liveChip}
+        {wordOfDayBanner}
           <div style={{textAlign:'center',padding:'18px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #93c5fd'}}>
             <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>🔽 Hilfe wie in Topf {helperPot} — Wie heißt das auf {langLabel(lang)}?</div>
             <div style={{fontSize:22,fontWeight:'bold',color:G900,marginBottom:showDashHint?10:4}}>{current&&current.clue}</div>
@@ -1051,6 +1094,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(phase==='answer') return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         <div style={{textAlign:'center',padding:'18px 16px',background:G50,borderRadius:14,marginBottom:12,border:'2px solid '+G200}}>
           <div style={{fontSize:10,color:G400,marginBottom:4,textTransform:'uppercase',letterSpacing:1}}>Topf {current&&current.pot} — {current&&current.pot===5?'Wie heißt das auf Deutsch?':('Wie heißt das auf '+langLabel(lang)+'?')}</div>
@@ -1072,6 +1116,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     return(
       <div style={{padding:8}}>
         {liveChip}
+        {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);}}/>}
         {result&&(
           <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.helped?'#eff6ff':result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.helped?'#93c5fd':result.correct?GR:RE)}}>

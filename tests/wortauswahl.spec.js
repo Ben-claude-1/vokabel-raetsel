@@ -204,6 +204,47 @@ test('bei höchstens 20 offenen Vokabeln ist das Arbeitsset von Anfang an unbegr
   expect(touched.size).toBe(15);
 });
 
+// ── Wort des Tages ───────────────────────────────────────────────────────────
+
+test('lsEnsureWordOfDay wählt eine Vokabel aus dem offenen Pool und lässt sie stehen', () => {
+  const p = makeOpenPool(10);
+  const changed = L.lsEnsureWordOfDay(p, 'run-1');
+  expect(changed).toBe(true);
+  expect(p.wordOfDay.date).toBe(L.lsToday());
+  expect(p.pots[1].some(w => w.word.toLowerCase() === p.wordOfDay.key)).toBe(true);
+
+  // Erneuter Aufruf am selben Tag ändert nichts, solange die Vokabel noch offen ist.
+  const before = JSON.stringify(p.wordOfDay);
+  expect(L.lsEnsureWordOfDay(p, 'run-1')).toBe(false);
+  expect(JSON.stringify(p.wordOfDay)).toBe(before);
+});
+
+test('lsEnsureWordOfDay zieht ein neues Wort nach, sobald das alte Topf 6 erreicht', () => {
+  const p = makeOpenPool(5);
+  L.lsEnsureWordOfDay(p, 'run-2');
+  const key = p.wordOfDay.key;
+  const idx = p.pots[1].findIndex(w => w.word.toLowerCase() === key);
+  p.pots[6].push(p.pots[1].splice(idx, 1)[0]);
+
+  const changed = L.lsEnsureWordOfDay(p, 'run-2');
+  expect(changed).toBe(true);
+  expect(p.wordOfDay.key).not.toBe(key);
+});
+
+test('lsPickWord bevorzugt das Wort des Tages deutlich und markiert es', () => {
+  const p = makeOpenPool(20);
+  L.lsEnsureWordOfDay(p, 'run-3');
+  const key = p.wordOfDay.key;
+  let wodHits = 0, marked = 0;
+  for (let i = 0; i < 500; i++) {
+    const w = L.lsPickWord(p, null, {});
+    if (w.word.toLowerCase() === key) { wodHits++; if (w.wod) marked++; }
+  }
+  // Bei 20 gleich gewichteten Kandidaten wäre der Erwartungswert ohne Bonus ~25.
+  expect(wodHits).toBeGreaterThan(80);
+  expect(marked).toBe(wodHits);
+});
+
 test('Fälligkeit wächst mit der Stufe 1-3-7-14-30-60', () => {
   const today = L.lsToday();
   expect(L.due6({ word: 'a', lc: daysAgo(0), rl: 0 }, today)).toBeLessThan(0);   // heute gekonnt
