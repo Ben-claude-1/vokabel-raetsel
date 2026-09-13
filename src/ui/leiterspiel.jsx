@@ -1815,7 +1815,7 @@ function LeitersSpielMenu({ player, chapters, scope, onStart, onDone, allUsers, 
           </div>}
           {verbCurrent.type==='new' && <div style={{fontSize:11,color:G400,marginTop:4}}>Erst wenn alle hier fertig abgefragt wurden (Topf ✍️ Abfrage), schaltet sich Tag {verbCurrent.day+1} frei.</div>}
           {verbTodayRun && <button onClick={function(){onStart(verbTodayRun,gs);}} style={BtnStyle(T,'white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>▶ Los geht's</button>}
-          {verbCurrent.type==='review' && <button onClick={function(){startVerbReview(verbCurrent.patterns);}} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
+          {(verbCurrent.type==='review'||verbCurrent.type==='test') && <button onClick={function(){startVerbReview(verbCurrent.patterns);}} style={BtnStyle('#f59e0b','white',{width:'100%',padding:'9px',fontSize:12,marginTop:8})}>🔁 Wiederholung starten</button>}
           {verbCurrent.type!=='new' && <button onClick={ackVerbPlanDay} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:11,marginTop:6})}>✓ Schon erledigt, weiter</button>}
         </div>;
       })()}
