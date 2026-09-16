@@ -379,7 +379,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var typed = skipped ? '' : input.trim();
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
-    var correctAnswer = isPot5 ? current.clue : wordDisplay(current);
+    var correctAnswer = isPot5 ? current.clue : wordDisplay(current, lang);
     var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer, extrasFor(current.word));
     var correct = status==='correct'||status==='partial';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
@@ -481,7 +481,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   // was eingegeben werden muss.
   function loesung(){
     if(!current) return '';
-    return current.pot===5 ? current.clue : wordDisplay(current);
+    return current.pot===5 ? current.clue : wordDisplay(current, lang);
   }
 
   // „Nicht gewusst" drücken. Solange Überspringer übrig sind, geht es wie
@@ -564,9 +564,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     saveAndUpdate(newData);
     var pts = helperPot*5;
     if(pts>0 && onUpdateScore) onUpdateScore(pts);
-    setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:wordDisplay(current),correct:true,partial:false,helped:true,fromPot:fromPot,toPot:fromPot,pts:pts}]);});
+    setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:wordDisplay(current, lang),correct:true,partial:false,helped:true,fromPot:fromPot,toPot:fromPot,pts:pts}]);});
     setHelpMode(false);
-    setResult({correct:true,helped:true,answer:wordDisplay(current),word:current.word,clue:current.clue,typed:wordDisplay(current),fromPot:fromPot,toPot:fromPot,pts:pts});
+    setResult({correct:true,helped:true,answer:wordDisplay(current, lang),word:current.word,clue:current.clue,typed:wordDisplay(current, lang),fromPot:fromPot,toPot:fromPot,pts:pts});
     setPhase('showResult');
   }
 
@@ -581,7 +581,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   // das Wort selbst (Topf 5 fragt sonst rückwärts, die Hilfe dreht das um).
   function submitHelpTyped(){
     if(!current) return;
-    var status = checkAnswer(input.trim(), wordDisplay(current), extrasFor(current.word));
+    var status = checkAnswer(input.trim(), wordDisplay(current, lang), extrasFor(current.word));
     if(status==='correct'||status==='partial') submitHelped();
     else submitHelpFailed();
   }
@@ -662,7 +662,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setPhase('test_q');
   }
   function testItemPrompt(it){ return it.kind==='sentence' ? it.translation : it.clue; }
-  function testItemAnswer(it){ return it.kind==='sentence' ? it.text : wordDisplay(it); }
+  function testItemAnswer(it){ return it.kind==='sentence' ? it.text : wordDisplay(it, lang); }
   function testItemDisplayWord(it){ return it.kind==='sentence' ? it.text : it.word; }
   function submitTestAnswer(){
     var w = testWords[testIdx]; if(!w) return;
@@ -973,7 +973,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
               style={{flex:1,padding:'12px 14px',fontSize:16,border:'2px solid #f59e0b',borderRadius:10,outline:'none'}}/>
             <button onClick={submitTyped} style={BtnStyle('#f59e0b','white',{padding:'12px 16px',fontSize:15})}>✓</button>
           </div>
-        ) : current&&<T2LetterField key={'t2_'+current.word} word={wordDisplay(current)} onCorrect={function(){
+        ) : current&&<T2LetterField key={'t2_'+current.word} word={wordDisplay(current, lang)} onCorrect={function(){
           if(copyMode){ finishCopy(); return; }
           var newData=JSON.parse(JSON.stringify(data));
           var potArr=(newData.pots[2]||[]);
@@ -1042,11 +1042,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           <div style={{fontSize:11,color:G600,marginBottom:6}}>Bedeutung: <strong>{current&&current.clue}</strong></div>
           <div style={{fontSize:10,color:G400}}>Tippe die Buchstaben in der richtigen Reihenfolge</div>
         </div>
-        {current&&<T2LetterField key={'help3_'+current.word} word={wordDisplay(current)} onCorrect={submitHelped} onWrong={submitHelpFailed}/>}
+        {current&&<T2LetterField key={'help3_'+current.word} word={wordDisplay(current, lang)} onCorrect={submitHelped} onWrong={submitHelpFailed}/>}
         <div style={{fontSize:11,color:G400,textAlign:'center',marginTop:8}}>Richtig gelöst bleibt die Vokabel in Topf 3.</div>
       </div>
     );
-    var dashLayout = buildT2Layout(wordDisplay(current));
+    var dashLayout = buildT2Layout(wordDisplay(current, lang));
     var dashLetterCount = dashLayout.targetNoSpaces.length;
     return(
       <div style={{padding:8}}>
@@ -1078,7 +1078,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     if(phase==='answer' && helpMode){
       var helperPot = HELP_FROM_POT[current.pot];
       var showDashHint = helperPot===3;
-      var hLayout = showDashHint ? buildT2Layout(wordDisplay(current)) : null;
+      var hLayout = showDashHint ? buildT2Layout(wordDisplay(current, lang)) : null;
       var hLetterCount = hLayout ? hLayout.targetNoSpaces.length : null;
       return(
         <div style={{padding:8}}>

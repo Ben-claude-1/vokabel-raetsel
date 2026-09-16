@@ -41,9 +41,24 @@ function aiCategorizeWords(words, apiKey) {
   }).catch(function(){ return {}; });
 }
 
-function wordDisplay(w) {
+// Modalverben stehen auch im Englischen ohne "to" ("she can swim"), sind in der
+// Datenbank aber als type=verb eingetragen.
+var MODAL_VERBS = {can:1, could:1, must:1, may:1, might:1, shall:1, should:1, will:1, would:1};
+
+// Das "to" vor Verben ist eine Eigenheit des englischen Infinitivs — spanische,
+// französische und lateinische Infinitive stehen ohne Partikel ("viajar", nicht
+// "to viajar"). Sprache kommt vom Aufrufer (Leiterspiel: runScope) oder aus dem
+// Wort selbst (Wiederholung: w.lang), sonst Englisch als Standard.
+function wordDisplay(w, lang) {
   if(!w) return '';
   var word = w.word||'';
+  if((lang || w.lang || 'en') !== 'en') return word;
+  if(MODAL_VERBS[word.toLowerCase().trim()]) return word;
+  // Steht in der Datenbank ein anderer Wortart-Typ, gilt der — die Endungs-
+  // Heuristik in getWordType hält sonst "yesterday" (Tipp "gestern") oder
+  // "against" ("gegen") für ein Verb und macht "to yesterday" daraus.
+  var t = (w.type||'').toLowerCase();
+  if(t && t!=='verb') return word;
   if(getWordType(w)==='verb' && !word.toLowerCase().startsWith('to ')) return 'to '+word;
   return word;
 }
