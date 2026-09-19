@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from '../core/react.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, T } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { checkAnswer, wordDisplay } from '../core/words.js';
+import { T2LetterField } from './widgets.jsx';
 
 var patternMeta = {
   chicken:   {emoji:'🐔', label:'Chicken',   rule:'alle 3 Formen gleich'},
@@ -239,6 +240,93 @@ function VerbMatchPanel({current, onSubmit}) {
   </div>;
 }
 
+// Buchstaben-Puzzle-Hilfe (2. Tipp-Stufe im Test, siehe VerbTestPanel unten):
+// je Zeitform ein eigenes T2LetterField (dieselbe Komponente wie Topf 2 bei
+// den normalen Vokabeln, siehe widgets.jsx) — Klammer-Alternativen wie
+// "burnt (burned)" werden von buildT2Layout schon als Statictext behandelt,
+// nur der Rest muss zusammengeklickt werden.
+function VerbLetterHintCard({current, fieldsMeta, onDone}) {
+  var [results, setResults] = useState(function(){ return fieldsMeta.map(function(){ return null; }); });
+  useEffect(function(){ setResults(fieldsMeta.map(function(){ return null; })); }, [current.word]);
+  function setOne(i, typed, correct) {
+    setResults(function(r){ var next = r.slice(); next[i] = {typed:typed, correct:correct}; return next; });
+  }
+  var allChecked = results.every(function(r){ return r!=null; });
+  function finish() {
+    var fields = fieldsMeta.map(function(f, i){
+      return {label:f.label, typed:results[i].typed, expected:primaryForm(f.expectedFull), correct:results[i].correct};
+    });
+    onDone({allCorrect: fields.every(function(f){return f.correct;}), fields:fields});
+  }
+  return <div style={{padding:'16px',background:'#eff6ff',borderRadius:14,border:'2px solid #93c5fd'}}>
+    <VerbHeader current={current}/>
+    <div style={{fontSize:10,color:G400,marginBottom:10,textTransform:'uppercase',letterSpacing:1,textAlign:'center'}}>Tipp 2 — Buchstaben anklicken</div>
+    {fieldsMeta.map(function(f, i){
+      return <div key={f.key} style={{marginBottom:14}}>
+        <div style={{fontSize:11,color:G400,marginBottom:3,fontWeight:'bold',textAlign:'center'}}>{f.label}</div>
+        <T2LetterField word={f.expectedFull}
+          onCorrect={function(){ setOne(i, primaryForm(f.expectedFull), true); }}
+          onWrong={function(typed){ setOne(i, typed, false); }}/>
+      </div>;
+    })}
+    {allChecked && <button onClick={finish} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15})}>→ Weiter</button>}
+  </div>;
+}
+
+// Test-Modus für Verben (siehe "📝 Test starten" in leiterspiel.jsx): anders
+// als die Muster-Läufe kennt man im gemischten Wiederholungs-Run die Gruppe
+// eines Verbs nicht automatisch aus dem Kapitelkontext — deshalb ist die
+// Muster-Zugehörigkeit hier selbst eine Tipp-Stufe statt immer sichtbar:
+// 0 = nur die drei leeren Felder, 1 = Tipp zeigt die Muster-Gruppe
+// (Chicken/Hamburger/...), 2 = zweiter Tipp ersetzt die Felder durch das
+// Buchstaben-Puzzle aus Topf 2 (VerbLetterHintCard), je Zeitform einzeln.
+function VerbTestPanel({current, onSubmit}) {
+  var [hintLevel, setHintLevel] = useState(0);
+  var fieldsMeta = useMemo(function(){
+    return [
+      {key:'grundform', label:'Grundform', expectedFull: wordDisplay(current)},
+      {key:'simplePast', label:'Simple Past', expectedFull: current.pastSimple},
+      {key:'pastParticiple', label:'Past Participle', expectedFull: current.pastParticiple}
+    ];
+  }, [current.word]);
+  var [values, setValues] = useState(function(){
+    var v = {}; fieldsMeta.forEach(function(f){ v[f.key]=''; }); return v;
+  });
+  useEffect(function(){
+    var v = {}; fieldsMeta.forEach(function(f){ v[f.key]=''; }); setValues(v); setHintLevel(0);
+  }, [current.word]);
+
+  function submit() {
+    var fields = fieldsMeta.map(function(f){ return gradeField(values[f.key], f.expectedFull, f.label); });
+    onSubmit({allCorrect: fields.every(function(f){return f.correct;}), fields:fields});
+  }
+  function giveUp() {
+    var fields = fieldsMeta.map(function(f){ return {label:f.label, typed:'', expected:primaryForm(f.expectedFull), correct:false}; });
+    onSubmit({allCorrect:false, fields:fields});
+  }
+
+  if(hintLevel>=2) return <VerbLetterHintCard current={current} fieldsMeta={fieldsMeta} onDone={onSubmit}/>;
+
+  return <div style={{padding:'16px',background:'#f0fdf4',borderRadius:14,border:'2px solid #86efac'}}>
+    <div style={{textAlign:'center',marginBottom:12}}>
+      {hintLevel>=1 ? patternBadge(current.pattern) : null}
+      {/* current.clue enthält das Muster-Emoji (siehe build_irregular_verbs.py)
+          und würde die Gruppe schon vor dem Tipp verraten — deshalb hier
+          bewusst current.meaning (reine Bedeutung ohne Icon). */}
+      <div style={{fontSize:22,fontWeight:'bold',color:G900}}>{current.meaning || current.clue}</div>
+    </div>
+    {fieldsMeta.map(function(f, i){
+      return <FieldRow key={f.key} label={f.label} value={values[f.key]} autoFocus={i===0}
+        onChange={function(v){ setValues(Object.assign({}, values, {[f.key]:v})); }}
+        onEnter={function(){ if(i===fieldsMeta.length-1) submit(); }}/>;
+    })}
+    <div style={{fontSize:10,color:G400,marginBottom:10,textTransform:'uppercase',letterSpacing:1,textAlign:'center'}}>Test — alle 3 Formen</div>
+    <button onClick={submit} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>✓ Prüfen</button>
+    {hintLevel<2 && <button onClick={function(){setHintLevel(hintLevel+1);}} style={BtnStyle('#eff6ff','#1d4ed8',{width:'100%',padding:'9px',fontSize:12,marginBottom:8})}>💡 Tipp {hintLevel+1===1?'— zu welcher Gruppe gehört das Verb?':'— Buchstaben anklicken'}</button>}
+    <button onClick={giveUp} style={BtnStyle(G100,G600,{width:'100%',padding:'8px',fontSize:12})}>Nicht gewusst / Lösung zeigen</button>
+  </div>;
+}
+
 function VerbResultFields({fields}) {
   if(!fields || !fields.length) return null;
   return <div style={{marginTop:8}}>
@@ -253,4 +341,4 @@ function VerbResultFields({fields}) {
   </div>;
 }
 
-export { patternMeta, VERB_POT_LABEL, VERB_POT_ICON, primaryForm, VerbFieldsPanel, VerbReversePanel, VerbMatchPanel, VerbResultFields };
+export { patternMeta, VERB_POT_LABEL, VERB_POT_ICON, primaryForm, VerbFieldsPanel, VerbReversePanel, VerbMatchPanel, VerbTestPanel, VerbResultFields };

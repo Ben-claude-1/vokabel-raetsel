@@ -9,7 +9,7 @@ import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, loadVerbCelebrated, saveVerbCelebrated, verbPlanProgress } from '../core/verbplan.js';
 import { ProgressStats } from './trainer.jsx';
-import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel } from './verbdrill.jsx';
+import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel, VerbTestPanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
 
 // Großen Verben-Mustern (Echo, Sonstige) ist ihre Wortliste auf mehrere
@@ -686,6 +686,20 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setResult({skipped:true,correct:false,answer:testItemAnswer(w),word:entry.word,clue:entry.clue,typed:'',kind:w.kind});
     setPhase('test_show');
   }
+  // Verben im Test: anders als die generische Ein-Feld-Abfrage prüft
+  // VerbTestPanel schon selbst alle 3 Formen (inkl. der beiden Tipp-Stufen)
+  // und liefert nur noch {allCorrect, fields}. „Nicht gewusst" läuft mit
+  // durch dieselbe Funktion (allCorrect:false), ein eigener Skip-Pfad wie bei
+  // der generischen Abfrage ist deshalb hier nicht nötig.
+  function submitVerbTestAnswer(res){
+    var w = testWords[testIdx]; if(!w) return;
+    setSesAns(function(n){return n+1;}); if(res.allCorrect) setSesCor(function(n){return n+1;}); trackActiveTime();
+    tallyAnswer(res.allCorrect, false, CREDIT.typed);
+    var entry = {kind:'word', word:w.word, clue:w.clue, typed:'', correct:res.allCorrect, partial:false, skipped:false, wordRef:null, rt:answerMs(), fields:res.fields};
+    setTestLog(function(l){return l.concat([entry]);});
+    setResult({correct:res.allCorrect, partial:false, skipped:false, word:w.word, clue:w.clue, kind:'word', fields:res.fields});
+    setPhase('test_show');
+  }
   function finalizeTest(finalLog){
     var tCorr = finalLog.filter(function(l){return l.correct;}).length;
     var tErr = finalLog.length - tCorr;
@@ -844,6 +858,18 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
                         <div style={{fontWeight:'bold',color:G900}}>{it.word}</div>
                         <div style={{color:G600,fontSize:10,fontStyle:'italic'}}>{it.clue}</div>
                         {!it.correct&&!it.skipped&&it.typed&&<div style={{color:'#991b1b',fontSize:10,marginTop:2}}>Deine Antwort: <span style={{textDecoration:'line-through'}}>{it.typed}</span></div>}
+                      </div>;
+                    }
+                    if(it.fields){
+                      return <div key={j} style={{padding:'5px 8px',marginBottom:3,borderRadius:6,background:bg,fontSize:11}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                          <span>{icon}</span>
+                          <span style={{fontWeight:'bold',color:G900}}>{it.word}</span>
+                          <span style={{color:G600,fontSize:10}}>{it.clue}</span>
+                        </div>
+                        {(it.fields||[]).filter(function(f){return !f.correct;}).map(function(f,k){
+                          return <div key={k} style={{fontSize:10,color:'#991b1b',marginLeft:22}}>{f.label}: {f.expected}</div>;
+                        })}
                       </div>;
                     }
                     return <div key={j} style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',marginBottom:2,borderRadius:6,background:bg,fontSize:11}}>
@@ -1165,6 +1191,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var tw = testWords[testIdx];
     var twIsSent = tw && tw.kind==='sentence';
     var testChip = <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(168,85,247,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)'}}>📝 Test {testIdx+1}/{testWords.length}</div>;
+    if(tw && tw.pattern){
+      return(
+        <div style={{padding:8}}>
+          {testChip}
+          <VerbTestPanel current={tw} onSubmit={submitVerbTestAnswer}/>
+          <button onClick={function(){if(confirm('Test abbrechen? Der bisherige Fortschritt geht verloren.'))exitTest();}} style={BtnStyle(G100,G400,{width:'100%',padding:'7px',fontSize:11,marginTop:8})}>Abbrechen</button>
+        </div>
+      );
+    }
     return(
       <div style={{padding:8}}>
         {testChip}
@@ -1196,10 +1231,19 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {result&&(
           <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.correct?GR:RE)}}>
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.correct?'#065f46':'#991b1b',marginBottom:6}}>
-              {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
+              {result.skipped?'⏭ Übersprungen':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Nicht ganz'}
             </div>
-            <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.answer}</span><SpeakButton text={result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
-            {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+            {result.fields ? (
+              <div>
+                <div style={{fontSize:13,color:G600,marginBottom:6}}>{result.word} <span style={{color:G400}}>({result.clue})</span></div>
+                <VerbResultFields fields={result.fields}/>
+              </div>
+            ) : (
+              <div>
+                <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.answer}</span><SpeakButton text={result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
+                {!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+              </div>
+            )}
           </div>
         )}
         <button onClick={nextTestQuestion} style={BtnStyle('#a855f7','white',{width:'100%',padding:'12px',fontSize:15})}>{isLast?'→ Auswertung':'→ Weiter'}</button>
