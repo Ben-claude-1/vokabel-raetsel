@@ -738,6 +738,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     setTestIdx(nextI); setCurrent(testWords[nextI]); qShownAt.current = Date.now(); setPhase('test_q');
   }
   function exitTest(){
+    var nd=saveSession(data);if(nd!==data){saveAndUpdate(nd);}
     setTestWords([]); setTestIdx(0); setTestLog([]);
     setInput(''); setResult(null); setCurrent(null); setPhase('pick');
   }
