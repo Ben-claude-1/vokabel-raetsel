@@ -60,11 +60,9 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
       var hist = Array.isArray(res[1])?res[1]:[];
       var allRuns = Array.isArray(res[2])?res[2]:[];
       setHistory(hist);
-      // Bewusst NICHT auf die gewählte Klasse/Sprache eingeschränkt: sobald der
-      // Umschalter auf Klasse 6 steht, wäre der ganze Klasse-5-Wortschatz aus
-      // der Wiederholung verschwunden und würde still verfallen. Stattdessen
-      // hängt an jeder Vokabel die Sprache ihres Runs, damit in der Frage steht,
-      // in welcher Sprache geantwortet werden soll.
+      // Sprachübergreifend (jede Vokabel trägt die Sprache ihres Runs, damit
+      // in der Frage steht, in welcher Sprache geantwortet werden soll), aber
+      // auf Wunsch vorerst nur Klasse 6 — siehe Filter auf sc.grade unten.
       var runInfo = {};
       allRuns.forEach(function(r){ runInfo[r.id] = runScope(r, chapters||[]); });
       var map6={}, map5={};
@@ -85,7 +83,9 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
         if((w.rl||0) > map[k].rl) map[k].rl = w.rl||0;
       }
       rows.forEach(function(row){
-        if(!runInfo[row.run_id]) return;   // Run gehört nicht (mehr) zu diesem Kind
+        var sc = runInfo[row.run_id];
+        if(!sc) return;   // Run gehört nicht (mehr) zu diesem Kind
+        if(sc.grade!==6) return;   // vorerst nur Klasse 6 wiederholen
         var d=parseData(row.data), pots=d.pots||{};
         (pots[6]||[]).forEach(function(w){ add(map6,w,row.run_id,6); });
         (pots[5]||[]).forEach(function(w){ add(map5,w,row.run_id,5); });
@@ -284,7 +284,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     </div>
     {poolNote&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:8,padding:'8px 10px',fontSize:11,marginBottom:12}}>{poolNote}</div>}
     <div style={{fontSize:11,color:G600,textAlign:'center',marginBottom:14}}>Lernpool: <b>{pool.length}</b> gelernte Vokabeln{dueCount>0&&<span> · <b style={{color:T}}>{dueCount}</b> sind dran 🔔</span>}
-      <div style={{fontSize:10,color:G400,marginTop:3}}>aus allen Klassen und Sprachen: {poolNachSprache.map(function(x,i){ return <span key={x.lang}>{i>0?' · ':''}{langFlag(x.lang)} {x.n}</span>; })}</div>
+      <div style={{fontSize:10,color:G400,marginTop:3}}>Klasse 6, alle Sprachen: {poolNachSprache.map(function(x,i){ return <span key={x.lang}>{i>0?' · ':''}{langFlag(x.lang)} {x.n}</span>; })}</div>
     </div>
     {history.length>0&&<div style={{marginBottom:14}}><RepeatRunHistory runs={history} title="Deine bisherigen Läufe"/></div>}
     <button onClick={startRun} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>▶ Lauf starten</button>
