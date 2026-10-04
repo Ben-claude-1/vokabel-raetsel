@@ -6,6 +6,7 @@ import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../c
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
 import { RepeatRunHistory } from './progress.jsx';
+import { primaryForm } from './verbdrill.jsx';
 import { SpeakButton } from './widgets.jsx';
 
 function WiederholungWrap(p){ return <div style={{maxWidth:460,margin:'0 auto',padding:'4px 2px'}}>{p.children}</div>; }
@@ -40,6 +41,14 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   // „Hotel → hotel" gibt es auf Englisch wie auf Spanisch.
   function wkey(w, lang){ return (lang||w.lang||'')+'|'+(w.word||'').toLowerCase()+'|'+(w.clue||'').toLowerCase(); }
 
+  // Unregelmäßige Verben tragen im Pool zusätzlich ihre Formen — hier wird pro
+  // Frage zufällig entschieden, ob die 1. (Grundform) oder 2. Form (Simple
+  // Past) abgefragt wird. Bewusst nie die 3. Form: Rückwärts (Topf 4/5) und
+  // der gemischte Verben-Review testen die schon regelmäßig, hier soll die
+  // generische Wiederholung nur zwischen den beiden am häufigsten verwechselten
+  // Formen variieren statt immer nur die Grundform-Bedeutung abzufragen.
+  function askExpected(w){ return (w&&w.pattern&&w.askForm==='past') ? (w.pastSimple||w.word) : wordDisplay(w); }
+
   useEffect(function(){
     if(!pid || !UUID.test(pid)){ setPhase('empty'); return; }
     Promise.all([
@@ -64,6 +73,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
         var k=wkey(w, sc.language); if(!w.word||!w.clue) return;
         if(!map[k]) map[k]={word:w.word,clue:w.clue,type:w.type,lang:sc.language||'en',grade:sc.grade||null,
           wrong:0,correct:0,src:[],lcMs:0,rl:0};
+        // Formen der unregelmäßigen Verben (siehe build_irregular_verbs.py)
+        // mitnehmen, sonst weiß die sprachübergreifende Wiederholung nichts
+        // davon und fragt immer nur die Grundform-Bedeutung ab.
+        if(w.pattern){ map[k].pattern=w.pattern; map[k].meaning=w.meaning||map[k].meaning; map[k].pastSimple=w.pastSimple; map[k].pastParticiple=w.pastParticiple; }
         map[k].wrong+=(w.wrong||0); map[k].correct+=(w.correct||0);
         map[k].src.push({runId:runId, pot:pot});
         // zuletzt gekonnt + erreichte Wiederholungsstufe zählen als Beleg mit
@@ -116,7 +129,11 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     // Lauf identisch ist.
     var n = Math.min(reviewRunSize(pol, dueCount), ranked.length);
     var head = ranked.slice(0, Math.min(ranked.length, Math.max(n, n*2)));
-    var picked = shuffleArr(head).slice(0, n).map(function(x){ return x.item; });
+    var picked = shuffleArr(head).slice(0, n).map(function(x){
+      var it = Object.assign({}, x.item);
+      if(it.pattern) it.askForm = Math.random()<0.5 ? 'base' : 'past';
+      return it;
+    });
     // Innerhalb des Laufs wird die Sprache nicht gewechselt: erst alle
     // englischen Vokabeln, dann die spanischen. Hin- und Herspringen zwischen
     // zwei Sprachen kostet bei jeder Frage einen Umschaltmoment.
@@ -127,10 +144,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
 
   var cur = items[idx];
   var hintData = useMemo(function(){
-    var w=(cur&&cur.word)||'';
+    var w=cur?askExpected(cur):'';
     var lay=buildT2Layout(w);
     return {dash:lay, scramble:shuffleArr(lay.targetNoSpaces.split(''))};
-  },[cur&&cur.word]);
+  },[cur&&cur.word, cur&&cur.askForm]);
 
   useEffect(function(){ if(phase==='q'&&inputRef.current){ try{inputRef.current.focus();}catch(e){} } },[phase,idx]);
 
@@ -139,7 +156,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   function submit(){
     if(!cur) return;
     var typed=input.trim(); if(!typed) return;
-    var status=checkAnswer(typed, wordDisplay(cur));
+    var status=checkAnswer(typed, askExpected(cur));
     var correct = status==='correct'||status==='partial';
     // Nach Tagen ohne Kontakt frei abgerufen — der stärkste Beleg, dass es
     // sitzt. Mit Tipps entsprechend weniger.
@@ -149,7 +166,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
     setScore(function(s){return s+pts;});
-    setResult({correct:correct, points:pts, answer:wordDisplay(cur), typed:typed, hints:hints, skipped:false});
+    setResult({correct:correct, points:pts, answer:askExpected(cur), typed:typed, hints:hints, skipped:false});
     setPhase('show');
   }
   function giveUp(){
@@ -158,7 +175,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, false, 4);
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:'', correct:false, hints:hints, points:0, skipped:true};
     setLog(function(l){return l.concat([entry]);});
-    setResult({correct:false, points:0, answer:wordDisplay(cur), typed:'', hints:hints, skipped:true});
+    setResult({correct:false, points:0, answer:askExpected(cur), typed:'', hints:hints, skipped:true});
     setPhase('show');
   }
   function next(){
@@ -283,9 +300,16 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
       <div style={{height:'100%',width:Math.round(idx/items.length*100)+'%',background:T,borderRadius:3,transition:'width .3s'}}/>
     </div>
     <div style={{background:'white',borderRadius:14,border:'1px solid '+G200,padding:'18px 16px',marginBottom:12,textAlign:'center'}}>
-      <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Übersetze ins {zielSprache(cur.lang)}</div>
+      {cur.pattern && cur.askForm==='past'
+        ? <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Simple Past (2. Form)</div>
+        : <div style={{fontSize:10,color:G400,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>{cur.pattern?'Grundform (1. Form) — übersetze ins '+zielSprache(cur.lang):'Übersetze ins '+zielSprache(cur.lang)}</div>}
       <div style={{fontSize:11,color:T,fontWeight:'bold',marginBottom:6}}>{langFlag(cur.lang)} {langLabel(cur.lang)}{cur.grade?' · Klasse '+cur.grade:''}</div>
-      <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{cur.clue}</div>
+      {cur.pattern && cur.askForm==='past'
+        ? <div>
+            <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{primaryForm(cur.word)}</div>
+            <div style={{fontSize:13,color:G600,marginTop:4}}>{cur.meaning||cur.clue}</div>
+          </div>
+        : <div style={{fontSize:24,fontWeight:'bold',color:G900}}>{cur.clue}</div>}
       <div style={{fontSize:11,color:hints===0?T:hints===1?'#d97706':RE,marginTop:6,fontWeight:'bold'}}>
         {hints===0?'🏆 10 Punkte möglich':hints===1?'💡 noch 5 Punkte':'💡 0 Punkte (Buchstaben-Hilfe)'}
       </div>
