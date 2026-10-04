@@ -1,7 +1,7 @@
 import { sbGet, sbPost } from '../core/api.js';
 import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, logWordEvent, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { langAdj, langAdjN, langFlag, langLabel, langRank, runScope } from '../core/scope.js';
+import { langAdj, langAdjN, langFlag, langLabel, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
@@ -116,6 +116,19 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   var dueCount = useMemo(function(){
     return ranked.filter(function(x){ return x.over>=1; }).length;
   },[ranked]);
+  // Ein Lauf darf nicht zwischen Sprachen hin- und herspringen — deshalb
+  // steht die Sprache schon vor der Auswahl fest: die des am längsten
+  // überfälligen Worts (ranked ist bereits danach sortiert). Lauf-Umfang und
+  // Fälligkeits-Anzeige im Intro beziehen sich dann auch nur noch auf diese
+  // eine Sprache, sonst würde die Vorschau mehr Vokabeln versprechen, als
+  // der Lauf nachher tatsächlich enthält.
+  var runLang = ranked.length ? ranked[0].item.lang : null;
+  var rankedLang = useMemo(function(){
+    return runLang ? ranked.filter(function(x){ return x.item.lang===runLang; }) : ranked;
+  },[ranked, runLang]);
+  var dueCountLang = useMemo(function(){
+    return rankedLang.filter(function(x){ return x.over>=1; }).length;
+  },[rankedLang]);
   // Was steckt im Pool — sichtbar machen, dass auch die alte Klasse dabei ist.
   var poolNachSprache = useMemo(function(){
     var m = {};
@@ -126,18 +139,16 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   function startRun(){
     // Die am längsten überfälligen zuerst — genau die zeigen, ob es sitzt.
     // Aus den doppelt so vielen Kandidaten wird gemischt, damit nicht jeder
-    // Lauf identisch ist.
-    var n = Math.min(reviewRunSize(pol, dueCount), ranked.length);
-    var head = ranked.slice(0, Math.min(ranked.length, Math.max(n, n*2)));
+    // Lauf identisch ist. rankedLang ist schon auf eine einzige Sprache
+    // eingegrenzt (siehe runLang oben) — ein Lauf mischt also nie Englisch
+    // und Spanisch durcheinander.
+    var n = Math.min(reviewRunSize(pol, dueCountLang), rankedLang.length);
+    var head = rankedLang.slice(0, Math.min(rankedLang.length, Math.max(n, n*2)));
     var picked = shuffleArr(head).slice(0, n).map(function(x){
       var it = Object.assign({}, x.item);
       if(it.pattern) it.askForm = Math.random()<0.5 ? 'base' : 'past';
       return it;
     });
-    // Innerhalb des Laufs wird die Sprache nicht gewechselt: erst alle
-    // englischen Vokabeln, dann die spanischen. Hin- und Herspringen zwischen
-    // zwei Sprachen kostet bei jeder Frage einen Umschaltmoment.
-    picked.sort(function(a,b){ return langRank(a.lang) - langRank(b.lang); });
     setItems(picked); setIdx(0); setInput(''); setHints(0); setResult(null); setLog([]); setScore(0); setShowReview(false);
     setPhase('q');
   }
@@ -273,7 +284,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     <div style={{textAlign:'center',marginBottom:14}}>
       <div style={{fontSize:34}}>🔁</div>
       <div style={{fontWeight:'bold',fontSize:17,color:T}}>{wasMandatory?'Wiederholung fällig':'Wiederholung'}</div>
-      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(reviewRunSize(pol,dueCount),pool.length)} Vokabeln in diesem Lauf</div>
+      <div style={{fontSize:12,color:G600}}>Gelerntes festigen · {Math.min(reviewRunSize(pol,dueCountLang),rankedLang.length)} {runLang?langFlag(runLang)+' ':''}Vokabeln in diesem Lauf</div>
     </div>
     {wasMandatory&&<div style={{background:'#fef3c7',color:'#92400e',borderRadius:10,padding:'10px 12px',marginBottom:12,fontSize:12,lineHeight:1.5}}>
       🔒 Das Leiterspiel ist gesperrt, bis du diesen Lauf gemacht hast. Danach geht es sofort weiter.
@@ -362,10 +373,6 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
       {!result.correct&&!result.skipped&&result.typed&&<div style={{fontSize:11,color:G600,marginTop:4}}>Deine Eingabe: „{result.typed}"</div>}
       <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
     </div>
-    {items[idx+1] && items[idx+1].lang !== cur.lang &&
-      <div style={{background:TL,color:TD,borderRadius:10,padding:'9px 12px',marginBottom:10,fontSize:12,textAlign:'center',fontWeight:'bold'}}>
-        {langFlag(items[idx+1].lang)} Gleich geht es auf {langLabel(items[idx+1].lang)} weiter
-      </div>}
     <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>{idx+1>=items.length?'Ergebnis anzeigen':'Weiter →'}</button>
   </WiederholungWrap>;
 
