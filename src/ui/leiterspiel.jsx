@@ -1485,7 +1485,7 @@ function SatzmeisterGame({ words, runId, runName, lang, player, onUpdateScore, o
       </div>
       <div style={{fontSize:11,color:G400,textAlign:'center',marginBottom:12}}>🇩🇪 {sent.clue}</div>
       <div style={{display:'flex',gap:8,marginBottom:10}}>
-        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false' style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
         <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
       </div>
       <div style={{display:'flex',gap:8}}>
@@ -1707,7 +1707,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
             </div>}
       </div>}
       <div style={{display:'flex',gap:8,marginBottom:10}}>
-        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} autoCapitalize='none' autoCorrect='off' autoComplete='off' spellCheck='false' style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
         <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
       </div>
       <div style={{display:'flex',gap:8}}>
