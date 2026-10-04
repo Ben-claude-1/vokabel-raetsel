@@ -175,7 +175,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes'||phase==='test_q')) inputRef.current.focus(); },[phase,testIdx]);
 
   useEffect(function(){
-    var active=phase==='test_q'||phase==='test_show'||phase==='satzmeister'||phase==='satzquiz'||phase==='satzvokabel';
+    var active=phase==='test_q'||phase==='test_show'||phase==='satzmeister'||phase==='satzquiz';
     if(!active) return;
     var id=setInterval(trackActiveTime,120000);
     return function(){clearInterval(id);};
@@ -827,7 +827,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <button onClick={startTest} disabled={totalWords===0} style={BtnStyle('#a855f7','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>📝 Test starten (10 Vokabeln)</button>
         <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzmeister');}} disabled={totalWords===0} style={BtnStyle('#0ea5e9','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>✍️ Satzmeister</button>
         <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzquiz');}} disabled={totalWords===0} style={BtnStyle('#f97316','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🔤 Satzquiz</button>
-        <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzvokabel');}} disabled={totalWords===0} style={BtnStyle('#16a34a','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🇩🇪 Satzvokabel</button>
         {Array.isArray(data.tests)&&data.tests.length>0&&(function(){
           var len = data.tests.length;
           var recent = data.tests.slice(-10).reverse();
@@ -1352,15 +1351,6 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       return w;
     })();
     return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
-  }
-  if(phase==='satzvokabel'){
-    var svW=(function(){
-      var rw=[]; try{rw=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
-      if(rw.length>0) return rw;
-      var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
-      return w;
-    })();
-    return <div>{liveChip}<SatzVokabelGame words={svW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
   return null;
 }

@@ -5,6 +5,7 @@ import { langAdj, langAdjN, langFlag, langLabel, runScope } from '../core/scope.
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
+import { SatzVokabelGame } from './leiterspiel.jsx';
 import { RepeatRunHistory } from './progress.jsx';
 import { primaryForm } from './verbdrill.jsx';
 import { SpeakButton } from './widgets.jsx';
@@ -421,4 +422,64 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   return null;
 }
 
-export { WiederholungWrap, WiederholungMode };
+// Pool für Satzvokabel: anders als die normale Wiederholung oben reicht hier
+// die reine Wortliste (ohne Überfälligkeits-Tracking, das braucht nur das
+// freie Tippen oben) — gelernte Vokabeln (Topf 6) aus allen Klasse-6-Runs
+// EINER Sprache, damit generateSentences() nie Englisch und Spanisch mischt
+// (dieselbe Lehre wie bei der normalen Wiederholung).
+function fetchKlasse6Pool(pid, chapters, language){
+  var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if(!pid || !UUID.test(pid)) return Promise.resolve([]);
+  return Promise.all([
+    sbGet('ls_progress','player_id=eq.'+pid+'&select=run_id,data'),
+    lsGetRunsForPlayer(pid)
+  ]).then(function(res){
+    var rows = Array.isArray(res[0])?res[0]:[];
+    var allRuns = Array.isArray(res[1])?res[1]:[];
+    var runInfo = {};
+    allRuns.forEach(function(r){ runInfo[r.id] = runScope(r, chapters||[]); });
+    var seen = {}, out = [];
+    rows.forEach(function(row){
+      var sc = runInfo[row.run_id];
+      if(!sc || sc.grade!==6) return;
+      if(language && sc.language!==language) return;
+      var d=parseData(row.data), pots=d.pots||{};
+      (pots[6]||[]).forEach(function(w){
+        if(!w.word||!w.clue) return;
+        var k=(sc.language||'')+'|'+w.word.toLowerCase();
+        if(seen[k]) return; seen[k]=1;
+        out.push(Object.assign({}, w, {lang:sc.language||'en'}));
+      });
+    });
+    return out;
+  });
+}
+
+// Oberste Menüebene (wie 🔁 Wiederholung), nicht mehr pro Kapitel versteckt —
+// Sätze kommen aus allen bisher in Klasse 6 gelernten Leiterspielen der
+// aktuell gewählten Sprache, nicht nur aus einem einzelnen Kapitel.
+function SatzVokabelReview({ player, chapters, scope, onUpdateScore, onDone }){
+  var [words, setWords] = useState(null);
+  var pid = player && player.id;
+  var language = scope && scope.language;
+
+  useEffect(function(){
+    setWords(null);
+    fetchKlasse6Pool(pid, chapters, language).then(function(pool){ setWords(pool); })
+      .catch(function(){ setWords([]); });
+  },[pid, chapters, language]);
+
+  if(words===null) return <WiederholungWrap><div style={{textAlign:'center',padding:40,color:G400}}>Lade Vokabeln…</div></WiederholungWrap>;
+  if(!words.length) return <WiederholungWrap>
+    <div style={{textAlign:'center',padding:30}}>
+      <div style={{fontSize:40,marginBottom:10}}>🇩🇪</div>
+      <div style={{fontWeight:'bold',fontSize:15,marginBottom:6}}>Noch nichts zum Üben</div>
+      <div style={{fontSize:12,color:G600,marginBottom:16}}>Sobald du im Leiterspiel Vokabeln in Klasse 6 ({langLabel(language)}) in den „Gelernt"-Topf gebracht hast, kannst du hier Sätze üben.</div>
+      <button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 20px'})}>Zurück</button>
+    </div>
+  </WiederholungWrap>;
+  var runName = 'Wiederholung Klasse 6 ('+langLabel(language)+')';
+  return <SatzVokabelGame words={words} runId={null} runName={runName} lang={language} player={player} onUpdateScore={onUpdateScore} onDone={onDone}/>;
+}
+
+export { WiederholungWrap, WiederholungMode, SatzVokabelReview };

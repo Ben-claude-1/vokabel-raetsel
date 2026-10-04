@@ -13,7 +13,7 @@ import { LeitersSpielCreate, LeitersSpielMenu, LeitersSpielSession } from '../ui
 import { Leaderboard, MeineLernuebersicht, RepeatHistorySelf, Scoreboard, Stats } from '../ui/progress.jsx';
 import { Tagesaufgaben } from '../ui/quests.jsx';
 import { SentenceLearner, VokabelTrainer, WorkoutSession, WorkoutSetup } from '../ui/trainer.jsx';
-import { WiederholungMode } from '../ui/wiederholung.jsx';
+import { SatzVokabelReview, WiederholungMode } from '../ui/wiederholung.jsx';
 
 // Selten gebrauchte Bereiche werden erst beim Öffnen geladen — das hält den
 // Start der App klein. Jeder Eintrag wird zu einem eigenen Paket in dist/.
@@ -333,6 +333,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     if(screen==='wiederholung') return <WiederholungMode player={player} chapters={chapters}
       mandatory={reviewInfo.locked} policy={reviewInfo.policy}
       onCompleted={loadReview} onDone={function(fromLock){ loadReview(); go(fromLock===true?'leiterspiel_menu':'home'); }}/>;
+    if(screen==='satzvokabel') return <SatzVokabelReview player={player} chapters={chapters} scope={scope} onUpdateScore={handleUpdateScore} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} chapters={chapters} scope={scope} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} scope={scope} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
@@ -355,7 +356,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     verbsort:'🕵️ Muster-Detektiv',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
     scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit',
-    wiederholung:'🔁 Wiederholung'
+    wiederholung:'🔁 Wiederholung',satzvokabel:'🇩🇪 Satzvokabel'
   };
 
   var mainScreens = isAdmin
@@ -395,6 +396,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
               onGo={function(s, lang){ if(lang) switchLang(lang); go(s); }} onReward={handleUpdateScore}/>
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
+              {icon:'🇩🇪',title:'Satzvokabel',sub:'Sätze aus gelernten Vokabeln (Klasse 6)',action:function(){go('satzvokabel');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🪜',title:'Leiterspiel'+(reviewInfo.locked?' 🔒':''),sub:reviewInfo.locked?'Gesperrt — erst die Wiederholung machen':'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               ...(verbSortCount>0?[{icon:'🕵️',title:'Muster-Detektiv',sub:'Unregelmäßige Verben ihrer Gruppe zuordnen',action:function(){go('verbsort');}}]:[]),
@@ -429,6 +431,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           {screen==='games'&&(<div>
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
+              {icon:'🇩🇪',title:'Satzvokabel',sub:'Sätze aus gelernten Vokabeln (Klasse 6)',action:function(){go('satzvokabel');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
