@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateGermanSentences, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateForeignSentences, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -1592,11 +1592,11 @@ function SatzquizGame({ words, runId, runName, lang, player, onUpdateScore, onDo
   );
 }
 
-// Umgekehrte Satzrichtung zu Satzmeister/Satzquiz: der Satz ist auf Deutsch
-// und zeigt das gesuchte Wort unverkürzt und hervorgehoben (Kontext statt
-// isolierter Vokabel) — eingetippt wird die Fremdsprache. Die Tipp-Stufen
-// (Länge/Buchstaben) sind dieselbe Dash/Scramble-Anzeige wie in der
-// Wiederholung, nicht Satzmeisters buchstabenweises Aufdecken, weil hier
+// Anders als Satzmeister/Satzquiz (Lücke statt Wort) zeigt der Satz hier das
+// gesuchte Fremdsprachen-Wort unverkürzt und hervorgehoben (Kontext statt
+// isolierter Vokabel) — eingetippt wird die deutsche Bedeutung. Die
+// Tipp-Stufen (Länge/Buchstaben) sind dieselbe Dash/Scramble-Anzeige wie in
+// der Wiederholung, nicht Satzmeisters buchstabenweises Aufdecken, weil hier
 // genau wie dort ein einzelnes freies Textfeld bedient wird.
 function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, onDone }) {
   var [sentences, setSentences] = useState(null);
@@ -1616,7 +1616,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
     setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setGPhase('q');
     function start(ws) {
       if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
-      generateGermanSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
+      generateForeignSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
         .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
     }
     if(words&&words.length){start(words);return;}
@@ -1650,7 +1650,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
     var res=checkAnswer(typed,answer);
     var ok=res==='correct'||res==='partial';
     tallyAnswer(ok, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
-    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, ok, null);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, sent.word||answer, answer, ok, null);
     var pts=ok?calcPts():0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     setTotal(function(t){return t+pts;});
@@ -1659,7 +1659,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
 
   function skip(){
     tallyAnswer(false, true);
-    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, false, null);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, sent.word||answer, answer, false, null);
     setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a');
   }
 
@@ -1719,7 +1719,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
             </div>}
       </div>}
       <div style={{display:'flex',gap:8,marginBottom:10}}>
-        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder='Deutsche Antwort…' style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
         <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
       </div>
       <div style={{display:'flex',gap:8}}>

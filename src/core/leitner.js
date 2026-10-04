@@ -549,35 +549,34 @@ function generateSentences(words, runName, forceNew, lang) {
   });
 }
 
-// Deutsches Wort (clue, bei Verb-Mustern bevorzugt die emoji-freie `meaning`)
-// ohne Emoji-Vorsatz und ohne Komma-/Klammer-Zusatz — nur so lässt sich das
-// Wort zuverlässig unverändert in einem KI-generierten Satz wiederfinden.
-function germanWordOf(w){
-  var c = String((w&&(w.meaning||w.clue))||'');
-  c = c.replace(/^[\u{1F000}-\u{1FFFF}←-⯿☀-➿️\s]+/u, '');
+// Kanonische Schreibweise des Fremdsprachen-Worts (ohne Komma-/Klammer-
+// Zusatz) — nur so lässt es sich zuverlässig unverändert in einem
+// KI-generierten Satz wiederfinden.
+function foreignWordOf(w){
+  var c = String((w&&w.word)||'');
   c = c.split(',')[0].replace(/\([^)]*\)/g, '');
   return c.replace(/\s+/g,' ').trim();
 }
 
-// Satzvokabel-Modus: umgekehrte Richtung zu generateSentences() — der Satz ist
-// auf Deutsch (mit dem deutschen Wort markiert), eingetippt wird die
-// Fremdsprache. Die Antwort kommt direkt aus der echten Vokabelliste statt
-// von der KI erfunden zu werden (robuster als bei generateSentences, wo die
-// KI auch das Zielwort selbst zurückgibt) — die KI liefert nur den Satz, per
-// Index `i` den Vokabeln zugeordnet.
-function generateGermanSentences(words, runName, forceNew, lang) {
+// Satzvokabel-Modus: Satz ist in der Fremdsprache (mit dem Fremdwort
+// markiert, nicht durch "___" ersetzt wie bei generateSentences), eingetippt
+// wird die deutsche Bedeutung. Die KI liefert nur den Satz, per Index `i`
+// den Vokabeln zugeordnet — die Bedeutung kommt direkt aus der echten
+// Vokabelliste statt von der KI erfunden zu werden.
+function generateForeignSentences(words, runName, forceNew, lang) {
+  var langName = langLabel(lang||'en');
   var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
-  var items = picked.map(function(w, i){ return {i:i, de:germanWordOf(w), word:w.word, clue:w.clue}; })
-    .filter(function(it){ return it.de && it.word; });
-  var wordList = items.map(function(it){ return '{"i":'+it.i+',"wort":"'+it.de.replace(/"/g,'')+'"}'; }).join(', ');
-  var prompt = 'Schreibe für jede dieser deutschen Vokabeln genau einen kurzen, einfachen deutschen '+
+  var items = picked.map(function(w, i){ return {i:i, fw:foreignWordOf(w), word:w.word, clue:w.clue}; })
+    .filter(function(it){ return it.fw && it.clue; });
+  var wordList = items.map(function(it){ return '{"i":'+it.i+',"wort":"'+it.fw.replace(/"/g,'')+'"}'; }).join(', ');
+  var prompt = 'Schreibe für jede dieser '+langName+'-Vokabeln genau einen kurzen, einfachen '+langName+'-'+
     'Beispielsatz für einen Schüler der 6. Klasse (ca. 11-12 Jahre, Realschule/Gymnasium). '+
-    'Nutze das deutsche Wort unverändert in der angegebenen Schreibweise im Satz und markiere es mit '+
-    'doppelten Sternen, z. B. **Wort**. Maximal 10 Wörter pro Satz, einfache Grammatik (Präsens oder '+
-    'Perfekt), keine Nebensätze, keine Fremdwörter oder Fachbegriffe. Thema des Lernsets: "'+runName+'".\n'+
+    'Nutze das Wort unverändert in der angegebenen Schreibweise im Satz und markiere es mit '+
+    'doppelten Sternen, z. B. **word**. Maximal 10 Wörter pro Satz, einfache Grammatik, '+
+    'keine Nebensätze, keine Fachbegriffe. Thema des Lernsets: "'+runName+'".\n'+
     'Vokabeln: ['+wordList+']\n'+
-    'Antworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"i":<index>,"satz":"Satz mit **Wort** markiert"}]. Kein Markdown, keine Erklärungen.';
-  var cacheKey = 'satzde_' + (lang||'en') + '_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
+    'Antworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"i":<index>,"satz":"Satz mit **word** markiert"}]. Kein Markdown, keine Erklärungen.';
+  var cacheKey = 'satzfr_' + (lang||'en') + '_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
   function callApi(key) {
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
@@ -591,7 +590,7 @@ function generateGermanSentences(words, runName, forceNew, lang) {
       var raw=JSON.parse(m[0]);
       var byIdx={};
       raw.forEach(function(r){ if(r && typeof r.i==='number') byIdx[r.i]=r.satz||''; });
-      var sents = items.map(function(it){ return {sentence:byIdx[it.i]||'', answer:it.word, clue:it.clue}; })
+      var sents = items.map(function(it){ return {sentence:byIdx[it.i]||'', answer:it.clue, word:it.word}; })
         .filter(function(s){ return s.sentence; });
       fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
       return sents;
@@ -757,4 +756,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, generateGermanSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, generateForeignSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
