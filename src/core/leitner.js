@@ -549,71 +549,6 @@ function generateSentences(words, runName, forceNew, lang) {
   });
 }
 
-// Kanonische Schreibweise des Fremdsprachen-Worts (ohne Komma-/Klammer-
-// Zusatz) — nur so lässt es sich zuverlässig unverändert in einem
-// KI-generierten Satz wiederfinden.
-function foreignWordOf(w){
-  var c = String((w&&w.word)||'');
-  c = c.split(',')[0].replace(/\([^)]*\)/g, '');
-  return c.replace(/\s+/g,' ').trim();
-}
-
-// Satzvokabel-Modus: Satz ist in der Fremdsprache (mit dem Fremdwort
-// markiert, nicht durch "___" ersetzt wie bei generateSentences), eingetippt
-// wird die deutsche Bedeutung. Die KI liefert nur den Satz, per Index `i`
-// den Vokabeln zugeordnet — die Bedeutung kommt direkt aus der echten
-// Vokabelliste statt von der KI erfunden zu werden.
-function generateForeignSentences(words, runName, forceNew, lang) {
-  var langName = langLabel(lang||'en');
-  var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
-  var items = picked.map(function(w, i){ return {i:i, fw:foreignWordOf(w), word:w.word, clue:w.clue}; })
-    .filter(function(it){ return it.fw && it.clue; });
-  var wordList = items.map(function(it){ return '{"i":'+it.i+',"wort":"'+it.fw.replace(/"/g,'')+'"}'; }).join(', ');
-  var prompt = 'Schreibe für jede dieser '+langName+'-Vokabeln genau einen kurzen, einfachen '+langName+'-'+
-    'Beispielsatz für einen Schüler der 6. Klasse (ca. 11-12 Jahre, Realschule/Gymnasium). '+
-    'Nutze das Wort unverändert in der angegebenen Schreibweise im Satz und markiere es mit '+
-    'doppelten Sternen, z. B. **word**. Maximal 10 Wörter pro Satz, einfache Grammatik, '+
-    'keine Nebensätze, keine Fachbegriffe. Thema des Lernsets: "'+runName+'".\n'+
-    'Vokabeln: ['+wordList+']\n'+
-    'Antworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"i":<index>,"satz":"Satz mit **word** markiert"}]. Kein Markdown, keine Erklärungen.';
-  var cacheKey = 'satzfr_' + (lang||'en') + '_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
-  function callApi(key) {
-    return fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,messages:[{role:'user',content:prompt}]})
-    }).then(function(r){return r.json();}).then(function(d){
-      if(d.error) throw new Error(d.error.message||'API Fehler');
-      var text=d.content&&d.content[0]&&d.content[0].text||'';
-      var m=text.match(/\[[\s\S]*\]/);
-      if(!m) throw new Error('Kein JSON in Antwort');
-      var raw=JSON.parse(m[0]);
-      var byIdx={};
-      raw.forEach(function(r){ if(r && typeof r.i==='number') byIdx[r.i]=r.satz||''; });
-      var sents = items.map(function(it){ return {sentence:byIdx[it.i]||'', answer:it.clue, word:it.word}; })
-        .filter(function(s){ return s.sentence; });
-      fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
-      return sents;
-    });
-  }
-  function generate() {
-    return fetch(SB_URL+'/rest/v1/rpc/get_claude_key',{method:'POST',headers:HW_POST,body:'{}',mode:'cors',credentials:'omit'})
-      .then(function(r){return r.json();})
-      .then(function(key){
-        if(!key) key=localStorage.getItem('claude_api_key')||'';
-        if(!key) return Promise.reject(new Error('Kein API-Key hinterlegt'));
-        return callApi(key);
-      });
-  }
-  if(forceNew) return generate();
-  return sbGet('settings','key=eq.'+encodeURIComponent(cacheKey)).then(function(cached){
-    if(cached&&cached[0]&&cached[0].value){
-      try{var p=JSON.parse(cached[0].value);if(Array.isArray(p)&&p.length>0)return p;}catch(e){}
-    }
-    return generate();
-  });
-}
-
 var AUTO_RUN_MIN_WORDS = 2; // darunter lohnt sich kein Run (Leiterspiel braucht ≥2)
 
 function autoRunWordsFor(chapter){
@@ -756,4 +691,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, generateForeignSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

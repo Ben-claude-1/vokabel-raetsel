@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateForeignSentences, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -1592,9 +1592,9 @@ function SatzquizGame({ words, runId, runName, lang, player, onUpdateScore, onDo
   );
 }
 
-// Anders als Satzmeister/Satzquiz (Lücke statt Wort) zeigt der Satz hier das
-// gesuchte Fremdsprachen-Wort unverkürzt und hervorgehoben (Kontext statt
-// isolierter Vokabel) — eingetippt wird die deutsche Bedeutung. Die
+// Fremdsprachen-Satz mit Lücke (wie Satzmeister/Satzquiz, dieselbe
+// generateSentences()), eigener Modus trotzdem: die deutsche Bedeutung steht
+// hier prominent direkt im Satz-Kärtchen statt nur klein darunter, und die
 // Tipp-Stufen (Länge/Buchstaben) sind dieselbe Dash/Scramble-Anzeige wie in
 // der Wiederholung, nicht Satzmeisters buchstabenweises Aufdecken, weil hier
 // genau wie dort ein einzelnes freies Textfeld bedient wird.
@@ -1616,7 +1616,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
     setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setGPhase('q');
     function start(ws) {
       if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
-      generateForeignSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
+      generateSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
         .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
     }
     if(words&&words.length){start(words);return;}
@@ -1636,10 +1636,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
 
   var sent = sentences[idx];
   var answer = (sent.answer||'').trim();
-  // "**Wort**" aus dem KI-Satz in drei Teile für die Hervorhebung spalten —
-  // fehlen die Sterne (KI hat sie vergessen), wird der Satz einfach ohne
-  // Hervorhebung gezeigt statt die Frage platzen zu lassen.
-  var markedParts = sent.sentence.split('**');
+  var parts = sent.sentence.split('___');
   var hintData = buildT2Layout(answer);
   var scramble = shuffleArr(hintData.targetNoSpaces.split(''));
 
@@ -1650,7 +1647,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
     var res=checkAnswer(typed,answer);
     var ok=res==='correct'||res==='partial';
     tallyAnswer(ok, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
-    logWordEvent(player&&player.id, 'satzvokabel', runId, sent.word||answer, answer, ok, null);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, ok, null);
     var pts=ok?calcPts():0;
     if(pts>0&&onUpdateScore) onUpdateScore(pts);
     setTotal(function(t){return t+pts;});
@@ -1659,7 +1656,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
 
   function skip(){
     tallyAnswer(false, true);
-    logWordEvent(player&&player.id, 'satzvokabel', runId, sent.word||answer, answer, false, null);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, false, null);
     setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a');
   }
 
@@ -1671,9 +1668,10 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
 
   function SentenceCard(){
     return <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:12,border:'1px solid #bfdbfe',fontSize:16,lineHeight:1.8,color:G900,textAlign:'center'}}>
-      {markedParts.length>=3
-        ? <span>{markedParts[0]}<strong style={{color:T}}>{markedParts[1]}</strong>{markedParts.slice(2).join('**')}</span>
-        : <span>{sent.sentence}</span>}
+      <span>{parts[0]||''}</span>
+      <span style={{display:'inline-block',minWidth:64,textAlign:'center',background:T+'22',borderRadius:6,padding:'0 6px',color:T,fontWeight:'bold',fontFamily:'monospace',letterSpacing:2}}>___</span>
+      <span>{parts[1]||''}</span>
+      <div style={{fontSize:13,color:'#7c3aed',fontWeight:'bold',marginTop:8}}>🇩🇪 {sent.clue}</div>
     </div>;
   }
 
@@ -1719,7 +1717,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
             </div>}
       </div>}
       <div style={{display:'flex',gap:8,marginBottom:10}}>
-        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder='Deutsche Antwort…' style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
         <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
       </div>
       <div style={{display:'flex',gap:8}}>
