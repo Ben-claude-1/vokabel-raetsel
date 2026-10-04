@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateGermanSentences, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -175,7 +175,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   useEffect(function(){ if(inputRef.current && (phase==='answer'||phase==='dashes'||phase==='test_q')) inputRef.current.focus(); },[phase,testIdx]);
 
   useEffect(function(){
-    var active=phase==='test_q'||phase==='test_show'||phase==='satzmeister'||phase==='satzquiz';
+    var active=phase==='test_q'||phase==='test_show'||phase==='satzmeister'||phase==='satzquiz'||phase==='satzvokabel';
     if(!active) return;
     var id=setInterval(trackActiveTime,120000);
     return function(){clearInterval(id);};
@@ -827,6 +827,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         <button onClick={startTest} disabled={totalWords===0} style={BtnStyle('#a855f7','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>📝 Test starten (10 Vokabeln)</button>
         <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzmeister');}} disabled={totalWords===0} style={BtnStyle('#0ea5e9','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>✍️ Satzmeister</button>
         <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzquiz');}} disabled={totalWords===0} style={BtnStyle('#f97316','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🔤 Satzquiz</button>
+        <button onClick={function(){if(!sesStart) setSesStart(Date.now()); setPhase('satzvokabel');}} disabled={totalWords===0} style={BtnStyle('#16a34a','white',{width:'100%',padding:'14px',fontSize:16,marginBottom:8,opacity:totalWords===0?0.5:1})}>🇩🇪 Satzvokabel</button>
         {Array.isArray(data.tests)&&data.tests.length>0&&(function(){
           var len = data.tests.length;
           var recent = data.tests.slice(-10).reverse();
@@ -1352,6 +1353,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     })();
     return <div>{liveChip}<SatzquizGame words={sqW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
   }
+  if(phase==='satzvokabel'){
+    var svW=(function(){
+      var rw=[]; try{rw=typeof run.words==='string'?JSON.parse(run.words||'[]'):(run.words||[]);}catch(e){}
+      if(rw.length>0) return rw;
+      var w=[]; [1,2,3,4,5].forEach(function(p){(data.pots[p]||[]).forEach(function(ww){w.push(ww);});});
+      return w;
+    })();
+    return <div>{liveChip}<SatzVokabelGame words={svW} runId={run.id} runName={run.name} lang={lang} player={player} onUpdateScore={onUpdateScore} onDone={function(){trackActiveTime();setPhase('pick');}}/></div>;
+  }
   return null;
 }
 
@@ -1577,6 +1587,145 @@ function SatzquizGame({ words, runId, runName, lang, player, onUpdateScore, onDo
             {opt}
           </button>;
         })}
+      </div>
+    </div>
+  );
+}
+
+// Umgekehrte Satzrichtung zu Satzmeister/Satzquiz: der Satz ist auf Deutsch
+// und zeigt das gesuchte Wort unverkürzt und hervorgehoben (Kontext statt
+// isolierter Vokabel) — eingetippt wird die Fremdsprache. Die Tipp-Stufen
+// (Länge/Buchstaben) sind dieselbe Dash/Scramble-Anzeige wie in der
+// Wiederholung, nicht Satzmeisters buchstabenweises Aufdecken, weil hier
+// genau wie dort ein einzelnes freies Textfeld bedient wird.
+function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, onDone }) {
+  var [sentences, setSentences] = useState(null);
+  var [loadErr, setLoadErr] = useState('');
+  var [idx, setIdx] = useState(0);
+  var [input, setInput] = useState('');
+  var [hints, setHints] = useState(0);
+  var [gPhase, setGPhase] = useState('q');
+  var [lastOk, setLastOk] = useState(false);
+  var [lastPts, setLastPts] = useState(0);
+  var [lastSkip, setLastSkip] = useState(false);
+  var [total, setTotal] = useState(0);
+  var [regenKey, setRegenKey] = useState(0);
+  var ref = useRef(null);
+
+  useEffect(function(){
+    setSentences(null); setLoadErr(''); setIdx(0); setTotal(0); setHints(0); setGPhase('q');
+    function start(ws) {
+      if(!ws||!ws.length){setLoadErr('Keine Vokabeln.');setSentences([]);return;}
+      generateGermanSentences(ws, runName, regenKey>0, lang).then(function(s){setSentences(s);})
+        .catch(function(e){setLoadErr(e.message||'Fehler');setSentences([]);});
+    }
+    if(words&&words.length){start(words);return;}
+    if(runId){
+      sbGet('ls_runs','id=eq.'+runId+'&select=words').then(function(rows){
+        var rw=[]; try{var raw=rows&&rows[0]&&rows[0].words;rw=typeof raw==='string'?JSON.parse(raw||'[]'):(raw||[]);}catch(e){}
+        start(rw);
+      }).catch(function(){start([]);});
+    } else { start([]); }
+  },[regenKey]);
+
+  useEffect(function(){if(ref.current&&gPhase==='q')ref.current.focus();},[idx,gPhase]);
+
+  if(!sentences) return <div style={{padding:40,textAlign:'center'}}><div style={{fontSize:28,marginBottom:8}}>🤖</div><div style={{fontSize:13,color:G400}}>Generiere Sätze…</div></div>;
+  if(loadErr||!sentences.length) return <div style={{padding:20,textAlign:'center'}}><div style={{color:RE,fontSize:13,marginBottom:12}}>{loadErr||'Keine Sätze generiert.'}</div><button onClick={onDone} style={BtnStyle(G100,G600,{padding:'10px 24px'})}>← Zurück</button></div>;
+  if(idx>=sentences.length) return <div style={{padding:24,textAlign:'center'}}><div style={{fontSize:48,marginBottom:8}}>🏆</div><div style={{fontSize:22,fontWeight:'bold',color:T,marginBottom:4}}>Geschafft!</div><div style={{fontSize:16,color:G600,marginBottom:20}}>{total} Punkte</div><div style={{display:'flex',gap:8,justifyContent:'center'}}><button onClick={function(){setRegenKey(function(k){return k+1;});}} style={BtnStyle('#16a34a','white',{padding:'12px 20px',fontSize:14})}>↺ Neue Sätze</button><button onClick={onDone} style={BtnStyle(T,'white',{padding:'12px 20px',fontSize:14})}>← Zurück</button></div></div>;
+
+  var sent = sentences[idx];
+  var answer = (sent.answer||'').trim();
+  // "**Wort**" aus dem KI-Satz in drei Teile für die Hervorhebung spalten —
+  // fehlen die Sterne (KI hat sie vergessen), wird der Satz einfach ohne
+  // Hervorhebung gezeigt statt die Frage platzen zu lassen.
+  var markedParts = sent.sentence.split('**');
+  var hintData = buildT2Layout(answer);
+  var scramble = shuffleArr(hintData.targetNoSpaces.split(''));
+
+  function calcPts(){ return hints===0?10:hints===1?5:0; }
+
+  function submit(){
+    var typed=input.trim(); if(!typed) return;
+    var res=checkAnswer(typed,answer);
+    var ok=res==='correct'||res==='partial';
+    tallyAnswer(ok, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, ok, null);
+    var pts=ok?calcPts():0;
+    if(pts>0&&onUpdateScore) onUpdateScore(pts);
+    setTotal(function(t){return t+pts;});
+    setLastOk(ok); setLastPts(pts); setLastSkip(false); setGPhase('a');
+  }
+
+  function skip(){
+    tallyAnswer(false, true);
+    logWordEvent(player&&player.id, 'satzvokabel', runId, answer, sent.clue, false, null);
+    setLastOk(false); setLastPts(0); setLastSkip(true); setGPhase('a');
+  }
+
+  function next(){
+    setIdx(function(i){return i+1;});
+    setInput(''); setHints(0);
+    setLastOk(false); setLastPts(0); setLastSkip(false); setGPhase('q');
+  }
+
+  function SentenceCard(){
+    return <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:12,border:'1px solid #bfdbfe',fontSize:16,lineHeight:1.8,color:G900,textAlign:'center'}}>
+      {markedParts.length>=3
+        ? <span>{markedParts[0]}<strong style={{color:T}}>{markedParts[1]}</strong>{markedParts.slice(2).join('**')}</span>
+        : <span>{sent.sentence}</span>}
+    </div>;
+  }
+
+  if(gPhase==='a') return(
+    <div style={{padding:16}}>
+      <div style={{fontSize:11,color:G400,marginBottom:12}}>Satz {idx+1} / {sentences.length}</div>
+      <SentenceCard/>
+      <div style={{borderRadius:14,padding:16,marginBottom:12,background:lastSkip?G50:lastOk?'#d1fae5':'#fee2e2',border:'2px solid '+(lastSkip?G200:lastOk?GR:RE)}}>
+        <div style={{fontSize:16,fontWeight:'bold',color:lastSkip?G600:lastOk?'#065f46':'#991b1b',marginBottom:6}}>
+          {lastSkip?'⏭ Übersprungen':lastOk?'✓ Richtig':'✗ Falsch'}
+          {lastPts>0&&<span style={{marginLeft:8,fontSize:14,color:AM}}>+{lastPts} Pkt</span>}
+        </div>
+        <div style={{fontSize:14,color:G900}}>Richtig wäre: <strong>{answer}</strong></div>
+        {!lastOk&&!lastSkip&&<div style={{fontSize:11,color:G400,marginTop:4}}>Deine Antwort: {input||'–'}</div>}
+      </div>
+      <div style={{fontSize:12,color:G400,marginBottom:12,textAlign:'right'}}>Gesamt: {total} Pkt</div>
+      <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15})}>{idx+1>=sentences.length?'Fertig':'→ Weiter'}</button>
+    </div>
+  );
+
+  return(
+    <div style={{padding:16}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+        <div style={{fontSize:11,color:G400}}>Satz {idx+1} / {sentences.length}</div>
+        <div style={{fontSize:13,fontWeight:'bold',color:AM}}>{total} Pkt</div>
+      </div>
+      <SentenceCard/>
+      <div style={{fontSize:11,color:hints===0?T:hints===1?'#d97706':RE,textAlign:'center',marginBottom:10,fontWeight:'bold'}}>
+        {hints===0?'🏆 10 Punkte möglich':hints===1?'💡 noch 5 Punkte':'💡 0 Punkte (Buchstaben-Hilfe)'}
+      </div>
+      {hints>=1&&<div style={{background:G50,borderRadius:10,padding:'10px',marginBottom:12,textAlign:'center'}}>
+        <div style={{fontSize:9,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>{hints>=2?'Tipp 2 · Buchstaben':'Tipp 1 · Länge'}</div>
+        {hints>=2
+          ? <div style={{display:'flex',flexWrap:'wrap',gap:5,justifyContent:'center'}}>
+              {scramble.map(function(l,i){return <span key={i} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:26,height:30,background:'white',border:'1px solid '+G200,borderRadius:6,fontSize:16,fontWeight:'bold',color:T}}>{l.toUpperCase()}</span>;})}
+            </div>
+          : <div style={{display:'flex',flexWrap:'wrap',gap:4,justifyContent:'center',alignItems:'flex-end'}}>
+              {hintData.items.map(function(it,i){
+                if(it.type==='space') return <span key={i} style={{width:12}}/>;
+                if(it.type==='static') return <span key={i} style={{fontSize:14,color:G600,fontStyle:'italic',margin:'0 2px'}}>{it.text}</span>;
+                return <span key={i} style={{width:18,borderBottom:'2px solid '+G400,height:20}}/>;
+              })}
+            </div>}
+      </div>}
+      <div style={{display:'flex',gap:8,marginBottom:10}}>
+        <input ref={ref} value={input} onChange={function(e){setInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={langAdj(lang)+' Antwort…'} style={{flex:1,padding:'10px 12px',border:'2px solid '+G200,borderRadius:10,fontSize:14,outline:'none'}}/>
+        <button onClick={submit} disabled={!input.trim()} style={BtnStyle(T,'white',{padding:'10px 16px',fontSize:15,opacity:!input.trim()?0.5:1})}>✓</button>
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        {hints<1&&<button onClick={function(){setHints(1);}} style={BtnStyle(G100,'#d97706',{flex:1,padding:'10px',fontSize:12})}>💡 Tipp 1: Länge</button>}
+        {hints===1&&<button onClick={function(){setHints(2);}} style={BtnStyle(G100,RE,{flex:1,padding:'10px',fontSize:12})}>💡 Tipp 2: Buchstaben</button>}
+        <button onClick={skip} style={BtnStyle(G100,G400,{flex:1,padding:'10px',fontSize:12})}>⏭ Überspringen</button>
       </div>
     </div>
   );
@@ -2561,4 +2710,4 @@ function RunEditor({ run, chapters, onSave, onCancel }) {
   );
 }
 
-export { LeitersSpielSession, SatzmeisterGame, SatzquizGame, LeitersSpielMenu, LeitersSpielCreate, KapitelProgress, ReviewPolicySettings, LeitersSpielStreakSettings, LeitersSpielGradeSettings, RunEditor };
+export { LeitersSpielSession, SatzmeisterGame, SatzquizGame, SatzVokabelGame, LeitersSpielMenu, LeitersSpielCreate, KapitelProgress, ReviewPolicySettings, LeitersSpielStreakSettings, LeitersSpielGradeSettings, RunEditor };
