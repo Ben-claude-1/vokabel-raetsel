@@ -239,10 +239,29 @@ function WortkreisReview({ player, chapters, scope, onUpdateScore, onDone }) {
 
 var MATCH_SIZE = 10;
 
+// Gewichtung wie in der normalen Wiederholung (wiederholung.jsx): Vokabeln,
+// die öfter falsch als richtig beantwortet wurden, sollen häufiger dran sein
+// — aber per gewichteter Ziehung statt starrem Sortieren, sonst wären es
+// Runde für Runde immer dieselben zehn.
+function matchHardness(w) { return 1 + 0.2 * Math.max(0, (w.wrong || 0) - (w.correct || 0)); }
+
+function weightedSample(list, n, weightFn) {
+  var pool = list.slice(), out = [];
+  while (pool.length && out.length < n) {
+    var total = 0;
+    var weights = pool.map(function (x) { var v = Math.max(0.01, weightFn(x)); total += v; return v; });
+    var r = Math.random() * total, i = 0;
+    for (; i < pool.length - 1; i++) { r -= weights[i]; if (r <= 0) break; }
+    out.push(pool[i]);
+    pool.splice(i, 1);
+  }
+  return out;
+}
+
 function buildMatchRound(words) {
-  var pool = shuffleArr((words || []).filter(function (w) { return w.word && w.clue; }));
+  var pool = (words || []).filter(function (w) { return w.word && w.clue; });
   var n = Math.min(MATCH_SIZE, pool.length);
-  var picked = pool.slice(0, n).map(function (w, i) { return { id: i, word: w.word, clue: w.clue, lang: w.lang }; });
+  var picked = weightedSample(pool, n, matchHardness).map(function (w, i) { return { id: i, word: w.word, clue: w.clue, lang: w.lang }; });
   return { pairs: picked, left: shuffleArr(picked), right: shuffleArr(picked) };
 }
 
