@@ -150,7 +150,11 @@ function WortkreisGame({ words, lang, player, onUpdateScore, onDone }) {
   function onUp() {
     if (!dragging) return;
     setDragging(false);
-    if (selected.length > 0) evaluate(selected);
+    // Erst werten, wenn wirklich alle Buchstaben ausgewählt sind — sonst
+    // zählte ein zu früh abgesetzter Finger als Fehlversuch, obwohl der
+    // Spieler einfach nur neu ansetzen wollte.
+    if (selected.length === tiles.length) evaluate(selected);
+    else setSelected([]);
   }
 
   var liveWord = selected.map(function (i) { return tiles[i].letter; }).join('').toUpperCase();
