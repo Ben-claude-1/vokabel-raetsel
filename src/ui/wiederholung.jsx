@@ -1,10 +1,10 @@
 import { sbGet, sbPost } from '../core/api.js';
 import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer, lsPercent, lsSaveProgress, lsToday, logWordEvent, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewRunSize, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { langAdj, langAdjN, langFlag, langLabel, runScope } from '../core/scope.js';
+import { chGrade, chLang, langAdj, langAdjN, langFlag, langLabel, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
-import { buildT2Layout, checkAnswer, normWordKey, parseData, wordDisplay } from '../core/words.js';
+import { buildT2Layout, checkAnswer, normWordKey, parseData, safeWords, wordDisplay } from '../core/words.js';
 import { SatzVokabelGame } from './leiterspiel.jsx';
 import { RepeatRunHistory } from './progress.jsx';
 import { primaryForm } from './verbdrill.jsx';
@@ -455,6 +455,24 @@ function fetchKlasse6Pool(pid, chapters, language){
   });
 }
 
+// Für Ben (Erwachsenen-Spielerprofil, kein eigener Leiterspiel-Lernfortschritt):
+// voller Klasse-6-Wortschatz direkt aus den Kapiteln, nicht nur der
+// Gelernt-Topf aus eigenen Läufen.
+function fetchAllKlasse6Vocab(chapters, language){
+  var seen = {}, out = [];
+  (chapters||[]).forEach(function(c){
+    if(chGrade(c)!==6) return;
+    if(language && chLang(c)!==language) return;
+    safeWords(c.words).forEach(function(w){
+      if(!w.word||!w.clue) return;
+      var k=(chLang(c)||'')+'|'+w.word.toLowerCase();
+      if(seen[k]) return; seen[k]=1;
+      out.push(Object.assign({}, w, {lang:chLang(c)||'en'}));
+    });
+  });
+  return out;
+}
+
 // Oberste Menüebene (wie 🔁 Wiederholung), nicht mehr pro Kapitel versteckt —
 // Sätze kommen aus allen bisher in Klasse 6 gelernten Leiterspielen der
 // aktuell gewählten Sprache, nicht nur aus einem einzelnen Kapitel.
@@ -462,12 +480,17 @@ function SatzVokabelReview({ player, chapters, scope, onUpdateScore, onDone }){
   var [words, setWords] = useState(null);
   var pid = player && player.id;
   var language = scope && scope.language;
+  var isBen = player && player.name==='Ben';
 
   useEffect(function(){
     setWords(null);
+    if(isBen){
+      setWords(fetchAllKlasse6Vocab(chapters, language));
+      return;
+    }
     fetchKlasse6Pool(pid, chapters, language).then(function(pool){ setWords(pool); })
       .catch(function(){ setWords([]); });
-  },[pid, chapters, language]);
+  },[pid, chapters, language, isBen]);
 
   if(words===null) return <WiederholungWrap><div style={{textAlign:'center',padding:40,color:G400}}>Lade Vokabeln…</div></WiederholungWrap>;
   if(!words.length) return <WiederholungWrap>
