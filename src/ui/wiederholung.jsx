@@ -505,4 +505,4 @@ function SatzVokabelReview({ player, chapters, scope, onUpdateScore, onDone }){
   return <SatzVokabelGame words={words} runId={null} runName={runName} lang={language} player={player} onUpdateScore={onUpdateScore} onDone={onDone}/>;
 }
 
-export { WiederholungWrap, WiederholungMode, SatzVokabelReview };
+export { WiederholungWrap, WiederholungMode, SatzVokabelReview, fetchKlasse6Pool, fetchAllKlasse6Vocab };

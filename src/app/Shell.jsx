@@ -28,6 +28,8 @@ const QuizDuel = React.lazy(function(){ return import('../ui/quiz.jsx').then(fun
 const QuizDuelMenu = React.lazy(function(){ return import('../ui/quiz.jsx').then(function(m){ return {default:m.QuizDuelMenu}; }); });
 const QuizSolo = React.lazy(function(){ return import('../ui/quiz.jsx').then(function(m){ return {default:m.QuizSolo}; }); });
 const VerbSortGame = React.lazy(function(){ return import('../ui/verbsort.jsx').then(function(m){ return {default:m.VerbSortGame}; }); });
+const WortkreisReview = React.lazy(function(){ return import('../ui/swipegames.jsx').then(function(m){ return {default:m.WortkreisReview}; }); });
+const VokabelpaareReview = React.lazy(function(){ return import('../ui/swipegames.jsx').then(function(m){ return {default:m.VokabelpaareReview}; }); });
 
 function ScopeSwitcher({ scopes, scope, onChange, compact }) {
   var [open, setOpen] = useState(false);
@@ -334,6 +336,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
       mandatory={reviewInfo.locked} policy={reviewInfo.policy}
       onCompleted={loadReview} onDone={function(fromLock){ loadReview(); go(fromLock===true?'leiterspiel_menu':'home'); }}/>;
     if(screen==='satzvokabel') return <SatzVokabelReview player={player} chapters={chapters} scope={scope} onUpdateScore={handleUpdateScore} onDone={function(){go('games');}}/>;
+    if(screen==='wortkreis') return <WortkreisReview player={player} chapters={chapters} scope={scope} onUpdateScore={handleUpdateScore} onDone={function(){go('games');}}/>;
+    if(screen==='vokabelpaare') return <VokabelpaareReview player={player} chapters={chapters} scope={scope} onUpdateScore={handleUpdateScore} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_player') return <KlassenarbeitPlayer player={player} chapters={chapters} scope={scope} onStart={function(qs){setKaQuestions(qs);go('klassenarbeit_play');}} onDone={function(){go('games');}}/>;
     if(screen==='klassenarbeit_play'&&kaQuestions) return <KlassenarbeitTest player={player} questions={kaQuestions} onDone={function(){go('klassenarbeit_player');}}/>;
     if(screen==='admin') return <AdminDash player={player} chapters={chapters} scope={scope} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onDone={function(){go('home');}}/>;
@@ -356,7 +360,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
     verbsort:'🕵️ Muster-Detektiv',
     grammar:'✏️ Grammar Trainer',stats:'📊 Mein Fortschritt',leaderboard:'🏆 Gesamtrangliste',word_select_trainer:'📝 Trainer',
     scoreboard:'🏆 Meine Sticker',klassenarbeit_player:'📋 Klassenarbeit',klassenarbeit_play:'📋 Klassenarbeit',
-    wiederholung:'🔁 Wiederholung',satzvokabel:'🇩🇪 Satzvokabel'
+    wiederholung:'🔁 Wiederholung',satzvokabel:'🇩🇪 Satzvokabel',
+    wortkreis:'🔤 Wortkreis',vokabelpaare:'🔗 Vokabelpaare'
   };
 
   var mainScreens = isAdmin
@@ -397,6 +402,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
               {icon:'🇩🇪',title:'Satzvokabel',sub:'Sätze aus gelernten Vokabeln (Klasse 6)',action:function(){go('satzvokabel');}},
+              {icon:'🔤',title:'Wortkreis',sub:'Buchstaben im Kreis zum Wort wischen',action:function(){go('wortkreis');}},
+              {icon:'🔗',title:'Vokabelpaare',sub:'Deutsch und Englisch zusammen wischen',action:function(){go('vokabelpaare');}},
               {icon:'🏋️',title:'Workout',sub:'Schwache Vokabeln trainieren',action:function(){go('workout_setup');}},
               {icon:'🪜',title:'Leiterspiel'+(reviewInfo.locked?' 🔒':''),sub:reviewInfo.locked?'Gesperrt — erst die Wiederholung machen':'Topf-System mit Fortschritt',action:function(){go('leiterspiel_menu');}},
               ...(verbSortCount>0?[{icon:'🕵️',title:'Muster-Detektiv',sub:'Unregelmäßige Verben ihrer Gruppe zuordnen',action:function(){go('verbsort');}}]:[]),
@@ -432,6 +439,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             {[
               {icon:'🔁',title:'Wiederholung'+(reviewInfo.locked?' 🔔':reviewInfo.paused?' ⏸️':''),sub:reviewSub,action:function(){go('wiederholung');}},
               {icon:'🇩🇪',title:'Satzvokabel',sub:'Sätze aus gelernten Vokabeln (Klasse 6)',action:function(){go('satzvokabel');}},
+              {icon:'🔤',title:'Wortkreis',sub:'Buchstaben im Kreis zum Wort wischen',action:function(){go('wortkreis');}},
+              {icon:'🔗',title:'Vokabelpaare',sub:'Deutsch und Englisch zusammen wischen',action:function(){go('vokabelpaare');}},
               {icon:'🎯',title:'Quiz',sub:'Solo oder Duell - Kapitel auswaehlen',action:function(){go('quiz_duel_menu');}},
               {icon:'🧩',title:'Kreuzworträtsel',sub:'Vokabeln im Rätsel lösen',action:function(){go('crossword');}},
               {icon:'🪜',title:'Leiterspiel',sub:'Topf-System Spiel',action:function(){go('leiterspiel_menu');}},
@@ -484,6 +493,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           var backMap={vocab_trainer:'learn',workout:'learn',workout_setup:'learn',sentence_learner:'learn',
             word_select_trainer:'learn',quiz_solo:'quiz_duel_menu',quiz_duel:'quiz_duel_menu',quiz_duel_menu:'games',crossword:'games',
             leiterspiel_menu:'games',leiterspiel_play:'leiterspiel_menu',leiterspiel_create:'games',verbsort:'games',
+            wortkreis:'games',vokabelpaare:'games',
             grammar:'games',klassenarbeit_player:'games',klassenarbeit_play:'klassenarbeit_player',
             stats:'progress',leaderboard:'home',browse:'learn',puzzle:'learn'};
           var dest=backMap[screen]||'home';

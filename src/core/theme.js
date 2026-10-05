@@ -46,7 +46,9 @@ var SCREEN_GAME = {
   klassenarbeit_play:'klassenarbeit',
   wiederholung:'wiederholung',
   verbsort:'verbmuster',
-  puzzle:'puzzle'
+  puzzle:'puzzle',
+  wortkreis:'wortkreis',
+  vokabelpaare:'vokabelpaare'
 };
 
 function screenGame(screen){ return SCREEN_GAME[screen] || null; }
@@ -64,6 +66,8 @@ var GAME_META = {
   wiederholung:{icon:'🔁',label:'Wiederholung'},
   verbmuster:{icon:'🕵️',label:'Muster-Detektiv'},
   puzzle:{icon:'🧩',label:'Puzzle'},
+  wortkreis:{icon:'🔤',label:'Wortkreis'},
+  vokabelpaare:{icon:'🔗',label:'Vokabelpaare'},
   sonstiges:{icon:'⏱️',label:'Sonstiges'}
 };
 
