@@ -48,7 +48,8 @@ var SCREEN_GAME = {
   verbsort:'verbmuster',
   puzzle:'puzzle',
   wortkreis:'wortkreis',
-  vokabelpaare:'vokabelpaare'
+  vokabelpaare:'vokabelpaare',
+  satzvokabel:'satzvokabel'
 };
 
 function screenGame(screen){ return SCREEN_GAME[screen] || null; }
@@ -68,6 +69,7 @@ var GAME_META = {
   puzzle:{icon:'🧩',label:'Puzzle'},
   wortkreis:{icon:'🔤',label:'Wortkreis'},
   vokabelpaare:{icon:'🔗',label:'Vokabelpaare'},
+  satzvokabel:{icon:'🇩🇪',label:'Satzvokabel'},
   sonstiges:{icon:'⏱️',label:'Sonstiges'}
 };
 
