@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { langLabel } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G600, G900, GR, RE, T } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
+import { SatzVokabelGame } from './leiterspiel.jsx';
 import { fetchAllKlasse6Vocab, fetchKlasse6Pool, WiederholungWrap } from './wiederholung.jsx';
 import { SpeakButton } from './widgets.jsx';
 
@@ -286,16 +287,28 @@ function VokabelpaareGame({ words, player, onUpdateScore, onDone }) {
   var [wrongFlash, setWrongFlash] = useState(null);
   var [drag, setDrag] = useState(null); // {side, id, x1,y1,x2,y2}
   var [score, setScore] = useState(0);
+  var [sentences, setSentences] = useState(false);
   var containerRef = useRef(null);
   var leftRefs = useRef({});
   var rightRefs = useRef({});
 
   useEffect(function () {
-    setRound(buildMatchRound(words)); setMatched({}); setScore(0); setWrongFlash(null); setDrag(null);
+    setRound(buildMatchRound(words)); setMatched({}); setScore(0); setWrongFlash(null); setDrag(null); setSentences(false);
   }, [words]);
 
   var pairs = round.pairs, left = round.left, right = round.right;
   var done = pairs.length > 0 && Object.keys(matched).length === pairs.length;
+
+  // Nach der Zuordnung dieselben zehn Vokabeln noch als Satz mit Lücke
+  // (wie Satzvokabel) — die genaue Wortliste kommt mit in den Cache-Schlüssel
+  // (über runName), damit nicht aus Versehen Sätze einer anderen Zehnergruppe
+  // aus dem Cache kommen.
+  if (sentences) {
+    var sentenceWords = pairs.map(function (p) { return { word: p.word, clue: p.clue, lang: p.lang }; });
+    var runName = 'Vokabelpaare ' + pairs.map(function (p) { return p.word; }).slice().sort().join(',');
+    return <SatzVokabelGame words={sentenceWords} runId={null} runName={runName} lang={pairs[0] && pairs[0].lang}
+      player={player} onUpdateScore={onUpdateScore} onDone={function () { setSentences(false); }} />;
+  }
 
   if (!pairs.length) return <WiederholungWrap>
     <div style={{ textAlign: 'center', padding: 30 }}>
@@ -390,7 +403,8 @@ function VokabelpaareGame({ words, player, onUpdateScore, onDone }) {
       <div style={{ fontSize: 34, marginBottom: 6 }}>🏆</div>
       <div style={{ fontWeight: 'bold', fontSize: 15, color: T, marginBottom: 4 }}>Alle Paare gefunden!</div>
       <div style={{ fontSize: 13, color: G600, marginBottom: 16 }}>{score} Punkte</div>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button onClick={function () { setSentences(true); }} style={BtnStyle('#7c3aed', 'white', { padding: '12px 20px', fontSize: 14 })}>📝 Sätze üben →</button>
         <button onClick={function () { setRound(buildMatchRound(words)); setMatched({}); setScore(0); }} style={BtnStyle('#16a34a', 'white', { padding: '12px 20px', fontSize: 14 })}>↺ Neue Runde</button>
         <button onClick={onDone} style={BtnStyle(T, 'white', { padding: '12px 20px', fontSize: 14 })}>← Zurück</button>
       </div>
