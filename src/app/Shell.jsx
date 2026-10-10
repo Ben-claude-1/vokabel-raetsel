@@ -513,6 +513,19 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   );
 }
 
+// Der Kapitel-Datensatz ist groß (über 600 KB, alle Klassen/Sprachen samt Wörtern
+// und Sätzen) und das Backend liefert ihn unkomprimiert über Tailscale Funnel —
+// auf schwachem Mobilfunk kann das lange dauern oder ganz hängen bleiben. Ein
+// lokaler Zwischenstand lässt die App sofort starten, während im Hintergrund
+// aktualisiert wird, statt den Start-Screen auf das Netz warten zu lassen.
+var LOGIN_CACHE_KEY = 'login_cache_v1';
+function loadLoginCache() {
+  try { return JSON.parse(localStorage.getItem(LOGIN_CACHE_KEY) || 'null'); } catch(e) { return null; }
+}
+function saveLoginCache(data) {
+  try { localStorage.setItem(LOGIN_CACHE_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
 function App() {
   var [player, setPlayer] = useState(null);
   var [chapters, setChapters] = useState(BUILTIN);
@@ -523,8 +536,18 @@ function App() {
 
   function handleLogin(user) {
     setPlayer(user);
-    setLoading(true);
     var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    var cached = loadLoginCache();
+    if(cached){
+      if(Array.isArray(cached.chapters)&&cached.chapters.length>0) setChapters(cached.chapters);
+      if(Array.isArray(cached.allUsers)&&cached.allUsers.length>0) setAllUsers(cached.allUsers);
+      if(Array.isArray(cached.allCategories)&&cached.allCategories.length>0) setAllCategories(cached.allCategories);
+    }
+    // Ohne Zwischenstand bleibt der Lade-Screen bis zur Antwort stehen (nichts
+    // anzuzeigen); mit Zwischenstand kann die App sofort loslegen, während die
+    // Anfragen im Hintergrund weiterlaufen.
+    setLoading(!cached);
+    var mergedChapters = (cached&&cached.chapters) || BUILTIN;
     var p1 = sbGet('chapters','select=id,parent_id,title,color,icon,words,sentences,is_builtin,grade,language').then(function(d){
       if(Array.isArray(d)&&d.length>0){
         var merged=BUILTIN.slice();
@@ -533,23 +556,30 @@ function App() {
           if(bi>=0) merged[bi]=Object.assign({},merged[bi],remote);
           else merged.push(remote);
         });
+        mergedChapters = merged;
         setChapters(merged);
       }
     });
+    var newUsers = (cached&&cached.allUsers) || [];
     var p2 = sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_admin,is_active').then(function(d){
-      if(Array.isArray(d)&&d.length>0) setAllUsers(d);
+      if(Array.isArray(d)&&d.length>0){ newUsers=d; setAllUsers(d); }
     });
+    var newCategories = (cached&&cached.allCategories) || [];
     var p3 = sbGet('settings','key=eq.word_categories&select=value').then(function(d){
       if(Array.isArray(d)&&d.length>0){
-        try{var cats=JSON.parse(d[0].value||'[]');if(Array.isArray(cats)&&cats.length>0)setAllCategories(cats);}catch(e){}
+        try{var cats=JSON.parse(d[0].value||'[]');if(Array.isArray(cats)&&cats.length>0){ newCategories=cats; setAllCategories(cats); }}catch(e){}
       }
     });
+    function finish(){
+      setLoading(false);
+      saveLoginCache({chapters:mergedChapters, allUsers:newUsers, allCategories:newCategories});
+    }
     if(!UUID.test(user.id)){
       p1; p2; p3;
-      setLoading(false);
+      finish();
       return;
     }
-    Promise.all([p1,p2,p3]).then(function(){ setLoading(false); }).catch(function(){ setLoading(false); });
+    Promise.all([p1,p2,p3]).then(finish).catch(finish);
   }
 
   function handleLogout() {
