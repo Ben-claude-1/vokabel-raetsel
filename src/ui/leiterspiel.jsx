@@ -1658,6 +1658,7 @@ function SatzVokabelGame({ words, runId, runName, lang, player, onUpdateScore, o
 
   function SentenceCard(){
     return <div style={{background:'#eff6ff',borderRadius:14,padding:16,marginBottom:12,border:'1px solid #bfdbfe',fontSize:16,lineHeight:1.8,color:G900,textAlign:'center'}}>
+      {sent.askForm==='past'&&<div style={{fontSize:11,color:'#d97706',fontWeight:'bold',marginBottom:6}}>⏪ Simple Past (2. Form)</div>}
       <span>{parts[0]||''}</span>
       <span style={{display:'inline-block',minWidth:64,textAlign:'center',background:T+'22',borderRadius:6,padding:'0 6px',color:T,fontWeight:'bold',fontFamily:'monospace',letterSpacing:2}}>___</span>
       <span>{parts[1]||''}</span>

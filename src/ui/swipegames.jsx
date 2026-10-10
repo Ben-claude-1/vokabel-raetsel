@@ -13,8 +13,12 @@ import { langLabel } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G600, G900, GR, RE, T } from '../core/theme.js';
 import { shuffleArr } from '../core/util.js';
 import { SatzVokabelGame } from './leiterspiel.jsx';
-import { fetchAllKlasse6Vocab, fetchKlasse6Pool, WiederholungWrap } from './wiederholung.jsx';
+import { fetchAllKlasse6Vocab, fetchChapterVocab, fetchKlasse6Pool, WiederholungWrap } from './wiederholung.jsx';
 import { SpeakButton } from './widgets.jsx';
+
+// Auf Wunsch zusätzlich zum Gelernt-Pool fest dabei, egal ob schon (ganz)
+// gelernt: Theme 1 "Back to Camden Town" (Klasse 6 Englisch).
+var EXTRA_CHAPTER_IDS = ['ch_klasse6_en_t1'];
 
 // ───────────────────────── Wortkreis ─────────────────────────
 
@@ -266,7 +270,13 @@ function weightedSample(list, n, weightFn) {
 function buildMatchRound(words) {
   var pool = (words || []).filter(function (w) { return w.word && w.clue; });
   var n = Math.min(MATCH_SIZE, pool.length);
-  var picked = weightedSample(pool, n, matchHardness).map(function (w, i) { return { id: i, word: w.word, clue: w.clue, lang: w.lang }; });
+  // pattern/pastSimple/pastParticiple/meaning mitnehmen (falls vorhanden) —
+  // die braucht die anschließende Satzrunde für unregelmäßige Verben.
+  var picked = weightedSample(pool, n, matchHardness).map(function (w, i) {
+    var p = { id: i, word: w.word, clue: w.clue, lang: w.lang };
+    if (w.pattern) { p.pattern = w.pattern; p.pastSimple = w.pastSimple; p.pastParticiple = w.pastParticiple; p.meaning = w.meaning; }
+    return p;
+  });
   return { pairs: picked, left: shuffleArr(picked), right: shuffleArr(picked) };
 }
 
@@ -304,7 +314,11 @@ function VokabelpaareGame({ words, player, onUpdateScore, onDone }) {
   // (über runName), damit nicht aus Versehen Sätze einer anderen Zehnergruppe
   // aus dem Cache kommen.
   if (sentences) {
-    var sentenceWords = pairs.map(function (p) { return { word: p.word, clue: p.clue, lang: p.lang }; });
+    var sentenceWords = pairs.map(function (p) {
+      var w = { word: p.word, clue: p.clue, lang: p.lang };
+      if (p.pattern) { w.pattern = p.pattern; w.pastSimple = p.pastSimple; w.pastParticiple = p.pastParticiple; w.meaning = p.meaning; }
+      return w;
+    });
     var runName = 'Vokabelpaare ' + pairs.map(function (p) { return p.word; }).slice().sort().join(',');
     return <SatzVokabelGame words={sentenceWords} runId={null} runName={runName} lang={pairs[0] && pairs[0].lang}
       player={player} onUpdateScore={onUpdateScore} onDone={function () { setSentences(false); }} />;
@@ -412,6 +426,21 @@ function VokabelpaareGame({ words, player, onUpdateScore, onDone }) {
   </WiederholungWrap>;
 }
 
+// Pool + feste Extra-Kapitel zusammenführen, dedupliziert nach Sprache+Wort.
+function withExtraChapters(pool, chapters, language) {
+  var seen = {}; (pool || []).forEach(function (w) { seen[(w.lang || '') + '|' + (w.word || '').toLowerCase()] = 1; });
+  var out = (pool || []).slice();
+  EXTRA_CHAPTER_IDS.forEach(function (id) {
+    fetchChapterVocab(chapters, id).forEach(function (w) {
+      if (language && w.lang !== language) return;
+      var k = (w.lang || '') + '|' + w.word.toLowerCase();
+      if (seen[k]) return; seen[k] = 1;
+      out.push(w);
+    });
+  });
+  return out;
+}
+
 function VokabelpaareReview({ player, chapters, scope, onUpdateScore, onDone }) {
   var [words, setWords] = useState(null);
   var pid = player && player.id;
@@ -420,8 +449,8 @@ function VokabelpaareReview({ player, chapters, scope, onUpdateScore, onDone }) 
 
   useEffect(function () {
     setWords(null);
-    if (isBen) { setWords(fetchAllKlasse6Vocab(chapters, language)); return; }
-    fetchKlasse6Pool(pid, chapters, language).then(function (pool) { setWords(pool); }).catch(function () { setWords([]); });
+    if (isBen) { setWords(withExtraChapters(fetchAllKlasse6Vocab(chapters, language), chapters, language)); return; }
+    fetchKlasse6Pool(pid, chapters, language).then(function (pool) { setWords(withExtraChapters(pool, chapters, language)); }).catch(function () { setWords(withExtraChapters([], chapters, language)); });
   }, [pid, chapters, language, isBen]);
 
   if (words === null) return <WiederholungWrap><div style={{ textAlign: 'center', padding: 40, color: G400 }}>Lade Vokabeln…</div></WiederholungWrap>;

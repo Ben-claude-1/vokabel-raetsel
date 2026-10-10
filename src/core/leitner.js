@@ -513,9 +513,36 @@ function markPromoted(wObj, today){ wObj.pd = today||lsToday(); }
 function generateSentences(words, runName, forceNew, lang) {
   var langName = langLabel(lang||'en');
   var picked = shuffleArr(words).slice(0, Math.min(10, words.length));
-  var wordList = picked.map(function(w){return '"'+w.word+'" ('+w.clue+')';}).join(', ');
-  var prompt = 'Erstelle für jede dieser '+langName+'-Vokabeln genau einen kurzen einfachen '+langName+'-Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___".\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel: [{"sentence":"...","answer":"'+langName+'es Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
+  // Unregelmäßige Verben (Feld `pattern`, siehe build_irregular_verbs.py) bekommen
+  // zufällig die 1. (Grundform) oder 2. Form (Simple Past) zugewiesen — analog zur
+  // generischen Wiederholung (wiederholung.jsx askExpected/askForm), damit auch
+  // die Satzlücke mal die Vergangenheitsform statt immer nur die Grundform verlangt.
+  var hasPattern = false;
+  picked = picked.map(function(w){
+    if(!w.pattern) return w;
+    hasPattern = true;
+    var askForm = Math.random()<0.5 ? 'base' : 'past';
+    return Object.assign({}, w, {askForm:askForm, target: askForm==='past' ? (w.pastSimple||w.word) : w.word});
+  });
+  var wordList = picked.map(function(w){
+    if(w.pattern && w.askForm==='past'){
+      return '"'+w.word+'" — Satz in der Vergangenheit, Lücke muss durch die Simple-Past-Form "'+w.target+'" ausgefüllt werden, nicht durch die Grundform (Bedeutung: '+(w.meaning||w.clue)+')';
+    }
+    return '"'+w.word+'" ('+w.clue+')';
+  }).join(', ');
+  var prompt = 'Erstelle für jede dieser '+langName+'-Vokabeln genau einen kurzen einfachen '+langName+'-Satz (max. 10 Wörter) für Schüler (10-12 Jahre). Thema des Lernsets: "'+runName+'".\nVokabeln: '+wordList+'\nErsetze die Vokabel im Satz durch "___". Wo eine bestimmte Verbform verlangt wird, muss genau diese Form in die Lücke passen.\nAntworte NUR mit einem JSON-Array, ein Objekt pro Vokabel in genau dieser Reihenfolge: [{"sentence":"...","answer":"'+langName+'es Wort","clue":"deutsche Übersetzung"}]. Kein Markdown, keine Erklärungen.';
   var cacheKey = 'satz_' + (lang||'en') + '_' + runName.replace(/[^a-zA-Z0-9]/g,'_').substring(0,40);
+  // Deterministische Vorgabe für die abgefragte Form überschreibt, was das Modell
+  // selbst als "answer" liefert — sonst würde eine falsch befolgte Anweisung die
+  // Bewertung verfälschen. Für Wörter ohne `pattern` unverändert.
+  function applyOverrides(sents){
+    if(!Array.isArray(sents)) return sents;
+    return sents.map(function(s,i){
+      var w = picked[i];
+      if(w && w.pattern && w.target) return Object.assign({}, s, {answer:w.target, askForm:w.askForm});
+      return s;
+    });
+  }
   function callApi(key) {
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
@@ -527,8 +554,10 @@ function generateSentences(words, runName, forceNew, lang) {
       var m=text.match(/\[[\s\S]*\]/);
       if(!m) throw new Error('Kein JSON in Antwort');
       var sents=JSON.parse(m[0]);
-      fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
-      return sents;
+      // Unregelmäßige Verben nicht cachen: die Form wird bei jedem Aufruf neu
+      // gewürfelt, ein gecachter Satz würde zur neuen Form nicht mehr passen.
+      if(!hasPattern) fetch(SB_URL+'/rest/v1/settings',{method:'POST',headers:Object.assign({},HW_POST,{'Prefer':'resolution=merge-duplicates,return=minimal'}),body:JSON.stringify({key:cacheKey,value:JSON.stringify(sents)}),mode:'cors',credentials:'omit'});
+      return applyOverrides(sents);
     });
   }
   function generate() {
@@ -540,7 +569,7 @@ function generateSentences(words, runName, forceNew, lang) {
         return callApi(key);
       });
   }
-  if(forceNew) return generate();
+  if(forceNew||hasPattern) return generate();
   return sbGet('settings','key=eq.'+encodeURIComponent(cacheKey)).then(function(cached){
     if(cached&&cached[0]&&cached[0].value){
       try{var p=JSON.parse(cached[0].value);if(Array.isArray(p)&&p.length>0)return p;}catch(e){}

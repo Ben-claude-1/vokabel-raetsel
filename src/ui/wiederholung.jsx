@@ -473,6 +473,16 @@ function fetchAllKlasse6Vocab(chapters, language){
   return out;
 }
 
+// Voller Wortschatz eines einzelnen Kapitels, unabhängig vom Lernfortschritt —
+// für Kapitel, die zusätzlich zum Gelernt-Topf immer dabei sein sollen.
+function fetchChapterVocab(chapters, chapterId){
+  var c = (chapters||[]).filter(function(x){ return x.id===chapterId; })[0];
+  if(!c) return [];
+  var lang = chLang(c)||'en';
+  return safeWords(c.words).filter(function(w){ return w.word&&w.clue; })
+    .map(function(w){ return Object.assign({}, w, {lang:lang}); });
+}
+
 // Oberste Menüebene (wie 🔁 Wiederholung), nicht mehr pro Kapitel versteckt —
 // Sätze kommen aus allen bisher in Klasse 6 gelernten Leiterspielen der
 // aktuell gewählten Sprache, nicht nur aus einem einzelnen Kapitel.
@@ -505,4 +515,4 @@ function SatzVokabelReview({ player, chapters, scope, onUpdateScore, onDone }){
   return <SatzVokabelGame words={words} runId={null} runName={runName} lang={language} player={player} onUpdateScore={onUpdateScore} onDone={onDone}/>;
 }
 
-export { WiederholungWrap, WiederholungMode, SatzVokabelReview, fetchKlasse6Pool, fetchAllKlasse6Vocab };
+export { WiederholungWrap, WiederholungMode, SatzVokabelReview, fetchKlasse6Pool, fetchAllKlasse6Vocab, fetchChapterVocab };
