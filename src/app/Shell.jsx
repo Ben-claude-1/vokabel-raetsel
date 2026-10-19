@@ -2,9 +2,9 @@ import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { HW_POST, SB_URL } from '../core/config.js';
 import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsForPlayer, reviewLockState } from '../core/leitner.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
-import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, sameScope, saveScope, scopeText } from '../core/scope.js';
+import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, playerLangs, sameScope, saveScope, scopeText } from '../core/scope.js';
 import { BUILTIN } from '../core/store.js';
-import { dayGoalHint, dayGoalState } from '../core/goal.js';
+import { areasFor, dayGoalHint, dayGoalState } from '../core/goal.js';
 import { BtnStyle, G100, G200, G400, G600, G900, T, TD, screenGame } from '../core/theme.js';
 import { collectVerbs } from '../core/verbsort.js';
 import { normWordKey, parseData } from '../core/words.js';
@@ -135,7 +135,10 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
   }, [player&&player.id]);
   useEffect(function(){ loadReview(); }, [loadReview]);
 
-  var scopes = useMemo(function(){ return listScopes(chapters); }, [chapters]);
+  var scopes = useMemo(function(){
+    var langs = playerLangs(player);
+    return listScopes(chapters).filter(function(s){ return langs.indexOf(s.language) >= 0; });
+  }, [chapters, player]);
   // Sobald die Kapitel geladen sind: gespeicherte Auswahl prüfen, sonst Standard
   // (Klasse 6 / Englisch, falls vorhanden — sonst höchste verfügbare Klasse).
   useEffect(function(){
@@ -391,7 +394,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
                 {goalInfo.current>0&&<span style={{fontSize:13,fontWeight:'bold',color:'#d97706'}}>🔥 {goalInfo.current}</span>}
               </div>
               {goalInfo.todaySec>0
-                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute · {dayGoalHint(dayGoalState(goalInfo.tag))}</div>
+                ? <div style={{fontSize:12,color:G600}}>{Math.round(goalInfo.todaySec/60)} Min heute · {dayGoalHint(dayGoalState(goalInfo.tag, areasFor(player)))}</div>
                 : <div style={{fontSize:12,color:G600}}>Heute noch nichts gelernt — los geht's! 💪</div>
               }
               {goalInfo.current>0&&<div style={{fontSize:10,color:G400,marginTop:4}}>Streak: {goalInfo.current} Tag{goalInfo.current!==1?'e':''} · Bestwert: {goalInfo.best} Tag{goalInfo.best!==1?'e':''}</div>}
@@ -561,7 +564,7 @@ function App() {
       }
     });
     var newUsers = (cached&&cached.allUsers) || [];
-    var p2 = sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_admin,is_active').then(function(d){
+    var p2 = sbGet('players','select=id,name,total_score,total_correct,total_wrong,is_admin,is_active,languages').then(function(d){
       if(Array.isArray(d)&&d.length>0){ newUsers=d; setAllUsers(d); }
     });
     var newCategories = (cached&&cached.allCategories) || [];

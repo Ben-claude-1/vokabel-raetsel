@@ -20,12 +20,21 @@
 // Überspringer fallen beim Spielen ohnehin an.
 
 import { dayKey } from './util.js';
+import { playerLangs } from './scope.js';
 
 var AREAS = [
   {key:'grammatik', icon:'✏️',  label:'Grammatik', min:5,  lang:null},
   {key:'englisch',  icon:'🇬🇧', label:'Englisch',  min:10, lang:'en'},
   {key:'spanisch',  icon:'🇪🇸', label:'Spanisch',  min:10, lang:'es'},
+  {key:'latein',    icon:'🏛️', label:'Latein',    min:10, lang:'la'},
 ];
+
+// Die Bereiche, die für ein Kind gelten: Grammatik für alle, dazu die Sprachen
+// aus players.languages (Nino: Englisch + Latein, kein Spanisch).
+function areasFor(player){
+  var langs = playerLangs(player);
+  return AREAS.filter(function(a){ return !a.lang || langs.indexOf(a.lang) >= 0; });
+}
 
 // 40 Punkte = 1 Minute. In Zahlen für eine Minute Gutschrift:
 //   Topf 1 (Auswahl) 40 · Topf 2 20 · Topf 3 10 · Topf 4 8 · Topf 5 ~7
@@ -48,6 +57,7 @@ function areaOfSession(s, runLang){
   var lang = s.language || (runLang && runLang[s.run_id]) || null;
   if(lang === 'en') return 'englisch';
   if(lang === 'es') return 'spanisch';
+  if(lang === 'la') return 'latein';
   return null;
 }
 
@@ -85,9 +95,9 @@ function areaGoalMin(area, credit){
 }
 
 // Stand eines Tages: je Bereich Ziel und Ist, dazu die Ehrlichkeits-Bedingung.
-function dayGoalState(st){
+function dayGoalState(st, areaList){
   st = st || {sec:0, secBy:{}, corBy:{}, creBy:{}, ans:0, skip:0, credit:0};
-  var areas = AREAS.map(function(a){
+  var areas = (areaList || areasFor(null)).map(function(a){
     var cor = (st.corBy||{})[a.key]||0;
     var cre = (st.creBy||{})[a.key]||0;
     var goal = areaGoalMin(a, cre);
@@ -122,24 +132,24 @@ function dayGoalHint(state){
 }
 
 // Zählt ein Tag für die Streak? Vor der Umstellung nach der alten Zeitschranke.
-function dayCounts(day, st){
+function dayCounts(day, st, areaList){
   if(!st) return false;
   if(day && day < GOAL_RULE_FROM) return (st.sec||0) >= LEGACY_GOAL_SEC;
-  return dayGoalState(st).erfuellt;
+  return dayGoalState(st, areaList).erfuellt;
 }
 
-function calcStreakFromStats(stats){
+function calcStreakFromStats(stats, areaList){
   var today = new Date(); today.setHours(0,0,0,0);
   var todayKey = dayKey(today);
-  var streak = dayCounts(todayKey, (stats||{})[todayKey]) ? 1 : 0;
+  var streak = dayCounts(todayKey, (stats||{})[todayKey], areaList) ? 1 : 0;
   var d = new Date(today); d.setDate(d.getDate()-1);
   for(var i=0; i<365; i++){
     var k = dayKey(d);
-    if(dayCounts(k, (stats||{})[k])){ streak++; d.setDate(d.getDate()-1); }
+    if(dayCounts(k, (stats||{})[k], areaList)){ streak++; d.setDate(d.getDate()-1); }
     else break;
   }
   return streak;
 }
 
 export { AREAS, CREDIT_PER_MIN, MIN_ANSWERS, MAX_SKIP_SHARE, GOAL_RULE_FROM, LEGACY_GOAL_SEC,
-  areaOfSession, buildDayStats, areaGoalMin, dayGoalState, dayGoalHint, dayCounts, calcStreakFromStats };
+  areasFor, areaOfSession, buildDayStats, areaGoalMin, dayGoalState, dayGoalHint, dayCounts, calcStreakFromStats };

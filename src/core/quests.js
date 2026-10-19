@@ -15,6 +15,7 @@ var QUEST_META = {
   grammatik: {pts:60,  screen:'grammar'},
   englisch:  {pts:100, screen:'leiterspiel_menu'},
   spanisch:  {pts:100, screen:'leiterspiel_menu'},
+  latein:    {pts:100, screen:'leiterspiel_menu'},
 };
 
 // Ein Bonus obendrauf, wenn alle drei Aufgaben erledigt sind.
@@ -26,8 +27,8 @@ function questText(a){
 
 // Ist der Wiederholungslauf fällig, ist das Leiterspiel gesperrt — dann führt
 // der Weg zu den Sprachminuten über die Wiederholung.
-function questState(reviewDue, stats, claimed){
-  var st = dayGoalState(stats);
+function questState(reviewDue, stats, claimed, areaList){
+  var st = dayGoalState(stats, areaList);
   var list = st.areas.map(function(a){
     var m = QUEST_META[a.key] || {pts:80, screen:'leiterspiel_menu'};
     return {

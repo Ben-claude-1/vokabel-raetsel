@@ -2,7 +2,7 @@ import { sbGet } from '../core/api.js';
 import { lsAnswersSince, lsDayStats, lsDeltaSince, lsGetRunsForPlayer, lsLearnedInRange, lsPercent } from '../core/leitner.js';
 import { useEffect, useState } from '../core/react.js';
 import { filterRunsByScope } from '../core/scope.js';
-import { buildDayStats, dayCounts } from '../core/goal.js';
+import { areasFor, buildDayStats, dayCounts } from '../core/goal.js';
 import { AM, G100, G200, G400, G50, G600, G900, GAME_META, RE, T, TD, TL, WD_LONG, gameOf } from '../core/theme.js';
 import { dayKey, fmtDayShort, fmtDuration, shiftDay, weekdayOf } from '../core/util.js';
 import { parseData } from '../core/words.js';
@@ -328,7 +328,7 @@ function TagesLeiterspiel({ progressRows, runs, day }){
   </div>;
 }
 
-function TagesDetail({ sessions, progressRows, runs, playerId }) {
+function TagesDetail({ sessions, progressRows, runs, playerId, player }) {
   var today = dayKey();
   var [sel,setSel] = useState(today);
   var [wordEvents,setWordEvents] = useState(null);
@@ -376,7 +376,7 @@ function TagesDetail({ sessions, progressRows, runs, playerId }) {
       </div>
       <div style={{display:'flex',gap:6,marginBottom:dayAns>0||daySec>0?12:2}}>
         <div style={{flex:1,textAlign:'center'}}>
-          <span style={{fontSize:26,fontWeight:'bold',color:dayCounts(sel, dayStatsAll[sel])?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
+          <span style={{fontSize:26,fontWeight:'bold',color:dayCounts(sel, dayStatsAll[sel], areasFor(player))?T:daySec>0?'#d97706':G400}}>{Math.round(daySec/60)}</span>
           <span style={{fontSize:12,color:G600,marginLeft:4}}>Min</span>
         </div>
         {dayAns>0&&<div style={{flex:1,textAlign:'center'}}>
@@ -435,7 +435,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
   return <div>
     <div style={{display:'flex',gap:6,marginBottom:12}}>
       <Stat value={fmtDuration(totalSec)} label="Gesamt gelernt"/>
-      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={dayCounts(today, tagesStand[today])?T:'#d97706'}/>
+      <Stat value={Math.round(todaySec/60)+' Min'} label="Heute" color={dayCounts(today, tagesStand[today], areasFor(player))?T:'#d97706'}/>
       <Stat value={activeDays} label="Aktive Tage"/>
     </div>
     <LeiterspielFortschritt progressRows={scopedProgress} runs={runs} sessions={sessions} title="🪜 Dein Leiterspiel-Fortschritt"/>
@@ -445,7 +445,7 @@ function MeineLernuebersicht({ player, chapters, scope }) {
     <div style={{fontSize:10,fontWeight:'bold',color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📈 Deine Lernzeit pro Tag</div>
     <LernVerlaufChart sessions={chartSessions}/>
     <div style={{height:12}}/>
-    <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs} playerId={player&&player.id}/>
+    <TagesDetail sessions={sessions} progressRows={scopedProgress} runs={runs} playerId={player&&player.id} player={player}/>
     <div style={{height:12}}/>
     <GameBreakdown sessions={sessions} title="🎮 Insgesamt gelernt"/>
   </div>;

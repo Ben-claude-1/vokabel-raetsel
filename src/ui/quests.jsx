@@ -1,5 +1,5 @@
 import { sbGet } from '../core/api.js';
-import { buildDayStats } from '../core/goal.js';
+import { areasFor, buildDayStats } from '../core/goal.js';
 import { ALL_DONE_BONUS, loadClaimed, questState, saveClaimed } from '../core/quests.js';
 import { useCallback, useEffect, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G600, G900, GR, T, TD, TL } from '../core/theme.js';
@@ -47,7 +47,7 @@ function Tagesaufgaben({ player, reviewDue, onGo, onReward, refreshKey }){
   useEffect(function(){ laden(); }, [laden, refreshKey]);
 
   if(!pid || !UUID.test(pid) || !stand) return null;
-  var st = questState(reviewDue, stand, claimed);
+  var st = questState(reviewDue, stand, claimed, areasFor(player));
   var fertig = st.list.filter(function(q){ return q.done; }).length;
 
   function belohnungHolen(){

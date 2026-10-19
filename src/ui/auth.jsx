@@ -2,7 +2,7 @@ import { hashPw, sbGet, sbPost } from '../core/api.js';
 import { HG, SB_URL } from '../core/config.js';
 import { useEffect, useState } from '../core/react.js';
 import { BtnStyle, G200, G400, G600, G900, RE, T } from '../core/theme.js';
-import { buildDayStats, calcStreakFromStats, dayCounts } from '../core/goal.js';
+import { areasFor, buildDayStats, calcStreakFromStats, dayCounts } from '../core/goal.js';
 import { dayKey, getWeekDays, getWeekKey } from '../core/util.js';
 
 function LoginScreen({ onLogin, onRegister }) {
@@ -141,13 +141,14 @@ function GoalTracker({ player, onInfo }) {
       var heute = stats[today] || {sec:0, secBy:{}, corBy:{}, ans:0, skip:0};
       var todaySec = heute.sec||0;
       var weekDays = getWeekDays();
-      var weekGoalDays = weekDays.filter(function(k){ return dayCounts(k, stats[k]); }).length;
-      var streak = calcStreakFromStats(stats);
+      var areas = areasFor(player);
+      var weekGoalDays = weekDays.filter(function(k){ return dayCounts(k, stats[k], areas); }).length;
+      var streak = calcStreakFromStats(stats, areas);
       var stored={}; try{stored=JSON.parse(localStorage.getItem(streakKey)||'{}');}catch(e){}
       var shown={};  try{shown =JSON.parse(localStorage.getItem(shownKey)||'{}');}catch(e){}
       var best = Math.max(stored.best||0, streak);
       var newToasts=[];
-      if(dayCounts(today, heute) && shown.dailyDate!==today){
+      if(dayCounts(today, heute, areas) && shown.dailyDate!==today){
         shown.dailyDate=today;
         newToasts.push({id:'daily',emoji:'🎯',msg:'Super gemacht! Dein Tagesziel hast du erreicht!'});
       }

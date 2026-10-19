@@ -21,6 +21,16 @@ function langAdjM(l){ return (LANGS[l]||{}).adjM || LANGS.en.adjM; }
 // nicht zwischen Sprachen hin- und hergesprungen: erst Englisch, dann Spanisch.
 var LANG_ORDER = ['en', 'es', 'fr', 'la'];
 
+// Welche Sprachen ein Kind lernt: Spalte players.languages. Ohne Eintrag gilt
+// der Standard — Latein bekommt nur, wer es ausdrücklich eingetragen hat
+// (Nino). Der Admin sieht alles.
+var DEFAULT_LANGS = ['en', 'es', 'fr'];
+
+function playerLangs(p){
+  if(p && p.is_admin) return LANG_ORDER.slice();
+  return (p && Array.isArray(p.languages) && p.languages.length) ? p.languages : DEFAULT_LANGS;
+}
+
 function langRank(l){ var i = LANG_ORDER.indexOf(l||'en'); return i<0 ? LANG_ORDER.length : i; }
 
 function langFlag(l){ return (LANGS[l]||{}).flag || '🗣️'; }
@@ -122,4 +132,4 @@ function filterRunsByScope(runs, chapters, sc){
   return sortRunsForDisplay((runs||[]).filter(function(r){ return sameScope(runScope(r, chapters), sc); }), chapters);
 }
 
-export { SCOPE_KEY, LANGS, LANG_ORDER, langLabel, langAdj, langAdjN, langAdjM, langRank, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };
+export { SCOPE_KEY, LANGS, LANG_ORDER, playerLangs, langLabel, langAdj, langAdjN, langAdjM, langRank, langFlag, chGrade, chLang, inScope, sameScope, scopeText, listScopes, defaultScope, loadScope, saveScope, rootsOf, runScope, naturalIdCmp, sortRunsForDisplay, filterRunsByScope };
