@@ -35,6 +35,14 @@ LANGS = {
         "node_icon": "🇪🇸",
         "theme_prefix": "ch_klasse6_es_u",
     },
+    "la": {
+        "glob": "k6-fotos/la_*.json",
+        "node_id": "ch_klasse6_la",
+        "node_title": "Latein",
+        "node_color": "#92400e",
+        "node_icon": "🏛️",
+        "theme_prefix": "ch_klasse6_la_l",
+    },
 }
 
 # Farben/Icons wie in Klasse 5, damit die Themen visuell wiedererkennbar sind.
@@ -76,7 +84,7 @@ def load_words(pattern):
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] not in LANGS:
-        sys.exit("Aufruf: import_klasse6.py <en|es> [--dry]")
+        sys.exit("Aufruf: import_klasse6.py <en|es|la> [--dry]")
     lang = sys.argv[1]
     dry = "--dry" in sys.argv
     cfg = LANGS[lang]
@@ -134,6 +142,8 @@ def main():
                 "theme_num": theme_num,
                 "theme_title": theme_title,
             })
+            if w.get("forms"):
+                words[-1]["forms"] = w["forms"]
         total += len(words)
 
         payload = json.dumps(words, ensure_ascii=False)
