@@ -1,5 +1,5 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
-import { HW_POST, SB_URL } from '../core/config.js';
+import { HG, HW_POST, SB_URL, WHOAMI_URL } from '../core/config.js';
 import { ANSWER_TALLY, REVIEW_DEFAULT, answersSinceReview, countDue6, lsGetRunsForPlayer, reviewLockState } from '../core/leitner.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { defaultScope, inScope, langFlag, langLabel, listScopes, loadScope, playerLangs, sameScope, saveScope, scopeText } from '../core/scope.js';
@@ -82,7 +82,7 @@ function ScopeSwitcher({ scopes, scope, onChange, compact }) {
   );
 }
 
-function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout }) {
+function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout, tailInfo, onSwitch }) {
   var isAdmin = !!(player && player.is_admin);
   var [screen, setScreen] = useState(isAdmin ? 'admin' : 'home');
   var [screenData, setScreenData] = useState(null);
@@ -382,6 +382,8 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
             <div style={{fontSize:10,color:'rgba(255,255,255,0.7)'}}>{player&&player.name} · {player&&(player.total_score||0)} Pkt{scope?' · '+scopeText(scope):''}</div>
           </div>
           <ScopeSwitcher scopes={scopes} scope={scope} onChange={setScope}/>
+          {tailInfo&&tailInfo.admin&&player&&player.name===tailInfo.home&&<button onClick={function(){onSwitch(tailInfo.admin);}} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>⚙️ Admin</button>}
+          {tailInfo&&tailInfo.admin&&isAdmin&&<button onClick={function(){onSwitch(tailInfo.home);}} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>← {tailInfo.home}</button>}
           <button onClick={onLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>Abmelden</button>
         </div>
 
@@ -536,6 +538,8 @@ function App() {
   var [allCategories, setAllCategories] = useState([]);
   var [loading, setLoading] = useState(false);
   var [showRegister, setShowRegister] = useState(false);
+  var [checking, setChecking] = useState(true);
+  var [tailInfo, setTailInfo] = useState(null);
 
   function handleLogin(user) {
     setPlayer(user);
@@ -586,9 +590,55 @@ function App() {
   }
 
   function handleLogout() {
+    // Nach bewusstem Abmelden nicht gleich wieder automatisch anmelden (sonst
+    // käme man nie zum Login-Bild, z. B. um sich als jemand anderes anzumelden).
+    try { sessionStorage.setItem('no_tailnet_auto', '1'); } catch(e) {}
+    setTailInfo(null);
     setPlayer(null); setChapters(BUILTIN); setAllUsers([]); setAllCategories([]);
   }
 
+  function fetchPlayerByName(name) {
+    return fetch(SB_URL+'/rest/v1/players?name=eq.'+encodeURIComponent(name)+'&select=*', {headers:HG, mode:'cors', credentials:'omit'})
+      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+      .then(function(d){ var u=Array.isArray(d)&&d[0]; if(!u||u.is_active===false) throw new Error('kein Konto'); return u; });
+  }
+
+  // Wechsel zwischen dem eigenen Konto und dem Admin-Konto — nur, wenn Tailscale
+  // die Person erkannt hat (tailInfo kommt ausschließlich aus der Auto-Anmeldung).
+  function handleSwitch(name) {
+    fetchPlayerByName(name).then(function(u){ handleLogin(u); }).catch(function(){});
+  }
+
+  // Auto-Anmeldung über die Tailscale-Identität: Geräte im Tailnet erreichen den
+  // Whoami-Dienst, alle anderen nicht (Timeout) und sehen den normalen Login.
+  // Auf localhost aus, damit die Playwright-Tests den Login-Bildschirm sehen
+  // (zum Ausprobieren erzwingbar mit ?tailnet=1).
+  useEffect(function(){
+    var onLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) && !/[?&]tailnet=1/.test(location.search);
+    var skip = false;
+    try { skip = sessionStorage.getItem('no_tailnet_auto') === '1' || localStorage.getItem('no_tailnet_login') === '1'; } catch(e) {}
+    if(onLocal || skip){ setChecking(false); return; }
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 3500);
+    fetch(WHOAMI_URL, {signal:ctrl.signal, mode:'cors', credentials:'omit'})
+      .then(function(r){ if(!r.ok) throw new Error('http '+r.status); return r.json(); })
+      .then(function(w){
+        if(!w || !w.player) throw new Error('unbekannt');
+        return fetchPlayerByName(w.player).then(function(u){
+          setTailInfo({home:u.name, admin:w.admin_player||null});
+          handleLogin(u);
+        });
+      })
+      .catch(function(){})
+      .then(function(){ clearTimeout(timer); setChecking(false); });
+    return function(){ clearTimeout(timer); };
+  },[]);
+
+  if(!player&&checking) return(
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#0f766e,#134e4a)'}}>
+      <div style={{textAlign:'center',color:'white'}}><div style={{fontSize:48,marginBottom:16}}>🎓</div><div style={{fontSize:16}}>Anmeldung…</div></div>
+    </div>
+  );
   if(!player&&showRegister) return <RegisterScreen onRegister={function(u){handleLogin(u);setShowRegister(false);}} onBack={function(){setShowRegister(false);}}/>;
   if(!player) return <LoginScreen onLogin={handleLogin} onRegister={function(){setShowRegister(true);}}/>;
   if(loading) return(
@@ -597,7 +647,7 @@ function App() {
     </div>
   );
 
-  return <Shell player={player} setPlayer={setPlayer} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onLogout={handleLogout}/>;
+  return <Shell key={player.id} tailInfo={tailInfo} onSwitch={handleSwitch} player={player} setPlayer={setPlayer} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onLogout={handleLogout}/>;
 }
 
 export { ScopeSwitcher, Shell, App };
