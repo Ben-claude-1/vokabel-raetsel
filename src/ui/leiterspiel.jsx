@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, wordsConfusable, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -229,9 +229,14 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       var wType=getWordType(w);
       var sameType=allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word)&&getWordType(ww)===wType;});
       var quizPool=sameType.length>=3?sameType:allWords.filter(function(ww){return normWordKey(ww.word)!==normWordKey(w.word);});
+      // Keine ähnlich aussehenden Wörter als Antwortoptionen (Verwechslungsfallen).
+      var quizClean=quizPool.filter(function(ww){return !wordsConfusable(ww.word,w.word);});
+      if(quizClean.length>=3) quizPool=quizClean;
       var others=shuffleArr(quizPool).slice(0,3);
       setQuizOptions(shuffleArr([{word:w.word,clue:w.clue}].concat(others.map(function(d){return {word:d.word,clue:d.clue};}))));
-      setQuizChosen(null); setPhase('quiz');
+      setQuizChosen(null);
+      // Nie gesehenes Wort: erst die Lösung zeigen (Lernkarte), dann abfragen.
+      setPhase(((w.correct||0)+(w.wrong||0))===0 ? 'intro' : 'quiz');
     } else if(w.pot===2){
       setPhase('t2');
     } else if(w.pot===3){
@@ -920,6 +925,25 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         {current&&<VerbReversePanel current={current} showForm={verbShowForm} onSubmit={submitVerbAnswer}/>}
+      </div>
+    );
+  }
+
+  if(phase==='intro'){
+    return(
+      <div style={{padding:8}}>
+        {liveChip}
+        {wordOfDayBanner}
+        <div style={{textAlign:'center',padding:'22px 16px',background:'#eff6ff',borderRadius:14,marginBottom:12,border:'2px solid #bfdbfe'}}>
+          <div style={{fontSize:10,color:G400,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>🆕 Neues Wort — merk es dir</div>
+          <div style={{fontSize:20,color:G900,marginBottom:10}}>{current&&current.clue}</div>
+          <div style={{fontSize:26,fontWeight:'bold',color:G900,display:'flex',justifyContent:'center',alignItems:'center',gap:8}}>
+            <span>{current&&current.word}</span>
+            {current&&<SpeakButton text={current.word} lang={lang} style={{fontSize:20,padding:'0 4px'}}/>}
+          </div>
+        </div>
+        <button onClick={function(){qShownAt.current=Date.now();setPhase('quiz');}}
+          style={BtnStyle(GR,'white',{width:'100%',padding:'14px',fontSize:16})}>Gemerkt — abfragen ▶</button>
       </div>
     );
   }

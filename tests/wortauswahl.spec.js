@@ -181,11 +181,12 @@ function makeOpenPool(n) {
   return { pots };
 }
 
-test('bei mehr als 20 offenen Vokabeln bleibt das Arbeitsset auf 20 gedeckelt, bis eine gelernt ist', () => {
+test('bei mehr als 8 offenen Vokabeln bleibt das Arbeitsset auf 8 gedeckelt, bis eine gelernt ist', () => {
   const p = makeOpenPool(30);
   const touched = new Set();
   for (let i = 0; i < 300; i++) touched.add(L.lsPickWord(p, null, {}).word);
-  expect(touched.size).toBeLessThanOrEqual(20);
+  expect(L.ACTIVE_POOL_SIZE).toBe(8);
+  expect(touched.size).toBeLessThanOrEqual(8);
 
   // Eine der aktiven Vokabeln „lernen" (Topf 6) — sie verschwindet aus dem offenen Pool.
   const idx = p.pots[1].findIndex(w => touched.has(w.word));
@@ -197,11 +198,31 @@ test('bei mehr als 20 offenen Vokabeln bleibt das Arbeitsset auf 20 gedeckelt, b
   expect(nachgerueckt.length).toBeGreaterThan(0);
 });
 
-test('bei höchstens 20 offenen Vokabeln ist das Arbeitsset von Anfang an unbegrenzt', () => {
-  const p = makeOpenPool(15);
+test('bei höchstens 8 offenen Vokabeln ist das Arbeitsset von Anfang an unbegrenzt', () => {
+  const p = makeOpenPool(7);
   const touched = new Set();
   for (let i = 0; i < 300; i++) touched.add(L.lsPickWord(p, null, {}).word);
-  expect(touched.size).toBe(15);
+  expect(touched.size).toBe(7);
+});
+
+test('Altbestand: schon angefangene Wörter werden auf das kleine Arbeitsset eingedampft', () => {
+  const p = makeOpenPool(22);
+  p.pots[1].forEach(w => { w.correct = 1; w.wrong = 1; });   // alle schon einmal gesehen
+  const touched = new Set();
+  for (let i = 0; i < 400; i++) touched.add(L.lsPickWord(p, null, {}).word);
+  expect(touched.size).toBeLessThanOrEqual(8);
+});
+
+test('ähnliche Wörter (Verwechsler) landen nicht gemeinsam im Arbeitsset', () => {
+  expect(L.wordsConfusable('¿Qué significa...?', 'Significa...')).toBe(true);
+  expect(L.wordsConfusable('la mesa', 'la mesa de noche')).toBe(true);
+  expect(L.wordsConfusable('la cama', 'el armario')).toBe(false);
+  const names = ['¿Qué significa...?', 'Significa...', 'la cama', 'el armario', 'la ventana', 'el espejo',
+    'la lámpara', 'la alfombra', 'el escritorio', 'la planta'];
+  const pots = { 1: names.map(n => ({ word: n, clue: n, streak: 0, correct: 1, wrong: 1 })), 2: [], 3: [], 4: [], 5: [], 6: [] };
+  const touched = new Set();
+  for (let i = 0; i < 400; i++) touched.add(L.lsPickWord({ pots }, null, { workingSet: 8 }).word);
+  expect(touched.has('¿Qué significa...?') && touched.has('Significa...')).toBe(false);
 });
 
 // ── Wort des Tages ───────────────────────────────────────────────────────────

@@ -346,7 +346,7 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
 // Jetzt: ein begrenztes Arbeitsset, das erst abgearbeitet wird, bevor neue
 // Wörter nachrücken, plus Gewichtung nach Dringlichkeit. Gedeckelt wird nur,
 // wenn der offene Pool (Töpfe 1-5) größer ist als ACTIVE_POOL_SIZE — bei
-// ≤20 offenen Vokabeln ist von Anfang an alles aktiv. Sobald eine Vokabel
+// ≤8 offenen Vokabeln ist von Anfang an alles aktiv. Sobald eine Vokabel
 // Topf 6 erreicht, verschwindet sie aus dem offenen Pool und die nächste
 // ungelernte rückt ins Arbeitsset nach.
 //
@@ -354,8 +354,11 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
 // der Lern-Teil; das Behalten übernimmt der Wiederholungslauf, der sich als
 // eigener Abschnitt dazwischenschiebt.
 
-var WORKING_SET = 12;   // Fallback-Arbeitsset, falls opts.workingSet erzwungen wird
-var ACTIVE_POOL_SIZE = 20;   // ab so vielen offenen Vokabeln wird das Arbeitsset gedeckelt
+// Arbeitsset bewusst klein (11.11.2026): Emma brauchte bei 22 gleichzeitig aktiven
+// Spanisch-Wörtern 133 Minuten für ein einziges gelerntes Wort (Topf 1: 47 % richtig).
+// Mit ~8 Wörtern auf einmal kommt jedes öfter dran, bevor das nächste nachrückt.
+var WORKING_SET = 8;   // Fallback-Arbeitsset, falls opts.workingSet erzwungen wird
+var ACTIVE_POOL_SIZE = 8;   // ab so vielen offenen Vokabeln wird das Arbeitsset gedeckelt
 
 var REVIEW6_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -449,6 +452,42 @@ function lsClaimWordOfDay(playerId, lang, today, candidateKeys){
   }).catch(function(){ return null; });
 }
 
+// ── Verwechslungsgefahr ──────────────────────────────────────────────────────
+// Ähnlich aussehende Wörter (¿Qué significa...? / Significa..., mesa / mesa de
+// noche) kommen nicht gemeinsam ins Arbeitsset, nicht direkt nacheinander und
+// stehen im Quiz nicht als Antwortoptionen nebeneinander.
+function confNorm(w){
+  return String(w||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+var CONF_STOP = {el:1,la:1,los:1,las:1,un:1,una:1,the:1,to:1,de:1,del:1,que:1,sth:1,sb:1,pl:1};
+function confTokens(w){ return confNorm(w).split(' ').filter(function(t){ return t && !CONF_STOP[t]; }); }
+function editDist(a,b){
+  var prev=[],cur=[],i,j;
+  for(j=0;j<=b.length;j++) prev[j]=j;
+  for(i=1;i<=a.length;i++){
+    cur=[i];
+    for(j=1;j<=b.length;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[b.length];
+}
+function wordsConfusable(a,b){
+  var na=confNorm(a), nb=confNorm(b);
+  if(!na||!nb||na===nb) return false;
+  var ta=confTokens(a), tb=confTokens(b);
+  for(var i=0;i<ta.length;i++) for(var j=0;j<tb.length;j++){
+    var x=ta[i], y=tb[j];
+    if(x.length>=5 && y.length>=5 && (x===y || x.slice(0,5)===y.slice(0,5))) return true;
+    if(x.length>=4 && y.length>=4 && 1-editDist(x,y)/Math.max(x.length,y.length) >= 0.7) return true;
+  }
+  return false;
+}
+function confusableWithAny(word, list){
+  for(var i=0;i<(list||[]).length;i++) if(wordsConfusable(word,list[i])) return true;
+  return false;
+}
+
 function lsPickWord(progress, recentWords, opts) {
   opts = opts || {};
   var today = lsToday();
@@ -474,10 +513,32 @@ function lsPickWord(progress, recentWords, opts) {
   }); });
   avail(1).forEach(function(w){ if(wordSeen(w)) (retiredToday(w,today)?resting:working).push({w:w, pot:1}); });
 
-  // Auffüllen mit noch nie gezeigten Wörtern.
+  // Zu großes Arbeitsset (Altbestand: alle Wörter schon angefangen) eindampfen:
+  // weiter fortgeschrittene Wörter zuerst fertig machen, Verwechsler nach hinten.
+  if(working.length > setSize){
+    var ranked = working.slice().sort(function(a,b){
+      return (b.pot-a.pot) || ((b.w.streak||0)-(a.w.streak||0)) || ((b.w.correct||0)-(a.w.correct||0));
+    });
+    var kept = [], later = [];
+    ranked.forEach(function(x){
+      if(kept.length<setSize && !confusableWithAny(x.w.word, kept.map(function(k){return k.w.word;}))) kept.push(x);
+      else later.push(x);
+    });
+    later.forEach(function(x){ if(kept.length<setSize) kept.push(x); });
+    working = kept;
+  }
+
+  // Auffüllen mit noch nie gezeigten Wörtern (Verwechsler des Arbeitssets überspringen).
   if(working.length < setSize){
     var fresh = avail(1).filter(function(w){ return !wordSeen(w); });
-    fresh.slice(0, setSize - working.length).forEach(function(w){ working.push({w:w, pot:1}); });
+    var inSet = working.map(function(x){ return x.w.word; });
+    var added = 0, skippedConf = [];
+    fresh.forEach(function(w){
+      if(working.length>=setSize) return;
+      if(confusableWithAny(w.word, inSet)){ skippedConf.push(w); return; }
+      working.push({w:w, pot:1}); inSet.push(w.word); added++;
+    });
+    skippedConf.forEach(function(w){ if(working.length<setSize) working.push({w:w, pot:1}); });
   }
 
   var cands = working.concat(resting);
@@ -495,6 +556,7 @@ function lsPickWord(progress, recentWords, opts) {
   if(!cands.length) return null;   // alles gelernt → der Run ist durch
   var pick = weightedPick(cands, function(x){
     var u = urgency(x.w, x.pot, today) * recentPenalty(x.w.word, recent);
+    if(confusableWithAny(x.w.word, recent.slice(0,2))) u *= 0.2;
     return (wodKey && normWordKey(x.w.word)===wodKey) ? u*WORD_OF_DAY_BOOST : u;
   });
   var picked = flat(pick.w, pick.pot);
@@ -720,4 +782,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, wordsConfusable, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

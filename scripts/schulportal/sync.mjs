@@ -222,10 +222,14 @@ async function remind() {
   if (!open.length) { log('alle HA-Runs gelernt (Topf 6), nur noch Wiederholung - keine Erinnerung'); return; }
 
   const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-  const sess = await rest('GET', `learn_sessions?player_id=eq.${EMMA}&started_at=gte.${encodeURIComponent(midnight.toISOString())}&run_id=in.(${open.map(r => r.id).join(',')})&select=active_seconds`);
+  // Zählt jede Lernzeit des Tages in einem Run derselben Sprache (nicht nur im HA-Run):
+  // Emma lernt dieselben Wörter oft in einem Seiten- oder Kapitel-Run (11.11.2026).
+  const openLangs = [...new Set(open.map(r => r.language))];
+  const langRuns = await rest('GET', `ls_runs?language=in.(${openLangs.join(',')})&select=id`);
+  const sess = await rest('GET', `learn_sessions?player_id=eq.${EMMA}&started_at=gte.${encodeURIComponent(midnight.toISOString())}&run_id=in.(${langRuns.map(r => r.id).join(',')})&select=active_seconds`);
   const min = Math.floor(sess.reduce((s, x) => s + x.active_seconds, 0) / 60);
   const langs = [...new Set(open.map(r => LANG_NAME[r.language]))].join(' und ');
-  log(`offen: ${open.map(r => r.name).join(' | ')}; heute gelernt: ${min} min (Ziel ${GOAL_MIN})`);
+  log(`offen: ${open.map(r => r.name).join(' | ')}; heute gelernt (alle ${openLangs.join('/')}-Runs): ${min} min (Ziel ${GOAL_MIN})`);
   if (min >= GOAL_MIN) { log('Ziel erreicht, keine Erinnerung'); state.reminded = todayStr; saveState(state); return; }
 
   const text = min === 0
