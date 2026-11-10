@@ -98,7 +98,7 @@ function findUntil(list, x) {
 }
 
 // Gibt { words, label } oder { reason } zurück.
-function resolve(hwInfo, pool) {
+function resolve(hwInfo, pool, lang) {
   const all = pool.flatMap(c => c.words);
   let sel = null;
   if (hwInfo.pages) {
@@ -118,9 +118,10 @@ function resolve(hwInfo, pool) {
   } else return { reason: 'weder Seite noch Unidad noch Endwort erkannt' };
   if (!sel.length) return { reason: 'keine Vokabeln für Seiten ' + (hwInfo.pages || []).join('-') };
   // Endwort auf der vollen Liste bestimmen, dann nur die wichtigen (fett gedruckten) Lernvokabeln
-  // behalten - wie bei den bisherigen HA-Runs.
+  // behalten (nur Englisch, wie bei den bisherigen HA-Runs).
   const endWord = sel[sel.length - 1].word;
-  sel = sel.filter(w => w.important !== false);
+  // Spanisch: auch die nicht fetten Vokabeln werden gelernt; Englisch: nur die fetten.
+  if (lang !== 'es') sel = sel.filter(w => w.important !== false);
   if (!sel.length) return { reason: 'keine wichtigen Vokabeln im Bereich' };
   const label = hwInfo.pages ? `S. ${hwInfo.pages[0]}${hwInfo.pages[1] !== hwInfo.pages[0] ? '/' + hwInfo.pages[1] : ''}` : 'Vokabeln';
   return { words: sel, label, endWord };
@@ -166,7 +167,7 @@ async function sync() {
         log(`${LANG_NAME[lang]} ${e.date}: Wiederholung/Test, kein neuer Run: ${info.text}`);
         seen.add(key); continue;
       }
-      const r = resolve(info, pool);
+      const r = resolve(info, pool, lang);
       if (!r.words) {
         log(`${LANG_NAME[lang]} ${e.date}: NICHT AUFGELÖST (${r.reason}): ${info.text}`);
         if (!flag('dry')) { notifyBen(`${LANG_NAME[lang]}-HA ${e.date} nicht automatisch erkannt: ${info.text.slice(0, 80)}`); seen.add(key); }

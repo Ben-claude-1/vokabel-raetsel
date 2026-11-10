@@ -30,15 +30,24 @@ async function openTab() {
       if (await ev('document.readyState') === 'complete' && (!waitFor || await ev(waitFor))) return;
     }
   };
+  const cookiesClear = async () => { await send('Network.enable');
+    const all = (await send('Network.getAllCookies')).result.cookies;
+    for (const c of all.filter(c => c.domain.endsWith('schulportal.hessen.de')))
+      await send('Network.deleteCookies', { name: c.name, domain: c.domain, path: c.path });
+  };
   const close = async () => { try { ws.close(); await fetch(CDP + '/json/close/' + tab.id); } catch {} };
-  return { ev, goto, close };
+  return { ev, goto, close, cookiesClear };
 }
 
 export async function withPortal(fn) {
   const t = await openTab();
   try {
     await t.goto('https://start.schulportal.hessen.de/meinunterricht.php');
-    if (!(await t.ev('location.host')).startsWith('start.')) {
+    // Nicht eingeloggt ODER Portal zeigt wegen alter Sitzung eine Fehlerseite -> frisch anmelden.
+    const stale = async () => !(await t.ev('location.host')).startsWith('start.') ||
+      /Datenbankauswahl nicht möglich|Sitzung|abgelaufen/.test(await t.ev('document.body.innerText'));
+    if (await stale()) {
+      await t.cookiesClear();
       const { user, password } = vaultCreds();
       await t.goto('https://login.schulportal.hessen.de/?i=4415', '!!document.querySelector("#username2")');
       await t.ev(`(()=>{const u=document.querySelector('#username2'),p=document.querySelector('#inputPassword');
@@ -47,7 +56,7 @@ export async function withPortal(fn) {
         [...document.querySelectorAll('button')].find(b=>/Anmelden/.test(b.textContent)).click();})()`);
       for (let i = 0; i < 20 && !(await t.ev('location.host')).startsWith('start.'); i++) await sleep(1000);
       await t.goto('https://start.schulportal.hessen.de/meinunterricht.php');
-      if (!(await t.ev('location.host')).startsWith('start.')) throw new Error('Schulportal-Login fehlgeschlagen');
+      if (await stale()) throw new Error('Schulportal-Login fehlgeschlagen');
     }
     return await fn(t);
   } finally { await t.close(); }
