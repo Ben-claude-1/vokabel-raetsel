@@ -143,7 +143,9 @@ function canonAnswer(s){
   s = s.replace(/\bjdn\.?\b/g,'jemanden').replace(/\bjdm\.?\b/g,'jemandem').replace(/\bjds\.?\b/g,'jemandes');
   s = s.replace(/\betw\.?\b/g,'etwas');
   s = s.replace(/\bsth\.?\b/g,'something').replace(/\bsb\.?\b/g,'somebody');
-  s = s.replace(/[.,;:!?„"'»«]/g,'');
+  // „…" / „..." sind nur Platzhalter in der Lösung — ob mitgeschrieben oder nicht, egal.
+  s = s.replace(/…|\.{2,}/g,' ');
+  s = s.replace(/[.,;:!?¿¡„"'»«]/g,'');
   s = s.replace(/\s+/g,' ').trim();
   return s;
 }
@@ -199,6 +201,46 @@ function expandSlashAlt(alt){
   return combos.filter(function(c){ return c && c!==alt; });
 }
 
+// ── Großzügigere Prüfung (Stufe 1, ohne KI) ──────────────────────────────────
+// Liefert 'partial' (zählt als richtig, mit „fast"-Hinweis) bei: fehlenden
+// Akzenten/Umlauten, weggelassenem Artikel, ODER einem einzelnen Tippfehler bei
+// längeren Wörtern. Falscher Artikel bleibt falsch (Genus ist Lernstoff).
+function foldAnswer(s){
+  return canonAnswer(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ß/g,'ss').replace(/\s+/g,' ').trim();
+}
+var ARTICLE_RE = /^(el|la|los|las|un|una|unos|unas|der|die|das|ein|eine|the|le|les|une|il|lo|gli)\s+/;
+function editDistance(a,b){
+  if(a===b) return 0;
+  if(Math.abs(a.length-b.length)>1) return 2;
+  var prev=[],cur,i,j;
+  for(j=0;j<=b.length;j++) prev[j]=j;
+  for(i=1;i<=a.length;i++){
+    cur=[i];
+    for(j=1;j<=b.length;j++) cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[b.length];
+}
+function leniencyMatch(typed, variants){
+  var t = foldAnswer(typed);
+  if(!t) return false;
+  var typedHasArticle = ARTICLE_RE.test(t);
+  for(var i=0;i<variants.length;i++){
+    var v = foldAnswer(variants[i]);
+    var vs = foldAnswer(stripParens(variants[i]));
+    var cands = [v, vs];
+    for(var c=0;c<cands.length;c++){
+      var x = cands[c];
+      if(!x) continue;
+      if(x===t) return true;                                  // nur Akzent/Umlaut-Unterschied
+      if(!typedHasArticle && x.replace(ARTICLE_RE,'')===t) return true;   // Artikel weggelassen
+      var xa = typedHasArticle ? x : x.replace(ARTICLE_RE,'');
+      if(xa.length>=6 && t.length>=6 && !/\d/.test(xa) && editDistance(xa,t)===1) return true;  // 1 Tippfehler
+    }
+  }
+  return false;
+}
+
 // `extra`: zusätzlich akzeptierte, wörtliche Antworten (z.B. vom Admin
 // bestätigte Anfechtungen) — werden 1:1 gegen die Eingabe geprüft.
 function checkAnswer(typed, correct, extra) {
@@ -238,6 +280,7 @@ function checkAnswer(typed, correct, extra) {
     if (vStripped && (vStripped === tCan || vStripped === tStripped)) return 'correct';
     if (vStripped && vStripped.replace(/\s+/g,'') === tStrippedNS) return 'correct';
   }
+  if (leniencyMatch(t, allVariants)) return 'partial';
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) { if (canonAnswer(stripTo(corrects[k])) === tCan) return 'partial'; }
   }

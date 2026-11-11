@@ -1,6 +1,7 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
 import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsPickGroup, lsRunPacing, wordsConfusable, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { LANG_TARGET, judgeAnswer } from '../core/judge.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -54,6 +55,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [sessionLog, setSessionLog] = useState([]);
   var [quizOptions, setQuizOptions] = useState([]);
   var [matchGroup, setMatchGroup] = useState(null);
+  var [judging, setJudging] = useState(false);
   var [quizChosen, setQuizChosen] = useState(null);
   var [dragWord, setDragWord] = useState(null);
   var [dragActive, setDragActive] = useState(false);
@@ -426,14 +428,32 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   // eine falsche Antwort (das ist es ja auch) und wird zusätzlich als
   // übersprungen vermerkt — vorher verschwanden genau diese Wörter spurlos.
   function submitAnswer(skipped){
-    if(!current) return;
+    if(!current || judging) return;
     var rt = answerMs();
     var typed = skipped ? '' : input.trim();
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current, lang);
     var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer, extrasFor(current.word));
-    var correct = status==='correct'||status==='partial';
+    // Lehnen die Regeln ab, urteilt die KI (Synonym, andere Schreibweise, ...).
+    // Fällt sie aus (kein Netz/Key/Timeout), gilt die Eingabe wie bisher als falsch.
+    if(status==='wrong' && !skipped && typed.length>=2){
+      setJudging(true);
+      judgeAnswer({typed:typed, expected:correctAnswer, prompt:isPot5?current.word:current.clue,
+        targetLang:isPot5?'Deutsch':(LANG_TARGET[lang]||'der Zielsprache')}).then(function(v){
+        setJudging(false);
+        finishAnswer(skipped, typed, rt, correctAnswer, (v&&v.ok)?'ai':'wrong', v);
+      });
+      return;
+    }
+    finishAnswer(skipped, typed, rt, correctAnswer, status, null);
+  }
+  function finishAnswer(skipped, typed, rt, correctAnswer, status, verdict){
+    var fromPot = current.pot;
+    var correct = status==='correct'||status==='partial'||status==='ai';
+    var note = status==='ai' ? ('KI: '+((verdict&&verdict.note)||'passt')+' — im Buch steht: '+correctAnswer)
+      : status==='partial' ? ('Du hast „'+typed+'" geschrieben — im Buch steht: '+correctAnswer)
+      : (verdict&&verdict.note) ? ('KI: '+verdict.note) : '';
     setSesAns(function(n){return n+1;}); if(correct) setSesCor(function(n){return n+1;}); trackActiveTime();
     var newData = JSON.parse(JSON.stringify(data));
     var reqStreak = ((streak.upThresholds||DEFAULT_STREAK.upThresholds)[fromPot])||2;
@@ -472,9 +492,9 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
 
     var newSc = correct ? streakCount+1 : 0;
     setStreakCount(newSc);
-    var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',skipped:!!skipped,fromPot:fromPot,toPot:moveTo,pts:pts};
+    var log = {word:current.word,clue:current.clue,typed:typed,correct:correct,partial:status==='partial',ai:status==='ai',skipped:!!skipped,fromPot:fromPot,toPot:moveTo,pts:pts};
     setSessionLog(function(l){return l.concat([log]);});
-    setResult({correct:correct,partial:status==='partial',skipped:!!skipped,answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
+    setResult({correct:correct,partial:status==='partial',ai:status==='ai',note:note,skipped:!!skipped,answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:moveTo,pts:pts,newStreak:newStreak,reqStreak:reqStreak});
     setPhase('showResult');
     if(correct && moveTo===6 && fromPot!==6) setCelebration('🏆 "'+current.word+'" gelernt!');
   }
@@ -800,11 +820,12 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var livePct = lsPercent(data, streak);
   var liveLearned = (data.pots[6]||[]).length;
   var liveTotal = Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
-  var liveChip = (phase!=='pick' && phase!=='done') ? <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(15,118,110,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:6,backdropFilter:'blur(4px)'}}>
+  var liveChipBase = (phase!=='pick' && phase!=='done') ? <div style={{position:'fixed',top:6,right:6,zIndex:9999,background:'rgba(15,118,110,0.95)',color:'white',padding:'5px 10px',borderRadius:18,fontSize:11,fontWeight:'bold',boxShadow:'0 2px 6px rgba(0,0,0,0.2)',display:'flex',alignItems:'center',gap:6,backdropFilter:'blur(4px)'}}>
     <span>{livePct}%</span>
     <span style={{opacity:0.7,fontWeight:'normal'}}>·</span>
     <span style={{opacity:0.85}}>✅ {liveLearned}/{liveTotal}</span>
   </div> : null;
+  var liveChip = <div>{liveChipBase}{judging&&<div style={{position:'fixed',inset:0,zIndex:10000,background:'rgba(255,255,255,0.75)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:'bold',color:T}}>🤖 Wird geprüft …</div>}</div>;
 
   // Wort des Tages: current.wod kommt direkt von lsPickWord — dieses Banner
   // erscheint egal in welcher Topf-Phase gerade gefragt wird.
@@ -1240,10 +1261,11 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {result&&(
           <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.helped?'#eff6ff':result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.helped?'#93c5fd':result.correct?GR:RE)}}>
             <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.helped?'#1d4ed8':result.correct?'#065f46':'#991b1b',marginBottom:6}}>
-              {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':''):'✗ Falsch'}
+              {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':result.ai?' (anderes Wort / Schreibweise)':''):'✗ Falsch'}
             </div>
             <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span><SpeakButton text={result.word||result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
             {!result.verbFields&&!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
+            {result.note&&<div style={{fontSize:12,color:result.correct?'#065f46':G600,marginBottom:4}}>{result.note}</div>}
             <VerbResultFields fields={result.verbFields}/>
             {result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} bleibt {POT_LABEL[result.fromPot]}</span>

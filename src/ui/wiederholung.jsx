@@ -3,6 +3,7 @@ import { CREDIT, REVIEW_INTERVALS, lsDayEntry, lsGetProgress, lsGetRunsForPlayer
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { chGrade, chLang, langAdj, langAdjN, langFlag, langLabel, runScope } from '../core/scope.js';
 import { BtnStyle, G100, G200, G400, G50, G600, G900, RE, T, TD, TL } from '../core/theme.js';
+import { LANG_TARGET, judgeAnswer } from '../core/judge.js';
 import { shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, normWordKey, parseData, safeWords, wordDisplay } from '../core/words.js';
 import { SatzVokabelGame } from './leiterspiel.jsx';
@@ -169,7 +170,19 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     if(!cur) return;
     var typed=input.trim(); if(!typed) return;
     var status=checkAnswer(typed, askExpected(cur));
-    var correct = status==='correct'||status==='partial';
+    // Regeln sagen "falsch" -> KI urteilt (Synonym, andere Schreibweise, ...). Verben mit
+    // Formenabfrage bleiben bei der strengen Prüfung.
+    if(status==='wrong' && typed.length>=2 && !cur.pattern){
+      setPhase('judging');
+      judgeAnswer({typed:typed, expected:askExpected(cur), prompt:cur.clue, targetLang:LANG_TARGET[cur.lang]||'der Zielsprache'}).then(function(v){
+        finishSubmit(typed, (v&&v.ok)?'ai':'wrong', v);
+      });
+      return;
+    }
+    finishSubmit(typed, status, null);
+  }
+  function finishSubmit(typed, status, verdict){
+    var correct = status==='correct'||status==='partial'||status==='ai';
     // Nach Tagen ohne Kontakt frei abgerufen — der stärkste Beleg, dass es
     // sitzt. Mit Tipps entsprechend weniger.
     tallyAnswer(correct, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
@@ -178,7 +191,10 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
     setScore(function(s){return s+pts;});
-    setResult({correct:correct, points:pts, answer:askExpected(cur), typed:typed, hints:hints, skipped:false});
+    var note = status==='ai' ? ('KI: '+((verdict&&verdict.note)||'passt')+' — im Buch steht: '+askExpected(cur))
+      : status==='partial' ? ('Du hast „'+typed+'" geschrieben — im Buch steht: '+askExpected(cur))
+      : (verdict&&verdict.note) ? ('KI: '+verdict.note) : '';
+    setResult({correct:correct, points:pts, answer:askExpected(cur), typed:typed, hints:hints, skipped:false, note:note});
     setPhase('show');
   }
   function giveUp(){
@@ -303,6 +319,8 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     <button onClick={function(){onDone(wasMandatory);}} style={BtnStyle(G100,G600,{width:'100%',padding:'10px',fontSize:12,marginTop:8})}>Zurück</button>
   </WiederholungWrap>;
 
+  if(phase==='judging') return <WiederholungWrap><div style={{textAlign:'center',padding:40,color:T,fontWeight:'bold'}}>🤖 Wird geprüft …</div></WiederholungWrap>;
+
   if(phase==='q' && cur) return <WiederholungWrap>
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:11,color:G600,marginBottom:10}}>
       <span>Vokabel {idx+1} / {items.length}</span>
@@ -372,6 +390,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
         <SpeakButton text={result.answer} lang={cur&&cur.lang}/>
       </div>
       {!result.correct&&!result.skipped&&result.typed&&<div style={{fontSize:11,color:G600,marginTop:4}}>Deine Eingabe: „{result.typed}"</div>}
+      {result.note&&<div style={{fontSize:11,color:result.correct?'#065f46':G600,marginTop:4}}>{result.note}</div>}
       <div style={{fontSize:11,color:G600,marginTop:8}}>{result.clue||cur&&cur.clue}</div>
     </div>
     <button onClick={next} style={BtnStyle(T,'white',{width:'100%',padding:'14px',fontSize:15})}>{idx+1>=items.length?'Ergebnis anzeigen':'Weiter →'}</button>
