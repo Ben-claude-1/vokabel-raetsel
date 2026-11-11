@@ -151,8 +151,10 @@ async function sync() {
   for (const { lang, id, entries } of portal) {
     if (!entries.length) throw new Error(`Kursmappe ${LANG_NAME[lang]} (${id}) leer gelesen - Portal-Layout geändert?`);
     const pool = await loadPool(lang);
-    const runs = await rest('GET', `ls_runs?language=eq.${lang}&select=id,name,words`);
-    const covered = new Set(runs.filter(r => /\bHA\b/.test(r.name)).flatMap(r =>
+    // Alle von Hand/automatisch angelegten Runs (nicht die Kapitel-Runs): HA-Runs werden auch
+    // umbenannt, z. B. "Unidad 2 - Vocabulario" (11.11.2026) - deren Wörter nicht doppelt anlegen.
+    const runs = await rest('GET', `ls_runs?language=eq.${lang}&auto_chapter_id=is.null&select=id,name,words`);
+    const covered = new Set(runs.flatMap(r =>
       (typeof r.words === 'string' ? JSON.parse(r.words) : r.words).map(wkey)));
 
     // älteste zuerst, damit "bis X" aufeinander aufbaut
@@ -206,8 +208,10 @@ async function remind() {
   if (state.reminded === todayStr && !flag('force')) { log('heute schon erinnert'); return; }
 
   const since = Date.now() - 30 * 86400000;
-  const runs = (await rest('GET', `ls_runs?language=in.(en,es)&select=id,name,language,word_count,created_at`))
-    .filter(r => /\bHA\b/.test(r.name) && new Date(r.created_at).getTime() > since);
+  // Aktuelle Lernstoff-Runs: jeder Nicht-Kapitel-Run der letzten 30 Tage, nicht nur "HA" im Namen
+  // (der HA-Run vom 07.11. wurde am 11.11. in "Unidad 2 - Vocabulario" überführt).
+  const runs = (await rest('GET', `ls_runs?language=in.(en,es)&auto_chapter_id=is.null&select=id,name,language,word_count,created_at`))
+    .filter(r => new Date(r.created_at).getTime() > since);
   if (!runs.length) { log('keine aktuellen HA-Runs'); return; }
 
   const ids = runs.map(r => r.id).join(',');

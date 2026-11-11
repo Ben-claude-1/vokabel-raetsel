@@ -27,18 +27,21 @@ test.describe('Admin · Spieler-Ansicht', () => {
 
     // Einen Lerntag öffnen (Gestern hatte Emma Leiterspiel-Antworten)
     await page.locator('text=Gestern').first().click();
-    await expect(page.locator('text=Spanisch HA').first()).toBeVisible();
+    // Der HA-Run vom 07.11. wurde am 11.11. auf Módulo 1 (S. 160) und Unidad 2 - Vocabulario aufgeteilt
+    await expect(page.locator('text=Unidad 1 - Módulo 1').first()).toBeVisible();
+    await expect(page.locator('text=Unidad 2 - Vocabulario').first()).toBeVisible();
     // Block aufklappen: einzelne Antworten mit Topf-Angabe und Töpfe-Button
-    await page.locator('text=Spanisch HA').first().click();
+    await page.locator('text=Unidad 1 - Módulo 1').first().click();
     await expect(page.locator('text=Aktueller Stand der Töpfe').first()).toBeVisible();
     await expect(page.locator('text=la papelera').first()).toBeVisible();
     await page.screenshot({ path: 'test-results/admin-spieler.png', fullPage: true });
 
     // Neuestes Leiterspiel steht in der Liste oben
     await expect(page.locator('text=⏳ Noch nicht begonnen ·')).toBeVisible();
-    // Zusammengeführter Run zählt die neuen Wörter schon mit (41 statt 22)
-    await expect(page.locator('text=/\\/41 gelernt/').first()).toBeVisible();
-    await page.locator('text=Spanisch HA: Unidad').last().click();
+    // Unidad 2 - Vocabulario zählt alle 28 Wörter bis "la hamaca", Módulo 1 jetzt 32
+    await expect(page.locator('text=/\\/28 gelernt/').first()).toBeVisible();
+    await expect(page.locator('text=/\\/32 gelernt/').first()).toBeVisible();
+    await page.locator('text=Unidad 2 - Vocabulario').last().click();
     // Standard: alle Vokabeln in Buch-Reihenfolge mit Topf
     await expect(page.locator('button:has-text("📖 Alle Vokabeln")')).toBeVisible();
     await expect(page.locator('text=la hamaca').first()).toBeVisible();
