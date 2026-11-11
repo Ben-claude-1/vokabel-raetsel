@@ -27,7 +27,7 @@ function dayLabel(d){
   return WD_LONG[weekdayOf(d)];
 }
 var VERDICT_TXT = {
-  partial:'fast richtig (Tippfehler/Akzent)', ai:'von KI akzeptiert', helped:'mit Hilfe',
+  partial:'fast richtig (Akzent/Artikel)', typo:'Schreibfehler (bleibt im Topf)', ai:'von KI akzeptiert', helped:'mit Hilfe',
   skipped:'nicht gewusst', choice:'Auswahl', letters:'Buchstaben sortieren',
   match:'Paar-Zuordnung', match_wrong:'Paar-Zuordnung mit Fehlversuch',
   hints1:'mit 1 Tipp', hints2:'mit 2 Tipps'

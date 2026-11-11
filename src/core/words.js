@@ -225,6 +225,7 @@ function leniencyMatch(typed, variants){
   var t = foldAnswer(typed);
   if(!t) return false;
   var typedHasArticle = ARTICLE_RE.test(t);
+  var typo = false;
   for(var i=0;i<variants.length;i++){
     var v = foldAnswer(variants[i]);
     var vs = foldAnswer(stripParens(variants[i]));
@@ -235,15 +236,21 @@ function leniencyMatch(typed, variants){
       if(x===t) return true;                                  // nur Akzent/Umlaut-Unterschied
       if(!typedHasArticle && x.replace(ARTICLE_RE,'')===t) return true;   // Artikel weggelassen
       var xa = typedHasArticle ? x : x.replace(ARTICLE_RE,'');
-      if(xa.length>=6 && t.length>=6 && !/\d/.test(xa) && editDistance(xa,t)===1) return true;  // 1 Tippfehler
+      if(xa.length>=6 && t.length>=6 && !/\d/.test(xa) && editDistance(xa,t)===1) typo = true;  // 1 Tippfehler (zählt NICHT als richtig)
     }
   }
-  return false;
+  return typo ? 'typo' : false;
 }
 
 // `extra`: zusätzlich akzeptierte, wörtliche Antworten (z.B. vom Admin
 // bestätigte Anfechtungen) — werden 1:1 gegen die Eingabe geprüft.
+// Für alle Aufrufer außer dem Leiterspiel: Tippfehler zählt wie bisher als 'partial'.
 function checkAnswer(typed, correct, extra) {
+  var r = checkAnswerEx(typed, correct, extra);
+  return r==='typo' ? 'partial' : r;
+}
+// Wie checkAnswer, liefert aber 'typo' bei einem Schreibfehler (Wort falsch geschrieben).
+function checkAnswerEx(typed, correct, extra) {
   if (!typed || !typed.trim()) return 'empty';
   var t = typed.trim();
   var tCan = canonAnswer(t);
@@ -280,7 +287,8 @@ function checkAnswer(typed, correct, extra) {
     if (vStripped && (vStripped === tCan || vStripped === tStripped)) return 'correct';
     if (vStripped && vStripped.replace(/\s+/g,'') === tStrippedNS) return 'correct';
   }
-  if (leniencyMatch(t, allVariants)) return 'partial';
+  var lm = leniencyMatch(t, allVariants);
+  if (lm) return lm==='typo' ? 'typo' : 'partial';
   for (var k=0;k<corrects.length;k++) {
     if (isToVerb(corrects[k])) { if (canonAnswer(stripTo(corrects[k])) === tCan) return 'partial'; }
   }
@@ -459,4 +467,4 @@ function safeWords(w){if(Array.isArray(w))return w;if(!w)return[];try{return JSO
 
 function parseData(d){if(d==null)return{};if(typeof d==='object')return d;try{return JSON.parse(d||'{}');}catch(e){return{};}}
 
-export { getWordType, quickDetectType, aiCategorizeWords, wordDisplay, makeQuizRound, makeAllRounds, normalizeAnswer, isProperNoun, wordVariants, canonAnswer, stripParens, checkAnswer, getWordColor, selectWorkoutWords, normWordKey, collectRunSentences, buildT2Layout, parseWishStructured, sortWords, translateSentenceEN2DE, safeWords, parseData };
+export { getWordType, quickDetectType, aiCategorizeWords, wordDisplay, makeQuizRound, makeAllRounds, normalizeAnswer, isProperNoun, wordVariants, canonAnswer, stripParens, checkAnswer, checkAnswerEx, getWordColor, selectWorkoutWords, normWordKey, collectRunSentences, buildT2Layout, parseWishStructured, sortWords, translateSentenceEN2DE, safeWords, parseData };

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON, POT_LABEL, RE, T, TD, TL } from '../core/theme.js';
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
-import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
+import { buildT2Layout, checkAnswer, checkAnswerEx, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, loadVerbCelebrated, saveVerbCelebrated, verbPlanProgress } from '../core/verbplan.js';
 import { PotMatch } from './potmatch.jsx';
 import { ProgressStats } from './trainer.jsx';
@@ -434,7 +434,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var fromPot = current.pot;
     var isPot5 = fromPot === 5;
     var correctAnswer = isPot5 ? current.clue : wordDisplay(current, lang);
-    var status = skipped ? 'wrong' : checkAnswer(typed, correctAnswer, extrasFor(current.word));
+    var status = skipped ? 'wrong' : checkAnswerEx(typed, correctAnswer, extrasFor(current.word));
     // Lehnen die Regeln ab, urteilt die KI (Synonym, andere Schreibweise, ...).
     // Fällt sie aus (kein Netz/Key/Timeout), gilt die Eingabe wie bisher als falsch.
     if(status==='wrong' && !skipped && typed.length>=2){
@@ -450,6 +450,15 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   }
   function finishAnswer(skipped, typed, rt, correctAnswer, status, verdict){
     var fromPot = current.pot;
+    if(status==='typo'){
+      // Schreibfehler: nicht grün, nicht gewertet — Wort bleibt im Topf, Serie unverändert.
+      logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, fromPot,
+        {answer:typed, fromPot:fromPot, verdict:'typo'});
+      setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:typed,correct:false,partial:false,typo:true,skipped:false,fromPot:fromPot,toPot:fromPot,pts:0}]);});
+      setResult({correct:false,typo:true,note:'Du hast „'+typed+'" geschrieben — im Buch steht: '+correctAnswer+'. Falsch geschrieben, deshalb bleibt das Wort in diesem Topf.',skipped:false,answer:correctAnswer,word:current.word,clue:current.clue,typed:typed,fromPot:fromPot,toPot:fromPot,pts:0});
+      setPhase('showResult');
+      return;
+    }
     var correct = status==='correct'||status==='partial'||status==='ai';
     var note = status==='ai' ? ('KI: '+((verdict&&verdict.note)||'passt')+' — im Buch steht: '+correctAnswer)
       : status==='partial' ? ('Du hast „'+typed+'" geschrieben — im Buch steht: '+correctAnswer)
@@ -1262,19 +1271,19 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);}}/>}
         {result&&(
-          <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.helped?'#eff6ff':result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.helped?'#93c5fd':result.correct?GR:RE)}}>
-            <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.helped?'#1d4ed8':result.correct?'#065f46':'#991b1b',marginBottom:6}}>
-              {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.correct?'✓ Richtig'+(result.partial?' (fast)':result.ai?' (anderes Wort / Schreibweise)':''):'✗ Falsch'}
+          <div style={{padding:16,borderRadius:14,marginBottom:12,background:result.skipped?G50:result.helped?'#eff6ff':result.typo?'#fef9c3':result.correct?'#d1fae5':'#fee2e2',border:'2px solid '+(result.skipped?G200:result.helped?'#93c5fd':result.typo?'#facc15':result.correct?GR:RE)}}>
+            <div style={{fontSize:18,fontWeight:'bold',color:result.skipped?G600:result.helped?'#1d4ed8':result.typo?'#a16207':result.correct?'#065f46':'#991b1b',marginBottom:6}}>
+              {result.skipped?'⏭ Übersprungen':result.helped?'🔽 Mit Hilfe gelöst':result.typo?'✏️ Fast — Schreibfehler':result.correct?'✓ Richtig'+(result.partial?' (fast)':result.ai?' (anderes Wort / Schreibweise)':''):'✗ Falsch'}
             </div>
             <div style={{fontSize:14,color:G900,marginBottom:4,display:'flex',alignItems:'center',gap:2}}><span style={{fontWeight:'bold'}}>{result.word||result.answer}</span><SpeakButton text={result.word||result.answer} lang={lang}/>{result.clue&&<span style={{color:G600,marginLeft:6,fontSize:12}}>({result.clue})</span>}</div>
             {!result.verbFields&&!result.correct&&!result.skipped&&<div style={{fontSize:12,color:G400}}>Deine Antwort: {result.typed}</div>}
-            {result.note&&<div style={{fontSize:12,color:result.correct?'#065f46':G600,marginBottom:4}}>{result.note}</div>}
+            {result.note&&<div style={{fontSize:12,color:result.typo?'#a16207':result.correct?'#065f46':G600,marginBottom:4}}>{result.note}</div>}
             <VerbResultFields fields={result.verbFields}/>
             {result.helped&&<div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,padding:'3px 10px',borderRadius:20,background:POT_COL[result.fromPot]+'22',color:POT_COL[result.fromPot],fontWeight:'bold'}}>{POT_ICON[result.fromPot]} bleibt {POT_LABEL[result.fromPot]}</span>
               {result.pts>0&&<span style={{marginLeft:'auto',fontSize:12,fontWeight:'bold',color:AM}}>+{result.pts} Pkt</span>}
             </div>}
-            {!result.skipped&&!result.helped&&(function(){
+            {!result.skipped&&!result.helped&&!result.typo&&(function(){
               var pl = result.verbFields ? VERB_POT_LABEL : POT_LABEL;
               var pi = result.verbFields ? VERB_POT_ICON : POT_ICON;
               return <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
@@ -1288,7 +1297,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         )}
         <button onClick={nextWord} style={BtnStyle(T,'white',{width:'100%',padding:'12px',fontSize:15,marginBottom:8})}>→ Weiter</button>
         <button onClick={function(){var nd=saveSession(data);if(nd!==data){saveAndUpdate(nd);}setPhase('pick');}} style={BtnStyle(G100,G600,{width:'100%',padding:'9px',fontSize:12})}>Pause / Menü</button>
-        {result&&!result.correct&&!result.skipped&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
+        {result&&!result.correct&&!result.skipped&&!result.typo&&<button onClick={function(){submitDispute('dispute');}} style={BtnStyle('#7c3aed','white',{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>❓ Antwort anfechten</button>}
         <button onClick={function(){submitDispute('unimportant');}} style={BtnStyle(G100,G400,{width:'100%',padding:'8px',fontSize:11,marginTop:4})}>🔇 Als unwichtig melden</button>
       </div>
     );
