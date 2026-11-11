@@ -553,6 +553,7 @@ function lsPickWord(progress, recentWords, opts) {
     }
   }
 
+  if(opts.candsOnly) return cands;   // nur das Arbeitsset (für lsPickGroup)
   if(!cands.length) return null;   // alles gelernt → der Run ist durch
   var pick = weightedPick(cands, function(x){
     var u = urgency(x.w, x.pot, today) * recentPenalty(x.w.word, recent);
@@ -562,6 +563,29 @@ function lsPickWord(progress, recentWords, opts) {
   var picked = flat(pick.w, pick.pot);
   if(wodKey && normWordKey(picked.word)===wodKey) picked.wod = true;
   return picked;
+}
+
+// Topf 1 als Paar-Zuordnung: zum ersten gezogenen Topf-1-Wort kommen bis zu 3
+// weitere aus demselben Arbeitsset (nur Topf 1, keine Verben-Muster, keine
+// Verwechsler untereinander). Gibt mindestens [first] zurück; bei weniger als
+// 2 Wörtern bleibt es beim normalen Einzel-Quiz.
+function lsPickGroup(progress, first, recentWords, opts){
+  var today = lsToday();
+  var cands = lsPickWord(progress, recentWords, Object.assign({}, opts||{}, {candsOnly:true})) || [];
+  var firstKey = normWordKey(first.word);
+  var pool = cands.filter(function(x){
+    return x.pot===1 && !x.w.pattern && normWordKey(x.w.word)!==firstKey && !retiredToday(x.w, today);
+  });
+  var group = [first];
+  while(group.length<4 && pool.length){
+    var names = group.map(function(g){ return g.word; });
+    var ok = pool.filter(function(x){ return !confusableWithAny(x.w.word, names); });
+    if(!ok.length) break;
+    var pick = weightedPick(ok, function(x){ return urgency(x.w, 1, today); });
+    group.push(Object.assign({}, pick.w, {streak:pick.w.streak||0, correct:pick.w.correct||0, wrong:pick.w.wrong||0, pot:1}));
+    pool.splice(pool.indexOf(pick), 1);
+  }
+  return group;
 }
 
 // Aufstiege werden nicht gesperrt (ein kleiner Wörter-Pool wie ein
@@ -782,4 +806,4 @@ function lsLearnedInRange(data, fromDay){
   return n;
 }
 
-export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, wordsConfusable, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };
+export { DEFAULT_STREAK, SKIP_LIMIT, CREDIT, potCredit, lsGetRuns, lsGetRunsForPlayer, trackPot, ANSWER_TALLY, tallyAnswer, DAY_LOG_KEEP, DAY_WORDS_KEEP, lsToday, daysBetween, lsWordCount, lsDayEntry, lsLogAnswer, logWordEvent, REVIEW_DEFAULT, REVIEW_INTERVALS, DAY_MS, reviewKey, reviewHistoryStats, reviewOverdue, reviewPolicyOf, reviewPaused, reviewLockState, reviewRunSize, lsDayStats, lsGetProgress, lsSaveProgress, lsInitProgress, lsPercent, lsGrade, lsRunPacing, lsPickWord, lsPickGroup, wordsConfusable, WORKING_SET, ACTIVE_POOL_SIZE, WORD_OF_DAY_BOOST, openPoolKeys, lsClaimWordOfDay, REVIEW6_INTERVALS, due6, countDue6, answersSinceReview, markPromoted, generateSentences, AUTO_RUN_MIN_WORDS, autoRunWordsFor, autoRunName, syncAutoRun, scopeUsesAutoRuns, syncAutoRunsForScope, saveChapterWords, saveChapterSentences, lsPctSeries, lsDeltaSince, lsAnswersSince, lsLearnedInRange };

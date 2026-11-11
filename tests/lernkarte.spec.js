@@ -13,7 +13,8 @@ const SB_KEY = fs.readFileSync(path.join(__dirname, '..', 'src', 'core', 'config
   .match(/SB_KEY[^"]*"([A-Za-z0-9_.\-]{40,})"/)[1];
 
 const WORTE = [];
-for (let i = 0; i < 12; i++) WORTE.push({ word: 'alpha' + i, clue: 'alt ' + i, type: 'noun' });
+const NAMEN = ['casa', 'perro', 'libro', 'ventana', 'puerta', 'gato', 'sol', 'luna', 'rio', 'nube', 'arbol', 'pan'];
+for (let i = 0; i < 12; i++) WORTE.push({ word: NAMEN[i], clue: 'alt ' + i, type: 'noun' });
 
 function fortschrittInTopf(pot) {
   const pots = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
@@ -66,24 +67,29 @@ async function openRun(page, name) {
   await page.locator('button:has-text("Lernen starten")').first().click();
 }
 
-test.describe('Lernkarte für neue Wörter (Topf 1)', () => {
+function stand1Wort(unseen) {
+  const pots = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+  WORTE.forEach((w, i) => {
+    const base = Object.assign({ streak: 0, correct: 2, wrong: 0 }, w);
+    if (i === 0) { base.correct = unseen ? 0 : 2; pots[1].push(base); } else pots[6].push(base);
+  });
+  return { pots, sentences: [], history: [], days: {}, sessions: [] };
+}
+
+test.describe('Einzel-Fallback in Topf 1 (nur ein Wort übrig)', () => {
   test('nie gesehenes Wort zeigt erst die Lösung, dann das Quiz', async ({ page, request }) => {
     const rid = await runId(request, /Theme 2/);
-    const stand = fortschrittInTopf(1);
-    stand.pots[1].forEach((w) => { w.correct = 0; w.wrong = 0; });
-    await setup(page, rid, { stand, letzterLauf: new Date().toISOString() });
+    await setup(page, rid, { stand: stand1Wort(true), letzterLauf: new Date().toISOString() });
     await openRun(page, 'Theme 2');
-
-    await expect(page.locator('text=Neues Wort')).toBeVisible({ timeout: 15000 });
-    const clue = (await page.getByText(/^alt \d+$/).first().innerText()).trim();
-    await expect(page.getByText('alpha' + clue.split(' ')[1], { exact: true })).toBeVisible();
-    await page.locator('button:has-text("Gemerkt")').click();
+    await expect(page.locator('text=Neues Wort — merk es dir')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('casa', { exact: true })).toBeVisible();
+    await page.locator('button:has-text("Gemerkt — abfragen")').click();
     await expect(page.locator('text=Welche Übersetzung ist richtig?')).toBeVisible();
   });
 
   test('schon geübtes Wort kommt direkt ins Quiz', async ({ page, request }) => {
     const rid = await runId(request, /Theme 2/);
-    await setup(page, rid, { stand: fortschrittInTopf(1), letzterLauf: new Date().toISOString() });
+    await setup(page, rid, { stand: stand1Wort(false), letzterLauf: new Date().toISOString() });
     await openRun(page, 'Theme 2');
     await expect(page.locator('text=Welche Übersetzung ist richtig?')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('text=Neues Wort')).toHaveCount(0);

@@ -1,6 +1,6 @@
 import { sbGet, sbPatch, sbPost } from '../core/api.js';
 import { SB_URL } from '../core/config.js';
-import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsRunPacing, wordsConfusable, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
+import { CREDIT, DEFAULT_STREAK, REVIEW_DEFAULT, SKIP_LIMIT, generateSentences, logWordEvent, lsClaimWordOfDay, lsGetProgress, lsGetRunsForPlayer, lsGrade, lsInitProgress, lsLogAnswer, lsPercent, lsPickWord, lsPickGroup, lsRunPacing, wordsConfusable, openPoolKeys, potCredit, lsSaveProgress, markPromoted, reviewPolicyOf, tallyAnswer, trackPot } from '../core/leitner.js';
 import { getReviewSkipStatus, requestReviewSkip } from '../core/push.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, langAdj, langAdjM, langLabel, rootsOf, runScope, scopeText } from '../core/scope.js';
@@ -8,6 +8,7 @@ import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, POT_COL, POT_ICON,
 import { dayKey, fmtTestStamp, naturalSort, shuffleArr } from '../core/util.js';
 import { buildT2Layout, checkAnswer, collectRunSentences, getWordType, normWordKey, parseData, parseWishStructured, safeWords, wordDisplay } from '../core/words.js';
 import { PATTERN_META, ackVerbDay, buildVerbPlan, loadVerbAck, loadVerbCelebrated, saveVerbCelebrated, verbPlanProgress } from '../core/verbplan.js';
+import { PotMatch } from './potmatch.jsx';
 import { ProgressStats } from './trainer.jsx';
 import { VERB_POT_ICON, VERB_POT_LABEL, VerbFieldsPanel, VerbMatchPanel, VerbResultFields, VerbReversePanel, VerbTestPanel } from './verbdrill.jsx';
 import { CelebrationPopup, LernVerlaufChart, SpeakButton, T2LetterField } from './widgets.jsx';
@@ -52,6 +53,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
   var [celebration, setCelebration] = useState(null);
   var [sessionLog, setSessionLog] = useState([]);
   var [quizOptions, setQuizOptions] = useState([]);
+  var [matchGroup, setMatchGroup] = useState(null);
   var [quizChosen, setQuizChosen] = useState(null);
   var [dragWord, setDragWord] = useState(null);
   var [dragActive, setDragActive] = useState(false);
@@ -224,6 +226,13 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       return;
     }
     if(w.pot===1){
+      // Topf 1 = Paar-Zuordnung mit bis zu 4 Wörtern (ab 2 Wörtern), sonst Einzel-Quiz.
+      var grp=lsPickGroup(data, w, recentWordsRef.current, {workingSet:streak.workingSet, wordOfDayKey:wordOfDayKey});
+      if(grp.length>=2){
+        recentWordsRef.current = grp.map(function(g){return g.word;}).concat(recentWordsRef.current).slice(0,3);
+        setMatchGroup(grp); setPhase('potmatch');
+        return;
+      }
       var allWords=[];
       [1,2,3,4,5,6].forEach(function(pot){(data.pots[pot]||[]).forEach(function(ww){allWords.push(ww);});});
       var wType=getWordType(w);
@@ -245,6 +254,44 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       setPhase('answer');
     }
   }
+
+  // Ergebnis einer Topf-1-Paar-Runde: pro Wort ein Eintrag. „Sauber" (kein
+  // Fehlversuch) steigt nach Topf 2 auf, alle anderen bleiben in Topf 1.
+  // `helped:true`, weil Zuordnen durch Ausschließen teils erratbar ist — die
+  // Behaltenskurve soll davon nicht verwässert werden.
+  function submitPotMatch(results){
+    var newData=JSON.parse(JSON.stringify(data));
+    var logs=[], pts=0;
+    results.forEach(function(r){
+      var potArr=newData.pots[1]||[];
+      var wIdx=potArr.findIndex(function(w){return normWordKey(w.word)===normWordKey(r.word);});
+      if(wIdx<0) return;
+      var pctBefore=lsPercent(newData);
+      var wObj=potArr.splice(wIdx,1)[0];
+      var moveTo=r.clean?2:1;
+      wObj.streak=0;
+      if(r.clean) markPromoted(wObj);
+      wObj.correct=(wObj.correct||0)+(r.clean?1:0); wObj.wrong=(wObj.wrong||0)+(r.clean?0:1);
+      trackPot(wObj,1,r.clean);
+      if(!newData.pots[moveTo]) newData.pots[moveTo]=[];
+      newData.pots[moveTo].push(wObj);
+      if(r.clean) newData.totalCorrect=(newData.totalCorrect||0)+1; else newData.totalWrong=(newData.totalWrong||0)+1;
+      tallyAnswer(r.clean,false,CREDIT.pot1);
+      lsLogAnswer(newData,{word:wObj.word,clue:wObj.clue,correct:r.clean,helped:true,fromPot:1,toPot:moveTo,
+        pctBefore:pctBefore,pctAfter:lsPercent(newData),rt:null,wObj:wObj});
+      logWordEvent(player&&player.id,'leiterspiel',run.id,wObj.word,wObj.clue,r.clean,moveTo);
+      setSesAns(function(n){return n+1;}); if(r.clean) setSesCor(function(n){return n+1;});
+      if(r.clean) pts+=10;
+      logs.push({word:wObj.word,clue:wObj.clue,typed:wObj.word,correct:r.clean,partial:false,fromPot:1,toPot:moveTo,pts:r.clean?10:0});
+    });
+    trackActiveTime();
+    saveAndUpdate(newData);
+    if(pts>0&&onUpdateScore) onUpdateScore(pts);
+    setSessionLog(function(l){return l.concat(logs);});
+    setMatchGroup(null);
+    setPhase('potnext');   // der Effekt unten zieht danach mit den frisch gespeicherten Daten das nächste Wort
+  }
+  useEffect(function(){ if(phase==='potnext') nextWord(); },[phase]);
 
   function submitDispute(type){
     if(!current||!player) return;
@@ -925,6 +972,16 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
         {wordOfDayBanner}
         {celebration&&<CelebrationPopup msg={celebration} onClose={function(){setCelebration(null);nextWord();}}/>}
         {current&&<VerbReversePanel current={current} showForm={verbShowForm} onSubmit={submitVerbAnswer}/>}
+      </div>
+    );
+  }
+
+  if(phase==='potmatch'&&matchGroup){
+    return(
+      <div style={{padding:8}}>
+        {liveChip}
+        {wordOfDayBanner}
+        <PotMatch key={matchGroup.map(function(g){return g.word;}).join('|')} words={matchGroup} lang={lang} onFinish={submitPotMatch}/>
       </div>
     );
   }
