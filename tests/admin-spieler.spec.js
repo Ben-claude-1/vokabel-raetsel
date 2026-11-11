@@ -39,7 +39,15 @@ test.describe('Admin · Spieler-Ansicht', () => {
     // Zusammengeführter Run zählt die neuen Wörter schon mit (41 statt 22)
     await expect(page.locator('text=/\\/41 gelernt/').first()).toBeVisible();
     await page.locator('text=Spanisch HA: Unidad').last().click();
+    // Standard: alle Vokabeln in Buch-Reihenfolge mit Topf
+    await expect(page.locator('button:has-text("📖 Alle Vokabeln")')).toBeVisible();
+    await expect(page.locator('text=la hamaca').first()).toBeVisible();
+    await page.click('button:has-text("🪜 Nach Töpfen")');
     await expect(page.locator('text=NEU').first()).toBeVisible();
+    // Auch nicht begonnene Leiterspiele zeigen ihre Vokabeln
+    await page.locator('text=⏳ Noch nicht begonnen ·').locator('..').locator('button:has-text("anzeigen")').click();
+    await page.locator('text=/nicht begonnen · \\d+ Vok/').first().click();
+    await expect(page.locator('text=/^1$/').first()).toBeVisible();
     await page.screenshot({ path: 'test-results/admin-spieler-run.png', fullPage: true });
 
     // Spieler wechseln lädt nur dessen Daten

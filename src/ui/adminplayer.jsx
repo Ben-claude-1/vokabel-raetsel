@@ -158,14 +158,37 @@ function DayDetail({ day, sessions, events, runsById, progByRun }){
   </div>;
 }
 
+// Alle Vokabeln eines Runs in Buch-Reihenfolge, je Wort der aktuelle Topf.
+function RunWordList({ run, pots }){
+  var potOf={}, stat={};
+  if(pots) [1,2,3,4,5,6].forEach(function(p){ (pots[p]||[]).forEach(function(w){ var k=normWordKey(w.word); potOf[k]=p; stat[k]=w; }); });
+  var words=safeWords(run.words);
+  if(!words.length) return <div style={{fontSize:11,color:G400,marginTop:8}}>Keine Vokabeln im Leiterspiel.</div>;
+  return <div style={{marginTop:8,borderTop:'1px solid '+G200,paddingTop:6}}>
+    {words.map(function(w,i){
+      var k=normWordKey(w.word), p=potOf[k], st=stat[k]||{};
+      var c=p?POT_COL[p]:G400;
+      return <div key={i} style={{display:'grid',gridTemplateColumns:'22px 1fr 1fr auto',gap:6,fontSize:11,padding:'3px 0',borderBottom:'1px solid '+G100,alignItems:'center'}}>
+        <span style={{fontSize:9,color:G400,textAlign:'right'}}>{i+1}</span>
+        <span style={{fontWeight:'bold',color:G900,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
+        <span style={{color:G600,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>
+        <span style={{fontSize:9,fontWeight:'bold',whiteSpace:'nowrap',padding:'1px 5px',borderRadius:8,background:c+'18',color:c}}>
+          {p ? (p===6?'Gelernt':'T'+p)+(st.isNew?' · neu':'') : '–'}
+        </span>
+      </div>;
+    })}
+  </div>;
+}
+
 function RunCard({ run, prog, lastPlayed, secTotal }){
   var [open,setOpen]=useState(false);
+  var [view,setView]=useState('words');
   var pots = prog ? (prog.pots||{}) : null;
   var total = pots ? [1,2,3,4,5,6].reduce(function(s,p){return s+((pots[p]||[]).length);},0) : (run.word_count||safeWords(run.words).length);
   var pct = prog ? Math.round(lsPercent(prog)) : 0;
   var learned = pots ? (pots[6]||[]).length : 0;
   return <div style={{border:'1px solid '+(prog?T+'44':G200),background:prog?TL:'white',borderRadius:9,padding:'8px 10px',marginBottom:6}}>
-    <div onClick={function(){ if(prog) setOpen(!open); }} style={{display:'flex',alignItems:'center',gap:8,cursor:prog?'pointer':'default'}}>
+    <div onClick={function(){ setOpen(!open); }} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
       <span style={{fontSize:18}}>{run.icon||'🎯'}</span>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontWeight:'bold',fontSize:12,color:G900}}>{run.name}</div>
@@ -181,7 +204,7 @@ function RunCard({ run, prog, lastPlayed, secTotal }){
             <div style={{fontSize:9,color:G400}}>{learned}/{total} gelernt</div>
           </div>
         : <span style={{fontSize:10,color:G400}}>nicht begonnen · {total} Vok.</span>}
-      {prog&&<span style={{fontSize:10,color:G400}}>{open?'▲':'▼'}</span>}
+      <span style={{fontSize:10,color:G400}}>{open?'▲':'▼'}</span>
     </div>
     {prog&&<div style={{marginTop:6}}>
       <div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginBottom:5}}>
@@ -189,7 +212,15 @@ function RunCard({ run, prog, lastPlayed, secTotal }){
       </div>
       <PotChips pots={pots}/>
     </div>}
-    {open&&pots&&<PotContents pots={pots}/>}
+    {open&&<div onClick={function(e){e.stopPropagation();}}>
+      {pots&&<div style={{display:'flex',gap:4,marginTop:8}}>
+        {[['words','📖 Alle Vokabeln'],['pots','🪜 Nach Töpfen']].map(function(t){
+          var sel=view===t[0];
+          return <button key={t[0]} onClick={function(){setView(t[0]);}} style={{padding:'3px 9px',fontSize:10,borderRadius:10,border:'1px solid '+(sel?T:G200),background:sel?T:'white',color:sel?'white':G600,cursor:'pointer',fontWeight:'bold'}}>{t[1]}</button>;
+        })}
+      </div>}
+      {(!pots||view==='words') ? <RunWordList run={run} pots={pots}/> : <PotContents pots={pots}/>}
+    </div>}
   </div>;
 }
 
