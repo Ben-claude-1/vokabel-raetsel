@@ -365,8 +365,8 @@ function lsRunPacing(currentPct, targetPct, targetDate, sessionsSecondsForRun){
 // Arbeitsset bewusst klein (11.11.2026): Emma brauchte bei 22 gleichzeitig aktiven
 // Spanisch-Wörtern 133 Minuten für ein einziges gelerntes Wort (Topf 1: 47 % richtig).
 // Mit ~8 Wörtern auf einmal kommt jedes öfter dran, bevor das nächste nachrückt.
-var WORKING_SET = 8;   // Fallback-Arbeitsset, falls opts.workingSet erzwungen wird
-var ACTIVE_POOL_SIZE = 8;   // ab so vielen offenen Vokabeln wird das Arbeitsset gedeckelt
+var WORKING_SET = 10;   // Fallback-Arbeitsset, falls opts.workingSet erzwungen wird
+var ACTIVE_POOL_SIZE = 10;   // ab so vielen offenen Vokabeln wird das Arbeitsset gedeckelt
 
 var REVIEW6_INTERVALS = [1, 3, 7, 14, 30, 60];
 
@@ -517,9 +517,9 @@ function lsPickWord(progress, recentWords, opts) {
   // im Kreis.
   var working = [], resting = [];
   [2,3,4,5].forEach(function(pot){ avail(pot).forEach(function(w){
-    (retiredToday(w,today)?resting:working).push({w:w, pot:pot});
+    working.push({w:w, pot:pot});  // auch heute Aufgestiegene zählen mit: hartes Limit
   }); });
-  avail(1).forEach(function(w){ if(wordSeen(w)) (retiredToday(w,today)?resting:working).push({w:w, pot:1}); });
+  avail(1).forEach(function(w){ if(wordSeen(w)) working.push({w:w, pot:1}); });
 
   // Zu großes Arbeitsset (Altbestand: alle Wörter schon angefangen) eindampfen:
   // weiter fortgeschrittene Wörter zuerst fertig machen, Verwechsler nach hinten.
