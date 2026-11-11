@@ -12,61 +12,9 @@ import { GrammarAdmin } from './grammar.jsx';
 import { KlassenarbeitAdmin } from './klassenarbeit.jsx';
 import { LeitersSpielCreate, LeitersSpielStreakSettings, RunEditor } from './leiterspiel.jsx';
 import { PushAdmin } from './push.jsx';
+import { AdminPlayerView } from './adminplayer.jsx';
 import { DailyLearnChart, GameBreakdown, LeiterspielFortschritt, RepeatRunHistory, TagesDetail } from './progress.jsx';
 import { LernVerlaufChart } from './widgets.jsx';
-
-function AdminLernzeitOverview({ allUsers }) {
-  var [sessions, setSessions] = useState([]);
-  useEffect(function(){
-    sbGet('learn_sessions','select=player_id,game,run_id,language,active_seconds,correct_count,wrong_count,skipped_count,credit_points,started_at').then(function(d){ if(Array.isArray(d)) setSessions(d); }).catch(function(){});
-  },[]);
-  var weekDays = getWeekDays();
-  var today = dayKey();
-  var DAY_LABELS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
-  // Je Kind die Tageszahlen — Zeit allein reicht für einen Häkchen-Tag nicht
-  // mehr, es zählen auch Antworten und Überspringer (siehe core/goal.js).
-  var playerByDay = {};
-  var bySpieler = {};
-  sessions.forEach(function(s){
-    if(!s || !s.player_id) return;
-    (bySpieler[s.player_id] || (bySpieler[s.player_id]=[])).push(s);
-  });
-  Object.keys(bySpieler).forEach(function(pid){ playerByDay[pid] = buildDayStats(bySpieler[pid]); });
-  if(!allUsers||allUsers.length===0) return null;
-  return (
-    <div style={{marginBottom:14}}>
-      <div style={{fontWeight:'bold',fontSize:11,color:G600,marginBottom:6,textTransform:'uppercase',letterSpacing:1}}>📅 Lernzeit diese Woche · Ziel: 5 Min Grammatik · 10 Min Englisch · 10 Min Spanisch</div>
-      <div style={{background:'white',borderRadius:10,border:'1px solid '+G200,overflow:'hidden'}}>
-        <div style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',background:G50,padding:'5px 8px',gap:2,borderBottom:'1px solid '+G200}}>
-          <div/>
-          {weekDays.map(function(d,i){
-            var isToday=d===today, isFuture=d>today;
-            return <div key={d} style={{textAlign:'center',fontSize:9,color:isFuture?G200:isToday?T:G600,fontWeight:isToday?'bold':'normal'}}>{DAY_LABELS[i]}<br/><span style={{fontSize:8}}>{d.slice(8)}.</span></div>;
-          })}
-        </div>
-        {allUsers.map(function(u){
-          var byDay=playerByDay[u.id]||{};
-          var areas=areasFor(u), streak=calcStreakFromStats(byDay, areas);
-          return <div key={u.id} style={{display:'grid',gridTemplateColumns:'90px repeat(7,1fr)',padding:'5px 8px',gap:2,borderBottom:'1px solid '+G50,alignItems:'center'}}>
-            <div style={{fontSize:11,fontWeight:'bold',color:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              {u.name}{streak>0&&<span style={{fontSize:9,color:'#d97706',marginLeft:3}}>🔥{streak}</span>}
-            </div>
-            {weekDays.map(function(d){
-              var st=byDay[d], sec=(st&&st.sec)||0, min=Math.round(sec/60);
-              var done=dayCounts(d, st, areas), isFuture=d>today, isToday=d===today;
-              var bg=isFuture?'white':done?'#d1fae5':sec>0?'#fef3c7':'#f9fafb';
-              var col=isFuture?G200:done?T:sec>0?'#92400e':G400;
-              return <div key={d} style={{textAlign:'center',padding:'3px 1px',borderRadius:4,background:bg,border:'1px solid '+(isToday?T:'transparent')}}>
-                <span style={{fontSize:9,fontWeight:'bold',color:col}}>{isFuture?'':min>0?min+'′':'–'}</span>
-                {done&&!isFuture&&<div style={{fontSize:7,color:T}}>✓</div>}
-              </div>;
-            })}
-          </div>;
-        })}
-      </div>
-    </div>
-  );
-}
 
 function LeitersSpielAdminOverview({ chapters, scope, player }) {
   var [runs, setRuns] = useState([]);
@@ -157,7 +105,7 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
   return(
     <div>
       <div style={{display:'flex',gap:4,marginBottom:12,background:G100,padding:3,borderRadius:8}}>
-        {[['runs','🏃 Runs'],['progress','📊 Fortschritt'],['time','⏱️ Zeit'],['disputes','❓ Anfragen']].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:11,cursor:'pointer'}}>{t[1]}</button>;})}
+        {[['runs','🏃 Runs'],['disputes','❓ Anfragen'+(allDisputes.length?' ('+allDisputes.length+')':'')]].map(function(t){return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{flex:1,padding:'6px 4px',borderRadius:6,border:'none',background:tab===t[0]?'white':G100,color:tab===t[0]?T:G600,fontWeight:'bold',fontSize:11,cursor:'pointer'}}>{t[1]}</button>;})}
       </div>
       {tab==='runs'&&(<div>
         <div style={{marginBottom:10,padding:'8px 10px',background:'#f0fdfa',border:'1px solid #99f6e4',borderRadius:8,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
@@ -210,122 +158,6 @@ function LeitersSpielAdminOverview({ chapters, scope, player }) {
               {run.target_date&&<button onClick={function(){updateGoal('target_date',null);}} title='Zieldatum löschen'
                 style={{padding:'2px 7px',fontSize:10,border:'1px solid '+G200,background:'white',color:G400,cursor:'pointer',borderRadius:4}}>✕</button>}
             </div>
-          </div>;
-        })}
-      </div>)}
-      {tab==='progress'&&(<div>
-        {allUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine Spieler gefunden.</div>}
-        {allUsers.map(function(u){
-          return <div key={u.id} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+G200,background:'white'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-              <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{u.name}</span>
-              <span style={{fontSize:11,color:G400,marginLeft:'auto'}}>{u.total_score||0} Pkt</span>
-            </div>
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {runs.map(function(run){
-                var prog = getProgData(u.id, run.id);
-                var pct = prog ? lsPercent(prog) : null;
-                var pots = prog ? (prog.pots||{}) : {};
-                var p1=(pots[1]||[]).length,p2=(pots[2]||[]).length,p3=(pots[3]||[]).length,p4=(pots[4]||[]).length,p5=(pots[5]||[]).length,p6=(pots[6]||[]).length;
-                var wc = prog ? (p1+p2+p3+p4+p5+p6) : getWordCount(run);
-                var expandKey = u.id+'__'+run.id;
-                var isExpanded = expanded[expandKey];
-                var allRunWords = [];
-                [1,2,3,4,5,6].forEach(function(pot){
-                  (pots[pot]||[]).forEach(function(w){
-                    allRunWords.push({word:w.word,clue:w.clue,pot:pot,correct:w.correct||0,wrong:w.wrong||0,ps:w.ps||{}});
-                  });
-                });
-                allRunWords.sort(function(a,b){return a.word.localeCompare(b.word);});
-                return <div key={run.id} style={{padding:'8px 10px',borderRadius:8,border:'1px solid '+(prog?T+'33':G200),background:prog?TL:'white',marginBottom:4}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:prog?4:0,cursor:prog?'pointer':'default'}}
-                    onClick={function(){if(prog)toggle(expandKey);}}>
-                    <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
-                    <span style={{fontWeight:'bold',fontSize:12,color:G900,flex:1}}>{run.name}</span>
-                    {prog
-                      ? <span style={{fontSize:12,fontWeight:'bold',color:T}}>{pct}% · {p6}/{wc} gelernt</span>
-                      : <span style={{fontSize:11,color:G400}}>noch nicht gespielt</span>
-                    }
-                    {prog&&<span style={{fontSize:10,color:G400,marginLeft:2}}>{isExpanded?'▲':'▼'}</span>}
-                  </div>
-                  {prog&&<div>
-                    <div style={{height:4,background:G200,borderRadius:2,overflow:'hidden',marginBottom:4}}>
-                      <div style={{height:'100%',width:(pct||0)+'%',background:T,borderRadius:2}}/>
-                    </div>
-                    <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                      {[[1,RE,'T1',p1],[2,'#f97316','T2',p2],[3,AM,'T3',p3],[4,T,'T4',p4],[5,'#7c3aed','T5',p5],[6,GR,'Gel.',p6]].map(function(pt){
-                        return pt[3]>0 ? <span key={pt[0]} style={{fontSize:10,padding:'1px 5px',borderRadius:10,background:pt[1]+'18',color:pt[1],fontWeight:'bold'}}>{pt[2]}: {pt[3]}</span> : null;
-                      })}
-                      <span style={{fontSize:10,color:GR,marginLeft:'auto',fontWeight:'bold'}}>✓ {prog.totalCorrect||0}</span>
-                      <span style={{fontSize:10,color:RE,fontWeight:'bold'}}>✗ {prog.totalWrong||0}</span>
-                    </div>
-                  </div>}
-                  {prog&&isExpanded&&(
-                    <div style={{borderTop:'1px solid '+G200,marginTop:5,paddingTop:5,maxHeight:260,overflowY:'auto'}}>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 34px auto',gap:'2px 6px',fontSize:10,color:G400,padding:'0 2px 4px 2px',fontWeight:'bold',borderBottom:'1px solid '+G100,marginBottom:3}}>
-                        <span>Englisch</span><span>Deutsch</span><span>Topf</span><span>Verlauf</span>
-                      </div>
-                      {allRunWords.map(function(w,wi){
-                        var potColor = [RE,'#f97316',AM,T,'#7c3aed',GR][w.pot-1]||G400;
-                        var psKeys=[1,2,3,4,5,6].filter(function(p){return w.ps[p]&&((w.ps[p].c||0)+(w.ps[p].w||0))>0;});
-                        return <div key={wi} style={{display:'grid',gridTemplateColumns:'1fr 1fr 34px auto',gap:'2px 6px',padding:'3px 2px',borderRadius:4,background:wi%2===0?G50:'white',fontSize:11,alignItems:'center'}}>
-                          <span style={{fontWeight:'bold',color:w.pot===6?GR:G900,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.word}</span>
-                          <span style={{color:G600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{w.clue}</span>
-                          <span style={{fontSize:9,padding:'1px 3px',borderRadius:6,background:potColor+'20',color:potColor,fontWeight:'bold',textAlign:'center'}}>{w.pot===6?'Gel.':'T'+w.pot}</span>
-                          <span style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                            {psKeys.length===0
-                              ? <span style={{fontSize:9,color:G400}}>—</span>
-                              : psKeys.map(function(p){
-                                  var s=w.ps[p]; var pc=POT_COL[p]||GR;
-                                  return <span key={p} style={{fontSize:9,padding:'0 3px',borderRadius:4,background:pc+'15',color:pc,fontWeight:'bold',whiteSpace:'nowrap'}}>
-                                    T{p}{s.c>0?' '+s.c+'✓':''}{s.w>0?' '+s.w+'✗':''}
-                                  </span>;
-                                })
-                            }
-                          </span>
-                        </div>;
-                      })}
-                    </div>
-                  )}
-                </div>;
-              })}
-            </div>
-          </div>;
-        })}
-      </div>)}
-      {tab==='time'&&(<div>
-        {allUsers.length===0&&<div style={{textAlign:'center',color:G400,padding:20,fontSize:13}}>Keine Spieler gefunden.</div>}
-        {allUsers.map(function(u){
-          var totalSec = secondsForPlayerTotal(u.id);
-          return <div key={u.id} style={{marginBottom:10,padding:'10px 12px',borderRadius:10,border:'1px solid '+G200,background:'white'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-              <span style={{fontWeight:'bold',fontSize:13,color:G900}}>{u.name}</span>
-              <span style={{fontSize:11,color:T,marginLeft:'auto',fontWeight:'bold'}}>⏱ {fmtMin(totalSec)} insg.</span>
-            </div>
-            {runs.filter(function(r){return secondsForPlayerRun(u.id,r.id)>0 || allProgress.some(function(p){return p.player_id===u.id&&p.run_id===r.id;});}).length===0
-              ? <div style={{fontSize:11,color:G400,fontStyle:'italic',textAlign:'center',padding:8}}>Noch keine Aktivität</div>
-              : runs.map(function(run){
-                var sec = secondsForPlayerRun(u.id, run.id);
-                var prog = getProgData(u.id, run.id);
-                if(sec===0 && !prog) return null;
-                var pct = prog ? lsPercent(prog) : 0;
-                var pacing = lsRunPacing(pct, run.target_pct, run.target_date, sec);
-                var chartKey = 'tch__'+u.id+'__'+run.id;
-                var chartOpen = expanded[chartKey];
-                var runSessions = progressSessionsFor(u.id, run.id);
-                return <div key={run.id} style={{borderRadius:7,background:G50,marginBottom:4}}>
-                  <div onClick={function(){toggle(chartKey);}} style={{padding:'6px 9px',fontSize:11,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',cursor:'pointer'}}>
-                    <span style={{fontSize:13}}>{run.icon||'🎯'}</span>
-                    <span style={{flex:'1 1 120px',fontWeight:'bold',color:G900}}>{run.name}</span>
-                    <span style={{color:G600}}>⏱ {fmtMin(sec)}</span>
-                    <span style={{color:T,fontWeight:'bold'}}>{pct}%</span>
-                    {pacing && pacing.requiredMinPerDay!=null && <span style={{padding:'2px 6px',borderRadius:5,background:pacing.status==='unrealistic'||pacing.status==='overdue'?'#fee2e2':pacing.status==='hard'?'#fed7aa':pacing.status==='ok'?'#fef3c7':'#d1fae5',color:pacing.status==='unrealistic'||pacing.status==='overdue'?'#991b1b':pacing.status==='hard'?'#9a3412':pacing.status==='ok'?'#92400e':'#065f46',fontWeight:'bold'}}>→ {pacing.requiredMinPerDay}m/T · {pacing.daysLeft}T</span>}
-                    {pacing && pacing.status==='done' && <span style={{padding:'2px 6px',borderRadius:5,background:'#d1fae5',color:'#065f46',fontWeight:'bold'}}>✅ Ziel</span>}
-                    <span style={{fontSize:10,color:G400}}>{chartOpen?'▲':'📊▼'}</span>
-                  </div>
-                  {chartOpen && <div style={{padding:'4px 9px 9px'}}><DailyLearnChart sessions={runSessions} run={run} pacing={pacing}/></div>}
-                </div>;
-              })}
           </div>;
         })}
       </div>)}
@@ -680,7 +512,7 @@ function VocabCheckAdmin({ chapters, setChapters }) {
 }
 
 function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onDone }) {
-  var [tab, setTab] = useState('chapters');
+  var [tab, setTab] = useState('player');
   var [saving, setSaving] = useState(false);
   var [msg, setMsg] = useState('');
   var [editCh, setEditCh] = useState(null);
@@ -1094,7 +926,7 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
   return(
     <div>
       <div style={{display:'flex',gap:3,marginBottom:12,overflowX:'auto',paddingBottom:2}}>
-        {[['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA'],['push','🔔 Push'],['chat','💬 Chat']].map(function(t){
+        {[['player','👤 Spieler'],['chapters','📚 Kap.'],['words','📝 Vok.'],['leiterspiel','🪜 LS'],['users','👥 User'],['grammar','✏️ Gram.'],['quiz','🎯 Quiz'],['vocabcheck','🔍 Prüfen'],['klassenarbeit','📋 KA'],['push','🔔 Push'],['chat','💬 Chat']].map(function(t){
           return <button key={t[0]} onClick={function(){setTab(t[0]);}} style={{padding:'7px 10px',borderRadius:8,border:'none',background:tab===t[0]?T:G100,color:tab===t[0]?'white':G600,fontWeight:'bold',fontSize:11,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>{t[1]}</button>;
         })}
       </div>
@@ -1464,6 +1296,8 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
         }}/>
       </div>)}
 
+      {tab==='player'&&<AdminPlayerView allUsers={allUsers}/>}
+
       {tab==='leiterspiel'&&(<div>
         {showCreateRun
           ? <div>
@@ -1482,7 +1316,6 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
       </div>)}
 
       {tab==='users'&&(<div>
-        <AdminLernzeitOverview allUsers={allUsers.filter(function(u){return !u.is_admin;})}/>
         <button onClick={function(){setShowNewUser(!showNewUser);setNewUserErr('');setNewUserName('');setNewUserPw('');}} style={{width:'100%',padding:'9px',borderRadius:8,border:'2px dashed '+T,background:'white',color:T,fontWeight:'bold',fontSize:12,cursor:'pointer',marginBottom:10}}>+ Neuer Spieler</button>
         {showNewUser&&(<div style={{padding:'12px',borderRadius:10,border:'1px solid '+G200,background:'#f0fdf4',marginBottom:10}}>
           <div style={{fontSize:12,fontWeight:'bold',color:T,marginBottom:8}}>Neuen Spieler anlegen</div>
@@ -1747,4 +1580,4 @@ function AdminDash({ player, chapters, scope, setChapters, allUsers, setAllUsers
   );
 }
 
-export { AdminLernzeitOverview, LeitersSpielAdminOverview, CategoryPicker, ApiKeyManager, VocabSearch, UploadPreview, QuizScoringAdmin, VocabCheckAdmin, AdminDash };
+export { LeitersSpielAdminOverview, CategoryPicker, ApiKeyManager, VocabSearch, UploadPreview, QuizScoringAdmin, VocabCheckAdmin, AdminDash };

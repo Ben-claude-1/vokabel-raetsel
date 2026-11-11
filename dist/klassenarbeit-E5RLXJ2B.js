@@ -1,0 +1,1 @@
+import{a,b,c,d,e}from"./chunk-N6OIFIPL.js";import"./chunk-6CJFK7EE.js";import"./chunk-BYO6DOPM.js";import"./chunk-TKVOVAA3.js";e();export{c as KlassenarbeitAdmin,d as KlassenarbeitPlayer,a as KlassenarbeitSetup,b as KlassenarbeitTest};

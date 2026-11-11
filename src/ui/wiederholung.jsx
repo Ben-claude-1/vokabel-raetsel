@@ -186,7 +186,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
     // Nach Tagen ohne Kontakt frei abgerufen — der stärkste Beleg, dass es
     // sitzt. Mit Tipps entsprechend weniger.
     tallyAnswer(correct, false, hints===0?CREDIT.review0:hints===1?CREDIT.review1:CREDIT.review2);
-    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, correct, correct?(hints>=2?5:6):4);
+    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, correct, correct?(hints>=2?5:6):4, {answer:typed, verdict:(status==='partial'||status==='ai')?status:(hints>0?'hints'+hints:null)});
     var pts = correct ? ptsForHints(hints) : 0;
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:typed, correct:correct, hints:hints, points:pts, skipped:false};
     setLog(function(l){return l.concat([entry]);});
@@ -200,7 +200,7 @@ function WiederholungMode({ player, chapters, mandatory, policy, onDone, onCompl
   function giveUp(){
     if(!cur) return;
     tallyAnswer(false, true);
-    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, false, 4);
+    logWordEvent(pid, 'wiederholung', null, cur.word, cur.clue, false, 4, {answer:'', verdict:'skipped'});
     var entry={word:cur.word, clue:cur.clue, lang:cur.lang, typed:'', correct:false, hints:hints, points:0, skipped:true};
     setLog(function(l){return l.concat([entry]);});
     setResult({correct:false, points:0, answer:askExpected(cur), typed:'', hints:hints, skipped:true});

@@ -281,7 +281,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       tallyAnswer(r.clean,false,CREDIT.pot1);
       lsLogAnswer(newData,{word:wObj.word,clue:wObj.clue,correct:r.clean,helped:true,fromPot:1,toPot:moveTo,
         pctBefore:pctBefore,pctAfter:lsPercent(newData),rt:null,wObj:wObj});
-      logWordEvent(player&&player.id,'leiterspiel',run.id,wObj.word,wObj.clue,r.clean,moveTo);
+      logWordEvent(player&&player.id,'leiterspiel',run.id,wObj.word,wObj.clue,r.clean,moveTo,{fromPot:1,verdict:r.clean?'match':'match_wrong'});
       setSesAns(function(n){return n+1;}); if(r.clean) setSesCor(function(n){return n+1;});
       if(r.clean) pts+=10;
       logs.push({word:wObj.word,clue:wObj.clue,typed:wObj.word,correct:r.clean,partial:false,fromPot:1,toPot:moveTo,pts:r.clean?10:0});
@@ -336,7 +336,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct, false, CREDIT.pot1);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:1,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
-    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo, {answer:opt.word, fromPot:1, verdict:'choice'});
     saveAndUpdate(newData);
     var pts=correct?10:0;
     if(pts>0&&onUpdateScore)onUpdateScore(pts);
@@ -416,7 +416,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(false, true);
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:1,toPot:1,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:true});
-    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1);
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1, {answer:'', fromPot:1, verdict:'skipped'});
     saveAndUpdate(newData);
     setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:'',correct:false,partial:false,skipped:true,fromPot:1,toPot:1,pts:0}]);});
     setStreakCount(0);
@@ -484,7 +484,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct, !!skipped, potCredit(fromPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj, skipped:!!skipped});
-    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo,
+      {answer:typed, fromPot:fromPot, verdict:skipped?'skipped':(status==='partial'||status==='ai')?status:null});
     saveAndUpdate(newData);
 
     var pts = correct ? (fromPot*5+(status==='partial'?1:0)) : 0;
@@ -536,7 +537,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(correct, false, potCredit(fromPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:correct,fromPot:fromPot,toPot:moveTo,
       pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:rt, wObj:wObj});
-    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo);
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, correct, moveTo,
+      {answer:Object.keys(payload.typed||{}).map(function(k){return (payload.typed||{})[k];}).join(' / '), fromPot:fromPot});
     saveAndUpdate(newData);
     var pts = correct ? fromPot*5 : 0;
     if(pts>0 && onUpdateScore) onUpdateScore(pts);
@@ -632,7 +634,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     tallyAnswer(true, false, potCredit(helperPot));
     lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:fromPot,toPot:fromPot,
       pctBefore:lsPercent(data), pctAfter:lsPercent(data), rt:rt, wObj:wObj, helped:true});
-    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, fromPot);
+    logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, fromPot, {answer:wordDisplay(current, lang), fromPot:fromPot, verdict:'helped'});
     saveAndUpdate(newData);
     var pts = helperPot*5;
     if(pts>0 && onUpdateScore) onUpdateScore(pts);
@@ -795,7 +797,8 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
       });
       lsLogAnswer(nd,{word:l.word, clue:l.clue, correct:!!l.correct, fromPot:null, toPot:null,
         pctBefore:pctNow, pctAfter:pctNow, rt:l.rt, wObj:wObj, skipped:!!l.skipped});
-      logWordEvent(player&&player.id, 'leiterspiel_test', run.id, l.word, l.clue, !!l.correct, wPot);
+      logWordEvent(player&&player.id, 'leiterspiel_test', run.id, l.word, l.clue, !!l.correct, wPot,
+        {answer:l.typed||'', fromPot:wPot, verdict:l.skipped?'skipped':l.partial?'partial':null});
     });
     saveAndUpdate(nd);
   }
@@ -1126,7 +1129,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           tallyAnswer(true, false, CREDIT.pot2);
           lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:true,fromPot:2,toPot:moveTo,
             pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
-          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, moveTo);
+          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, true, moveTo, {answer:current.word, fromPot:2, verdict:'letters'});
           saveAndUpdate(newData);
           var pts=10;
           if(onUpdateScore)onUpdateScore(pts);
@@ -1150,7 +1153,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
           tallyAnswer(false);
           lsLogAnswer(newData,{word:current.word,clue:current.clue,correct:false,fromPot:2,toPot:1,
             pctBefore:lsPercent(data), pctAfter:lsPercent(newData), rt:answerMs(), wObj:wObj});
-          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1);
+          logWordEvent(player&&player.id, 'leiterspiel', run.id, current.word, current.clue, false, 1, {answer:typed, fromPot:2, verdict:'letters'});
           saveAndUpdate(newData);
           setSessionLog(function(l){return l.concat([{word:current.word,clue:current.clue,typed:typed,correct:false,partial:false,fromPot:2,toPot:1,pts:0}]);});
           setResult({correct:false,partial:false,answer:current.word,word:current.word,clue:current.clue,typed:typed,fromPot:2,toPot:1,pts:0});

@@ -277,12 +277,20 @@ var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // hängt die Tagesansicht "welche Vokabel wo, richtig/falsch, welcher Topf" ab.
 // Bewusst fire-and-forget (wie updatePresence): eine verlorene Zeile darf das
 // Spiel nie blockieren oder verlangsamen.
-function logWordEvent(playerId, game, runId, word, clue, correct, pot){
+// `extra` (optional): {answer, fromPot, verdict} — für die Admin-Spieleransicht
+// („was wurde eingegeben, aus welchem Topf, Tippfehler/KI/Hilfe").
+function logWordEvent(playerId, game, runId, word, clue, correct, pot, extra){
   if(!playerId || !UUID_RE.test(playerId) || !word) return;
-  sbPost('word_events', {player_id:playerId, game:game,
+  var row = {player_id:playerId, game:game,
     run_id:(runId && UUID_RE.test(runId)) ? runId : null,
     word:word, clue:clue||null, correct:!!correct,
-    pot:(pot==null?null:pot)}).catch(function(){});
+    pot:(pot==null?null:pot)};
+  if(extra){
+    if(extra.answer!=null) row.answer = String(extra.answer).slice(0,300);
+    if(extra.fromPot!=null) row.from_pot = extra.fromPot;
+    if(extra.verdict) row.verdict = extra.verdict;
+  }
+  sbPost('word_events', row).catch(function(){});
 }
 
 function lsGetProgress(pid,rid) { var UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i; if(!UUID.test(pid)||!UUID.test(rid)) return Promise.resolve([]); return sbGet('ls_progress','player_id=eq.'+pid+'&run_id=eq.'+rid+'&select=*'); }
