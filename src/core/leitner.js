@@ -582,7 +582,7 @@ function lsPickGroup(progress, first, recentWords, opts){
   var cands = lsPickWord(progress, recentWords, Object.assign({}, opts||{}, {candsOnly:true})) || [];
   var firstKey = normWordKey(first.word);
   var pool = cands.filter(function(x){
-    return x.pot===1 && !x.w.pattern && normWordKey(x.w.word)!==firstKey && !retiredToday(x.w, today);
+    return x.pot===1 && !x.w.pattern && normWordKey(x.w.word)!==firstKey;  // heute aufgestiegene, wieder abgestiegene Wörter sind erlaubt (urgency dämpft sie)
   });
   var group = [first];
   while(group.length<4 && pool.length){
