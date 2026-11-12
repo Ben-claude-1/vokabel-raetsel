@@ -10,7 +10,7 @@ function KlassenarbeitSetup({ player, chapters, scope, onStart, onDone }) {
   // Grammatik-Pool und die festen Übersetzungssätze sind Englisch — bei einer
   // anderen Sprache besteht die Arbeit nur aus deren Vokabeln.
   var isEnglish = !scope || scope.language==='en';
-  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv']:[])); var [loading,setLoading]=useState(true); var [starting,setStarting]=useState(false);
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv','mm']:[])); var [loading,setLoading]=useState(true); var [starting,setStarting]=useState(false);
   useEffect(function(){lsGetRunsForPlayer(player.id).then(function(r){setRuns(filterRunsByScope(r||[],chapters,scope));setLoading(false);}).catch(function(){setLoading(false);});}, []);
   function toggleRun(id){setSelRuns(function(p){var n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
   function toggleTopic(t){setSelTopics(function(p){var n=new Set(p);n.has(t)?n.delete(t):n.add(t);return n;});}
@@ -234,7 +234,7 @@ function KlassenarbeitTest({ player, questions, onDone }) {
 
 function KlassenarbeitAdmin({ player, chapters, scope }) {
   var isEnglish = !scope || scope.language==='en';
-  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv']:[])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
+  var [runs,setRuns]=useState([]); var [selRuns,setSelRuns]=useState(new Set()); var [selTopics,setSelTopics]=useState(new Set(isEnglish?['sp','pp','sa','mv','mm']:[])); var [loading,setLoading]=useState(true); var [saving,setSaving]=useState(false); var [msg,setMsg]=useState(''); var [activeInfo,setActiveInfo]=useState(null);
   var [results,setResults]=useState([]); var [expandedResult,setExpandedResult]=useState(null); var [resultTab,setResultTab]=useState('test');
   useEffect(function(){
     lsGetRunsForPlayer(player.id).then(function(r){setRuns(filterRunsByScope(r||[],chapters,scope));setLoading(false);}).catch(function(){setLoading(false);});

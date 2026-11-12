@@ -2,7 +2,7 @@ import { sbGet, sbPatch, sbPost } from './api.js';
 import { shuffle, shuffleArr } from './util.js';
 import { normWordKey, safeWords } from './words.js';
 
-var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp', sa:'grammar_exercises_sa', mv:'grammar_exercises_mv' };
+var GRAMMAR_KEYS = { sp:'grammar_exercises_sp', pp:'grammar_exercises_pp', sa:'grammar_exercises_sa', mv:'grammar_exercises_mv', mm:'grammar_exercises_mm' };
 
 var MODAL_OPTS = ['must', "mustn't", 'should', "shouldn't", 'need to', "don't need to"];
 
@@ -102,7 +102,7 @@ var KA_SAETZE = [
   {de:'Es ist wichtig, ein Haustier zu haben, weil es dir beibringt, dass jedes Lebewesen Liebe und Aufmerksamkeit braucht.',en:'It is important to have a pet because it teaches you that every living thing needs love and attention.'}
 ];
 
-var KA_TOPIC_LABELS = {sp:'Simple Present',pp:'Present Progressive',sa:'some / any',mv:'Modalverben'};
+var KA_TOPIC_LABELS = {sp:'Simple Present',pp:'Present Progressive',sa:'some / any',mv:'Modalverben',mm:'much / many'};
 
 function kaSentenceMatch(input, target) {
   function norm(s){return (s||'').toLowerCase().replace(/[^a-z0-9\s]/g,'').trim();}
@@ -137,6 +137,8 @@ function buildKaQuestions(selectedRuns, grammarPool, withSentences) {
 function buildOptions(q, pool) {
   // some/any: always exactly 2 options
   if(q.rule==='some/any') return Math.random()<0.5?['some','any']:['any','some'];
+  // much/many: always exactly 2 options
+  if(q.rule==='much/many') return Math.random()<0.5?['much','many']:['many','much'];
   // modal verbs: show all 6 options shuffled
   if(q.rule==='modal verbs') {
     var mo=MODAL_OPTS.slice();

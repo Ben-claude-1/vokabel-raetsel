@@ -34,15 +34,19 @@ function GrammarAdmin({ player, chapters }) {
     var key = savedKey || localStorage.getItem('claude_api_key') || '';
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
-    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
+    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':topic==='mm'?'much/many':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
     var promptDetail = topic==='sp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball.","german_hint":"spielen"}'
       : topic==='pp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball.","german_hint":"spielen"}'
       : topic==='sa'
       ? 'Die Lücke ist "some" oder "any". Nutze NUR die einfache Schulregel für Klasse 6: "some" in positiven Aussagesätzen, "any" in Fragen und Verneinungen. WICHTIG: KEINE Bitten oder Höflichkeitsfragen wie "Can I have some...?", "Would you like some...?" oder "Could you give me some...?" — dort ist "some" laut englischer Grammatik zwar korrekt, das widerspricht aber der einfachen Schulregel und verwirrt Kinder, die genau diese Regel gerade lernen. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"I have ___ apples in my bag.","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Ich habe ein paar Äpfel in meiner Tasche."}'
+      : topic==='mm'
+      ? 'Die Lücke ist "much" oder "many". Nutze NUR die einfache Schulregel für Klasse 6: "many" bei zählbaren Nomen (apples, books, friends), "much" bei nicht zählbaren Nomen (water, milk, money, time, homework). Verwende nur Fragen ("How much/many ...?"), Verneinungen ("There aren\'t many ...", "I don\'t have much ...") und Sätze mit "too" / "so" ("too much homework", "so many people") — KEINE einfachen positiven Aussagesätze, dort sagt man "a lot of". Nur EINE Lücke pro Satz. Beispiel: {"sentence":"How ___ apples do you want?","answer":"many","distractors":["much","some","any"],"rule":"much/many","translation":"Wie viele Äpfel möchtest du?"}'
       : 'Erstelle alltagsnahe Sätze für Schüler der 6. Klasse wo ein Modalverb fehlt. Verfügbare Modalverben: must, mustn\'t, should, shouldn\'t, need to, don\'t need to. WICHTIG: Manchmal sind mehrere Modalverben sinnvoll — gib dann ALLE akzeptablen Antworten im "acceptable_answers"-Array an (immer befüllen, auch wenn nur eine Antwort möglich ist). Das "answer"-Feld enthält die beste/typischste Antwort. Kein Hinweis in Klammern am Satzende. Beispiel: {"sentence":"You ___ eat so many sweets.","answer":"shouldn\'t","acceptable_answers":["shouldn\'t","mustn\'t"],"distractors":["must","should","need to"],"rule":"modal verbs","translation":"Du solltest nicht so viele Süßigkeiten essen."}';
-    var distNote = topic==='sa'
+    var distNote = topic==='mm'
+      ? 'Die 3 distractors sind: das jeweils andere Wort (much/many) plus zwei weitere falsche Alternativen (some, any, a lot).'
+      : topic==='sa'
       ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).'
       : topic==='mv'
       ? 'Die distractors sind die Modalverben aus [must, mustn\'t, should, shouldn\'t, need to, don\'t need to] die NICHT in acceptable_answers stehen.'
@@ -126,7 +130,7 @@ function GrammarAdmin({ player, chapters }) {
         }
       </div>
       <div style={{display:'flex',gap:4,marginBottom:10,background:G100,padding:3,borderRadius:8}}>
-        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any'],['mv','Modalverben']].map(function(t){
+        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any'],['mv','Modalverben'],['mm','much / many']].map(function(t){
           return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
@@ -320,7 +324,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
-      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to']].map(function(t){
+      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to'],['mm','much / many','Mengen — How much water? How many apples?']].map(function(t){
         var sel=selTopics.indexOf(t[0])>=0;
         return <div key={t[0]} onClick={function(){
             setSelTopics(function(prev){
@@ -383,7 +387,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
 
   var q=questions[qIdx];
   if(!q) return null;
-  var isSomeAny=q.rule==='some/any'||q.rule==='modal verbs';
+  var isSomeAny=q.rule==='some/any'||q.rule==='modal verbs'||q.rule==='much/many';
   var prevCorrect=(qStats[q.id]||{}).correct||0;
   var stage2=!isSomeAny&&prevCorrect>=2; // Stufe 2: Freitext
   var opts=q._opts||[q.answer];
