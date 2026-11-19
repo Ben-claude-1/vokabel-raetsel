@@ -862,7 +862,7 @@ function LeitersSpielSession({ run, player, chapters, onDone, onUpdateScore, str
     var pct = lsPercent(data, streak);
     var grade = lsGrade(pct, streak);
     var totalWords = Object.values(data.pots).reduce(function(s,a){return s+a.length;},0);
-    var learned = (data.pots[5]||[]).length + (data.pots[6]||[]).length;
+    var learned = (data.pots[6]||[]).length;
     return(
       <div style={{padding:8}}>
         <div style={{background:'linear-gradient(135deg,'+T+','+TD+')',borderRadius:16,padding:20,color:'white',textAlign:'center',marginBottom:12}}>
