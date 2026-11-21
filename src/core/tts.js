@@ -27,9 +27,35 @@ if(ttsSupported()){
 // Systemstimmen und nachgeladene "Enhanced/Premium"-Stimmen, die deutlich
 // natürlicher klingen. Android/Chrome hat meist eine gute "Google …"-Stimme.
 // Wir bevorzugen die beste verfügbare, statt einfach die erste zu nehmen.
+function prefKey(base){ return 'lernapp_voice_'+base; }
+function getPreferredVoiceURI(base){ try{ return localStorage.getItem(prefKey(base))||''; }catch(e){ return ''; } }
+function setPreferredVoiceURI(base, uri){ try{ if(uri) localStorage.setItem(prefKey(base), uri); else localStorage.removeItem(prefKey(base)); }catch(e){} }
+// Alle installierten Stimmen einer Sprache (z.B. 'es'), beste zuerst.
+function listVoices(base){
+  refreshVoices();
+  if(!voiceCache) return [];
+  return voiceCache.filter(function(v){ return v.lang && v.lang.split('-')[0] === base; })
+    .sort(function(a,b){ return voiceScore(b, base) - voiceScore(a, base); });
+}
+function voiceScore(v, langCode){
+  var n = (v.name||'') + ' ' + (v.voiceURI||'');
+  if(v.lang === langCode && /enhanced|premium|neural/i.test(n)) return 4;
+  if(/enhanced|premium|neural/i.test(n)) return 3;
+  if(v.lang === langCode && /google/i.test(n)) return 3;
+  if(/google/i.test(n)) return 2;
+  if(v.lang === langCode) return 1;
+  if(/compact/i.test(n)) return -1;
+  return 0;
+}
+
 function pickVoice(langCode){
   if(!voiceCache || !voiceCache.length) return null;
   var base = langCode.split('-')[0];
+  var pref = getPreferredVoiceURI(base);
+  if(pref){
+    var pv = voiceCache.filter(function(v){ return v.voiceURI === pref; })[0];
+    if(pv) return pv;
+  }
   var candidates = voiceCache.filter(function(v){ return v.lang && v.lang.split('-')[0] === base; });
   if(!candidates.length) return null;
   function score(v){
@@ -98,4 +124,4 @@ function speakSeq(parts, lang, opts){
   };
 }
 
-export { ttsSupported, speakableText, speak, speakSeq, VOICE_LANG };
+export { ttsSupported, speakableText, speak, speakSeq, listVoices, getPreferredVoiceURI, setPreferredVoiceURI, VOICE_LANG };

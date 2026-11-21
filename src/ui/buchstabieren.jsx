@@ -7,12 +7,47 @@ import { CREDIT, logWordEvent, lsGetRunsForPlayer, tallyAnswer } from '../core/l
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
 import { runScope } from '../core/scope.js';
 import { BtnStyle, G100, G400, G600, G900, GR, RE, T } from '../core/theme.js';
-import { speak, speakSeq, ttsSupported } from '../core/tts.js';
+import { getPreferredVoiceURI, listVoices, setPreferredVoiceURI, speak, speakSeq, ttsSupported } from '../core/tts.js';
 import { shuffleArr } from '../core/util.js';
 import { parseData } from '../core/words.js';
 import { fetchAllKlasse6Vocab, WiederholungWrap } from './wiederholung.jsx';
 
 var ROUND_SIZE = 10;
+
+// Tempo: Rate der Stimme + Pause zwischen den Buchstaben
+var SPEEDS = [
+  { id: 'slow', label: 'Langsam', rate: 0.6, gap: 900 },
+  { id: 'slower', label: 'Sehr langsam', rate: 0.45, gap: 1500 },
+  { id: 'slowest', label: 'Extra langsam', rate: 0.3, gap: 2300 }
+];
+function loadSpeed() { try { return localStorage.getItem('lernapp_buchstabieren_speed') || 'slower'; } catch (e) { return 'slower'; } }
+function speedOf(id) { return SPEEDS.filter(function (s) { return s.id === id; })[0] || SPEEDS[1]; }
+
+function SpeechSettings({ speedId, onSpeed, onTest }) {
+  var [voiceURI, setVoiceURI] = useState(getPreferredVoiceURI('es'));
+  var [voices, setVoices] = useState(listVoices('es'));
+  useEffect(function () {
+    var n = 0, t = setInterval(function () { setVoices(listVoices('es')); if (++n > 6) clearInterval(t); }, 500);
+    return function () { clearInterval(t); };
+  }, []);
+  return <div style={{ background: '#f9fafb', borderRadius: 10, padding: 12, margin: '0 0 16px', textAlign: 'left' }}>
+    <div style={{ fontSize: 12, fontWeight: 'bold', color: G600, marginBottom: 6 }}>Tempo</div>
+    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      {SPEEDS.map(function (s) {
+        var on = s.id === speedId;
+        return <button key={s.id} onClick={function () { onSpeed(s.id); }} style={BtnStyle(on ? T : G100, on ? 'white' : G600, { flex: 1, padding: '8px 4px', fontSize: 11 })}>{s.label}</button>;
+      })}
+    </div>
+    <div style={{ fontSize: 12, fontWeight: 'bold', color: G600, marginBottom: 6 }}>Stimme</div>
+    {voices.length === 0 ? <div style={{ fontSize: 11, color: G400, marginBottom: 6 }}>Keine spanische Stimme gefunden — es wird die Standardstimme genommen. Mehr Stimmen: in den Geräte-Einstellungen unter Bedienungshilfen → Gesprochene Inhalte → Stimmen.</div>
+      : <select value={voiceURI} onChange={function (e) { setVoiceURI(e.target.value); setPreferredVoiceURI('es', e.target.value); }}
+        style={{ width: '100%', padding: '8px', fontSize: 13, borderRadius: 8, border: '1px solid #d1d5db', marginBottom: 6 }}>
+        <option value="">Automatisch (beste)</option>
+        {voices.map(function (v) { return <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>; })}
+      </select>}
+    <button onClick={onTest} style={BtnStyle(G100, G600, { width: '100%', padding: '8px', fontSize: 12 })}>🔊 Probe hören</button>
+  </div>;
+}
 var MIN_POT = 3;
 
 // Zimmerbeschreibung (Spielwörter ohne Artikel)
@@ -94,6 +129,11 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
   var [result, setResult] = useState(null);
   var [total, setTotal] = useState(0);
   var [speaking, setSpeaking] = useState(false);
+  var [speedId, setSpeedId] = useState(loadSpeed());
+  var [showSet, setShowSet] = useState(false);
+  var speedRef = useRef(speedOf(loadSpeed()));
+  function changeSpeed(id) { setSpeedId(id); speedRef.current = speedOf(id); try { localStorage.setItem('lernapp_buchstabieren_speed', id); } catch (e) {} }
+  function testVoice() { stop(); var sp = speedRef.current; cancelRef.current = speakSeq(['a', 'be', 'ce', 'de'], 'es', { rate: sp.rate, gap: sp.gap }); }
   var cancelRef = useRef(null);
   var inputRef = useRef(null);
   var cur = round[idx];
@@ -102,7 +142,7 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
   function spell() {
     if (!cur) return;
     stop(); setSpeaking(true);
-    cancelRef.current = speakSeq(spellParts(cur.target), 'es', { rate: 0.55, gap: 1000, onEnd: function () { setSpeaking(false); } });
+    cancelRef.current = speakSeq(spellParts(cur.target), 'es', { rate: speedRef.current.rate, gap: speedRef.current.gap, onEnd: function () { setSpeaking(false); } });
   }
   useEffect(function () { if (phase === 'q') { spell(); if (inputRef.current) inputRef.current.focus(); } return stop; }, [phase, idx]);
   useEffect(function () { return stop; }, []);
@@ -124,6 +164,7 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
       <div style={{ fontSize: 13, color: G600, marginBottom: 6 }}>Schreib es auf (mit Akzenten: á é í ó ú ñ). Ton anmachen! 🔊</div>
       <div style={{ fontSize: 12, color: G400, marginBottom: 20 }}>{round.length} Wörter · Zimmer-Wörter zuerst</div>
       {!ttsSupported() && <div style={{ fontSize: 12, color: RE, marginBottom: 12 }}>Dein Gerät kann leider nicht vorlesen.</div>}
+      <SpeechSettings speedId={speedId} onSpeed={changeSpeed} onTest={testVoice} />
       <button onClick={function () { setPhase('q'); }} style={BtnStyle(T, 'white', { padding: '12px 28px', fontSize: 15 })}>Los geht's</button>
       <div><button onClick={onDone} style={{ border: 'none', background: 'none', color: G400, fontSize: 11, marginTop: 14, cursor: 'pointer' }}>Zurück</button></div>
     </div>
@@ -199,8 +240,10 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
       </div>
       {note && <div style={{ fontSize: 12, color: '#d97706', textAlign: 'center', marginBottom: 8, fontWeight: 'bold' }}>{note}</div>}
       <button onClick={submit} style={BtnStyle(GR, 'white', { width: '100%', padding: '12px', fontSize: 14, marginBottom: 8 })}>Prüfen</button>
+      <button onClick={function () { setShowSet(!showSet); }} style={{ width: '100%', border: 'none', background: 'none', color: G600, fontSize: 12, padding: '4px', cursor: 'pointer', marginBottom: 6 }}>⚙️ Tempo & Stimme {showSet ? '▲' : '▼'}</button>
+      {showSet && <SpeechSettings speedId={speedId} onSpeed={changeSpeed} onTest={testVoice} />}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={function () { stop(); setSpeaking(false); setHint(true); speak(cur.target, 'es', { rate: 0.7 }); }} style={BtnStyle(G100, G600, { flex: 1, padding: '10px', fontSize: 12 })}>💡 Wort vorsprechen</button>
+        <button onClick={function () { stop(); setSpeaking(false); setHint(true); speak(cur.target, 'es', { rate: speedRef.current.rate }); }} style={BtnStyle(G100, G600, { flex: 1, padding: '10px', fontSize: 12 })}>💡 Wort vorsprechen</button>
         <button onClick={giveUp} style={BtnStyle(G100, G600, { flex: 1, padding: '10px', fontSize: 12 })}>Aufgeben</button>
       </div>
       {(tries > 0 || hint) && <div style={{ fontSize: 11, color: '#d97706', textAlign: 'center', marginTop: 8, fontWeight: 'bold' }}>{(tries === 0 && hint) || tries === 1 ? '💡 noch 5 Punkte' : tries > 1 ? '💡 0 Punkte möglich' : ''}</div>}
@@ -209,7 +252,7 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
       <div style={{ fontSize: 36, marginBottom: 6 }}>{result.correct ? '✅' : '❌'}</div>
       <div style={{ fontSize: 24, fontWeight: 'bold', color: result.correct ? GR : RE, marginBottom: 4 }}>{cur.target}</div>
       <div style={{ fontSize: 12, color: G600, marginBottom: 14 }}>{result.correct ? (result.points > 0 ? '+' + result.points + ' Punkte' : 'Richtig, aber ohne Punkte') : 'So wird es geschrieben'}</div>
-      <button onClick={function () { speak(cur.target, 'es', { rate: 0.7 }); }} style={BtnStyle(G100, G600, { padding: '8px 16px', fontSize: 12, marginRight: 8 })}>🔊 anhören</button>
+      <button onClick={function () { speak(cur.target, 'es', { rate: speedRef.current.rate }); }} style={BtnStyle(G100, G600, { padding: '8px 16px', fontSize: 12, marginRight: 8 })}>🔊 anhören</button>
       <button onClick={next} style={BtnStyle(T, 'white', { padding: '10px 24px', fontSize: 14 })}>{idx + 1 >= round.length ? 'Fertig' : 'Weiter →'}</button>
     </div>}
     <button onClick={function () { stop(); onDone(); }} style={{ width: '100%', border: 'none', background: 'none', color: G400, fontSize: 11, marginTop: 14, cursor: 'pointer' }}>Runde abbrechen</button>
