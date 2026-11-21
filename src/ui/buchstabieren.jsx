@@ -1,7 +1,7 @@
 // Buchstabier-Diktat (Spanisch): die Stimme buchstabiert ganz langsam ein
 // spanisches Wort Buchstabe für Buchstabe (a, be, ce, …), Emma schreibt es auf.
-// Pool: nur Vokabeln, die sie schon kennt (Topf 3–6 in Klasse-6-Läufen),
-// Zimmer-/Möbel-Wörter zuerst.
+// Pool: alle Vokabeln, die in ihren Klasse-6-Leiterspielen schon dran kamen
+// (Topf 2–6 oder schon mindestens einmal beantwortet); Zimmer-Wörter bevorzugt.
 import { sbGet } from '../core/api.js';
 import { CREDIT, logWordEvent, lsGetRunsForPlayer, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useMemo, useRef, useState } from '../core/react.js';
@@ -12,7 +12,9 @@ import { shuffleArr } from '../core/util.js';
 import { parseData } from '../core/words.js';
 import { fetchAllKlasse6Vocab, WiederholungWrap } from './wiederholung.jsx';
 
-var ROUND_SIZE = 10;
+var ROUND_SIZE = 20;
+var ROOM_MAX = 10; // höchstens so viele Zimmer-Wörter vorne, der Rest kommt aus dem ganzen Wortschatz
+var START_DELAY = 2500; // Pause vor dem Buchstabieren
 
 // Tempo: Rate der Stimme + Pause zwischen den Buchstaben
 var SPEEDS = [
@@ -48,7 +50,6 @@ function SpeechSettings({ speedId, onSpeed, onTest }) {
     <button onClick={onTest} style={BtnStyle(G100, G600, { width: '100%', padding: '8px', fontSize: 12 })}>🔊 Probe hören</button>
   </div>;
 }
-var MIN_POT = 3;
 
 // Zimmerbeschreibung (Spielwörter ohne Artikel)
 var ROOM_WORDS = ['habitación','cama','cama alta','armario','póster','pared','ventana','foto','espejo','puerta','lámpara','alfombra','sillón','estantería','consola','videojuego','altavoz','escritorio','sofá','rincón','salón','mesa','silla','planta','mesa de noche','guirnalda de luces','almohada','jaula','hamaca','baño','piso'];
@@ -92,9 +93,10 @@ function fetchKnownSpanish(pid, chapters) {
       var sc = runInfo[row.run_id];
       if (!sc || sc.grade !== 6 || sc.language !== 'es') return;
       var pots = parseData(row.data).pots || {};
-      for (var p = MIN_POT; p <= 6; p++) {
+      for (var p = 1; p <= 6; p++) {
         (pots[p] || []).forEach(function (w) {
           if (!w.word) return;
+          if (p === 1 && !((w.correct || 0) + (w.wrong || 0) > 0)) return; // nie gefragt
           var k = w.word.toLowerCase();
           if (seen[k]) return; seen[k] = 1;
           out.push(w);
@@ -117,7 +119,9 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
     });
     var room = shuffleArr(el.filter(function (x) { return x.room; }));
     var rest = shuffleArr(el.filter(function (x) { return !x.room; }));
-    return room.concat(rest).slice(0, ROUND_SIZE);
+    var pick = room.slice(0, ROOM_MAX);
+    pick = pick.concat(rest.concat(room.slice(ROOM_MAX)).slice(0, ROUND_SIZE - pick.length));
+    return shuffleArr(pick);
   }, [words]);
 
   var [phase, setPhase] = useState('start'); // start, q, show, done
@@ -138,20 +142,22 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
   var inputRef = useRef(null);
   var cur = round[idx];
 
-  function stop() { if (cancelRef.current) { cancelRef.current(); cancelRef.current = null; } }
-  function spell() {
+  var delayRef = useRef(null);
+  function stop() { if (delayRef.current) { clearTimeout(delayRef.current); delayRef.current = null; } if (cancelRef.current) { cancelRef.current(); cancelRef.current = null; } }
+  function spell(delay) {
     if (!cur) return;
     stop(); setSpeaking(true);
+    if (delay) { delayRef.current = setTimeout(function () { delayRef.current = null; spell(0); }, delay); return; }
     cancelRef.current = speakSeq(spellParts(cur.target), 'es', { rate: speedRef.current.rate, gap: speedRef.current.gap, onEnd: function () { setSpeaking(false); } });
   }
-  useEffect(function () { if (phase === 'q') { spell(); if (inputRef.current) inputRef.current.focus(); } return stop; }, [phase, idx]);
+  useEffect(function () { if (phase === 'q') { spell(START_DELAY); if (inputRef.current) inputRef.current.focus(); } return stop; }, [phase, idx]);
   useEffect(function () { return stop; }, []);
 
   if (!round.length) return <WiederholungWrap>
     <div style={{ textAlign: 'center', padding: 30 }}>
       <div style={{ fontSize: 40, marginBottom: 10 }}>✍️</div>
       <div style={{ fontWeight: 'bold', fontSize: 15, marginBottom: 6 }}>Noch nicht genug passende Vokabeln</div>
-      <div style={{ fontSize: 12, color: G600, marginBottom: 16 }}>Das Buchstabier-Diktat braucht spanische Vokabeln, die du im Leiterspiel schon bis mindestens Topf {MIN_POT} gebracht hast.</div>
+      <div style={{ fontSize: 12, color: G600, marginBottom: 16 }}>Das Buchstabier-Diktat braucht spanische Vokabeln, die im Leiterspiel schon dran waren.</div>
       <button onClick={onDone} style={BtnStyle(G100, G600, { padding: '10px 20px' })}>Zurück</button>
     </div>
   </WiederholungWrap>;
@@ -162,7 +168,7 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
       <div style={{ fontWeight: 'bold', fontSize: 17, color: T, marginBottom: 8 }}>Buchstabier-Diktat</div>
       <div style={{ fontSize: 13, color: G600, marginBottom: 6 }}>Du hörst ein spanisches Wort Buchstabe für Buchstabe — ganz langsam.</div>
       <div style={{ fontSize: 13, color: G600, marginBottom: 6 }}>Schreib es auf (mit Akzenten: á é í ó ú ñ). Ton anmachen! 🔊</div>
-      <div style={{ fontSize: 12, color: G400, marginBottom: 20 }}>{round.length} Wörter · Zimmer-Wörter zuerst</div>
+      <div style={{ fontSize: 12, color: G400, marginBottom: 20 }}>{round.length} Wörter · viele Zimmer-Wörter</div>
       {!ttsSupported() && <div style={{ fontSize: 12, color: RE, marginBottom: 12 }}>Dein Gerät kann leider nicht vorlesen.</div>}
       <SpeechSettings speedId={speedId} onSpeed={changeSpeed} onTest={testVoice} />
       <button onClick={function () { setPhase('q'); }} style={BtnStyle(T, 'white', { padding: '12px 28px', fontSize: 15 })}>Los geht's</button>
@@ -220,13 +226,14 @@ function BuchstabierGame({ words, player, onUpdateScore, onDone }) {
 
   return <WiederholungWrap>
     <div style={{ fontSize: 11, color: G400, textAlign: 'center', marginBottom: 8 }}>Wort {idx + 1} / {round.length}</div>
-    <div style={{ textAlign: 'center', marginBottom: 14 }}>
+    {phase === 'show' && <div style={{ textAlign: 'center', marginBottom: 14 }}>
       <div style={{ fontSize: 12, color: G600 }}>Bedeutung</div>
       <div style={{ fontSize: 18, fontWeight: 'bold', color: G900 }}>{cur.clue}</div>
-    </div>
+    </div>}
+    {phase === 'q' && <div style={{ textAlign: 'center', fontSize: 13, color: G600, marginBottom: 14 }}>Hör gut zu und schreib das Wort auf. 👂</div>}
     {phase === 'q' && <div>
       <div style={{ textAlign: 'center', marginBottom: 12 }}>
-        <button onClick={spell} disabled={speaking} style={BtnStyle(speaking ? G100 : T, speaking ? G400 : 'white', { padding: '12px 22px', fontSize: 15 })}>{speaking ? '🔊 Ich buchstabiere …' : '🔊 Nochmal buchstabieren'}</button>
+        <button onClick={spell} disabled={speaking} style={BtnStyle(speaking ? G100 : T, speaking ? G400 : 'white', { padding: '12px 22px', fontSize: 15 })}>{speaking ? '🔊 Hör zu … 👂' : '🔊 Nochmal buchstabieren'}</button>
       </div>
       <input ref={inputRef} value={input} onChange={function (e) { setInput(e.target.value); }}
         onKeyDown={function (e) { if (e.key === 'Enter') submit(); }}
