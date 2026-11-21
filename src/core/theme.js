@@ -49,6 +49,7 @@ var SCREEN_GAME = {
   puzzle:'puzzle',
   wortkreis:'wortkreis',
   vokabelpaare:'vokabelpaare',
+  buchstabieren:'buchstabieren',
   satzvokabel:'satzvokabel'
 };
 
@@ -69,6 +70,7 @@ var GAME_META = {
   puzzle:{icon:'🧩',label:'Puzzle'},
   wortkreis:{icon:'🔤',label:'Wortkreis'},
   vokabelpaare:{icon:'🔗',label:'Vokabelpaare'},
+  buchstabieren:{icon:'✍️',label:'Buchstabieren'},
   satzvokabel:{icon:'🇩🇪',label:'Satzvokabel'},
   sonstiges:{icon:'⏱️',label:'Sonstiges'}
 };

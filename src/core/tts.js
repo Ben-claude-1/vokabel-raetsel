@@ -64,4 +64,38 @@ function speak(text, lang, opts){
   }catch(e){}
 }
 
-export { ttsSupported, speakableText, speak, VOICE_LANG };
+// Mehrere Teile nacheinander sprechen, mit Pause dazwischen (Buchstabieren).
+// Gibt eine Abbruch-Funktion zurück. iOS feuert onend nicht immer — darum
+// Notfall-Timer pro Teil.
+function speakSeq(parts, lang, opts){
+  if(!ttsSupported() || !parts || !parts.length) return function(){};
+  var rate = (opts && opts.rate) || 0.6, gap = (opts && opts.gap) || 900;
+  var cancelled = false, i = 0, timer = null, guard = null;
+  var langCode = VOICE_LANG[lang] || VOICE_LANG.en;
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  function next(){
+    if(cancelled) return;
+    if(i >= parts.length){ if(opts && opts.onEnd) opts.onEnd(); return; }
+    var part = parts[i++], done = false;
+    function fin(){
+      if(done || cancelled) return;
+      done = true; clearTimeout(guard);
+      timer = setTimeout(next, gap);
+    }
+    try{
+      var u = new SpeechSynthesisUtterance(part);
+      u.lang = langCode; u.rate = rate; u.pitch = 1;
+      var v = pickVoice(langCode); if(v) u.voice = v;
+      u.onend = fin; u.onerror = fin;
+      guard = setTimeout(fin, 3500);
+      window.speechSynthesis.speak(u);
+    }catch(e){ fin(); }
+  }
+  next();
+  return function(){
+    cancelled = true; clearTimeout(timer); clearTimeout(guard);
+    try{ window.speechSynthesis.cancel(); }catch(e){}
+  };
+}
+
+export { ttsSupported, speakableText, speak, speakSeq, VOICE_LANG };
