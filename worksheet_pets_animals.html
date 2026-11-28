@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Worksheet 5A – Pets and Animals</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@page { size: A4; margin: 18mm 20mm; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11pt;
+  color: #000;
+  background: #fff;
+}
+
+@media screen {
+  body { background: #888; padding: 10mm; }
+  .page {
+    background: #fff;
+    width: 210mm;
+    padding: 18mm 20mm;
+    margin: 0 auto 12px auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+}
+
+@media print {
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+  .blank-page { display: none; }
+}
+
+.blank-page { min-height: 257mm; }
+
+/* ── Header ── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+.h-badge {
+  border: 1.5px solid #000;
+  padding: 1px 6px;
+  font-weight: bold;
+  font-size: 9.5pt;
+  white-space: nowrap;
+  height: fit-content;
+}
+.h-title { font-weight: bold; font-size: 13pt; text-align: center; flex: 1; padding-top: 2px; }
+.h-right { text-align: right; font-size: 11pt; min-width: 160px; }
+.h-score { margin-top: 4px; font-size: 11pt; }
+
+/* ── Section heading ── */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: bold;
+  font-size: 11.5pt;
+  margin: 14px 0 6px 0;
+}
+.s-icon { font-size: 10pt; letter-spacing: -1px; }
+.s-dot { color: #1565C0; font-size: 15pt; line-height: 1; }
+
+/* ── Task instruction ── */
+.task-inst {
+  font-size: 11pt;
+  line-height: 1.55;
+  margin-bottom: 8px;
+}
+.task-inst em { font-style: italic; }
+
+/* ── Flyer ── */
+.flyer {
+  border: 1.5px solid #000;
+  padding: 12px 58px 10px 14px;
+  margin: 4px 0 10px 0;
+  position: relative;
+}
+.flyer-title { font-weight: bold; font-size: 11pt; }
+.flyer-sub   { font-weight: bold; font-size: 11pt; margin-bottom: 8px; }
+.flyer-cols  { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.flyer-cols ul { list-style: disc; padding-left: 17px; }
+.flyer-cols li { margin-bottom: 3px; font-size: 10.5pt; }
+.flyer-addr  { font-weight: bold; font-size: 10pt; margin-top: 10px; }
+.flyer-fn    { font-size: 9pt; font-style: italic; margin-top: 3px; }
+.flyer-logo  {
+  position: absolute; top: 10px; right: 12px;
+  width: 54px; height: 54px;
+  border: 1.5px solid #000; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center; font-size: 7.5pt; font-weight: bold; line-height: 1.3;
+}
+
+/* ── True/False table ── */
+.tf-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.tf-table th, .tf-table td { border: 1px solid #000; padding: 5.5px 8px; }
+.tf-table th { text-align: center; font-weight: bold; width: 62px; }
+.tf-table td.chk { text-align: center; width: 62px; }
+
+/* ── Dialogue ── */
+.dialogue { margin: 6px 0 4px 0; }
+.d-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.d-sp { font-weight: bold; min-width: 58px; white-space: nowrap; font-size: 11pt; }
+.d-tx { flex: 1; line-height: 1; font-size: 11pt; }
+
+/* ── Blanks ── */
+.bl {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 140px;
+  height: 16px;
+  vertical-align: bottom;
+  margin: 0 2px;
+}
+.bl-sm {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 60px;
+  height: 16px;
+  vertical-align: bottom;
+  margin: 0 2px;
+}
+
+/* ── Task 7 ── */
+.t7-example { font-style: italic; margin-bottom: 6px; font-size: 10.5pt; }
+.t7-item { font-size: 10.5pt; margin-bottom: 5px; }
+.write-line { border-bottom: 1px solid #000; width: 100%; margin: 20px 0 4px 0; height: 1px; }
+
+/* ── Task 8 ── */
+.t8-text { line-height: 2.7; font-size: 11pt; }
+
+/* ── Task 9 ── */
+.t9-items {
+  display: flex;
+  justify-content: space-around;
+  margin: 10px 0 4px 0;
+}
+.t9-item { text-align: center; font-size: 10pt; }
+.t9-em   { font-size: 26pt; display: block; line-height: 1.3; }
+.t9-lbl  { display: block; margin-top: 1px; font-size: 9.5pt; }
+.t9-mrk  { display: block; font-weight: bold; font-size: 12pt; }
+
+.t9-dial { font-size: 11pt; }
+.t9-line { margin-bottom: 16px; line-height: 1; }
+.t9-q    { font-weight: bold; min-width: 40px; display: inline; }
+
+.bold  { font-weight: bold; }
+.uline { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 1 – Task 1: Reading
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div style="width:70px;"></div>
+    <div class="h-title">5A</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /9 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <span class="s-icon">○○</span> Reading: Happy Paws Rescue Centre
+  </div>
+
+  <div class="task-inst">
+    <strong>Task 1:</strong> Read the flyer and tick 'true' or 'false'.
+  </div>
+
+  <div class="flyer">
+    <div class="flyer-logo">HAPPY<br>PAWS<br>RESCUE</div>
+    <div class="flyer-title">Come and visit Happy Paws Rescue Centre!</div>
+    <div class="flyer-sub">Great fun for everyone – animals need you!</div>
+    <div class="flyer-cols">
+      <ul>
+        <li>Dogs, cats, rabbits and guinea pigs</li>
+        <li>Hamsters and goldfish</li>
+        <li>Animal feeding sessions</li>
+        <li>Dog walking with a volunteer</li>
+        <li>Visitor café on site</li>
+      </ul>
+      <ul>
+        <li>Free entry for all visitors</li>
+        <li>Children must come with an adult</li>
+        <li>Volunteers: ages 14 and above</li>
+        <li>Open Saturday and Sunday, 10 am – 4 pm</li>
+        <li>Special adoption<sup>1</sup> days every first Saturday</li>
+      </ul>
+    </div>
+    <div class="flyer-addr">Happy Paws Rescue Centre, 12 Green Lane, Bristol BS1 5NW</div>
+    <div class="flyer-fn"><sup>1</sup>adoption: Adoption / Übernahme eines Tieres</div>
+  </div>
+
+  <table class="tf-table">
+    <thead>
+      <tr>
+        <th style="text-align:left; border:1px solid #000;"></th>
+        <th>true</th>
+        <th>false</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1. This is a flyer for a pet shop in London.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>2. Happy Paws Rescue Centre is in Bristol.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>3. You can see horses and snakes at the centre.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>4. Entry to the centre costs money.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>5. There are special adoption days every Saturday.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>6. Children can go to the centre without an adult.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>7. You can walk dogs at the centre.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>8. The centre is open on Sundays.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>9. You must be 14 years old to volunteer at the centre.</td><td class="chk"></td><td class="chk"></td></tr>
+    </tbody>
+  </table>
+
+</div><!-- /page 1 -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 2 – Task 5: Grammar – Simple Present
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5A</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /14 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 5:</strong> Complete the dialogue. Put the verbs in brackets into the correct form of the <span class="uline">simple present</span>.<span style="float:right;">_____ /14 BE</span>
+  </div>
+
+  <div class="dialogue">
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx">How <span class="bl-sm"></span> you usually <span class="bl"></span> (take) care of your dog?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Noah:</span>
+      <span class="d-tx">I usually <span class="bl"></span> (feed) him twice a day.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> you <span class="bl"></span> (walk) him every day?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Noah:</span>
+      <span class="d-tx">Yes, I <span class="bl-sm"></span> (do).</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> your mum <span class="bl"></span> (help) with the dog?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Noah:</span>
+      <span class="d-tx">Yes, she <span class="bl-sm"></span> (do).</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> your dog <span class="bl"></span> (like) playing outside?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Noah:</span>
+      <span class="d-tx">No, he <span class="bl-sm"></span> (not do). He usually <span class="bl"></span> (sleep) all day.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx">Great! Your dog <span class="bl"></span> (sound) very interesting!</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Noah:</span>
+      <span class="d-tx">Thanks!</span>
+    </div>
+
+  </div>
+
+</div><!-- /page 2 -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 3 – Tasks 7 & 8: Present Progressive / SP vs PP
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5A</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /8 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 7:</strong> What are the kids not doing? What are they doing? Write sentences like in the example. <span style="float:right;">_____ /8 BE</span>
+  </div>
+
+  <div class="task-inst" style="margin-top:4px;">
+    → Emma: <strong>✗</strong> eat cake &nbsp;&nbsp; <strong>✓</strong> brush the dog<br>
+    1. Tim: <strong>✗</strong> play football &nbsp;&nbsp; <strong>✓</strong> walk the dog<br>
+    2. Mia: <strong>✗</strong> listen to music &nbsp;&nbsp; <strong>✓</strong> feed the rabbits<br>
+    3. Ben: <strong>✗</strong> sit in his room &nbsp;&nbsp; <strong>✓</strong> play with the kittens<br>
+    4. Anna and Leo: <strong>✗</strong> eat pizza &nbsp;&nbsp; <strong>✓</strong> clean the hamster cage
+  </div>
+
+  <div class="t7-example">→ <em>Emma isn't eating cake. She is brushing the dog.</em></div>
+
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+
+  <br>
+
+  <!-- Task 8 -->
+  <div class="task-inst" style="margin-top:10px;">
+    <strong>Task 8:</strong> Simple present or present progressive? Read the text and fill in the correct forms. The signal words can help you. <span style="float:right;">_____ /8 BE</span><br>
+    <em>Einfache Gegenwart oder Verlaufsform der Gegenwart? Lies den Text und trage die korrekten Formen ein. Die Signalwörter können dir helfen.</em>
+  </div>
+
+  <div class="t8-text">
+    Every Saturday, Emma <span class="bl"></span> (visit) the Happy Paws Rescue Centre. She usually <span class="bl"></span> (help) the staff with the animals. They always <span class="bl"></span> (feed) the cats in the morning. At the moment, Emma <span class="bl"></span> (brush) a big black Labrador. She <span class="bl"></span> (have) a lot of fun – the dog <span class="bl"></span> (wag) its tail and they <span class="bl"></span> (play) together. In the afternoon, Emma usually <span class="bl"></span> (clean) the rabbit cages.
+  </div>
+
+</div><!-- /page 3 -->
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 4 – Task 9: some and any
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5A</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /9 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 9:</strong> Mum is at the pet shop with the shopping list for their new hamster. She calls Dad at home to check what they already have. Look at the pictures. Then complete the phone call. Use <span class="uline">some and any</span>. <span style="float:right;">_____ /9 BE</span><br>
+    <em>Schau dir die Bilder an. Vervollständige dann das Telefongespräch zwischen Mum und Dad. Benutze some oder any in den Fragen und Antworten wie in (1).</em>
+  </div>
+
+  <!-- Item pictures -->
+  <div class="t9-items">
+    <div class="t9-item">
+      <span class="t9-em">🌾</span>
+      <span class="t9-lbl">hamster food</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">💧</span>
+      <span class="t9-lbl">water bottle</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🎡</span>
+      <span class="t9-lbl">exercise wheel</span>
+      <span class="t9-mrk">✗</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🧸</span>
+      <span class="t9-lbl">wooden toys</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🏠</span>
+      <span class="t9-lbl">hamster cage</span>
+      <span class="t9-mrk">✗</span>
+    </div>
+  </div>
+
+  <div class="t9-dial">
+
+    <div class="t9-line">
+      <strong>1) Mum:</strong> Have we got <strong>some</strong> hamster food?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, we have got <span class="bl"></span> hamster food.
+    </div>
+
+    <div class="t9-line">
+      <strong>2) Mum:</strong> <span class="bl"></span> water bottle?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, <span class="bl"></span> water bottle.
+    </div>
+
+    <div class="t9-line">
+      <strong>3) Mum:</strong> <span class="bl"></span> exercise wheel?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> No, <span class="bl"></span> exercise wheel.
+    </div>
+
+    <div class="t9-line">
+      <strong>4) Mum:</strong> <span class="bl"></span> wooden toys?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, <span class="bl"></span> wooden toys.
+    </div>
+
+    <div class="t9-line">
+      <strong>5) Mum:</strong> <span class="bl"></span> hamster cage?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> No, <span class="bl"></span> hamster cage.
+    </div>
+
+  </div>
+
+</div><!-- /page 4 -->
+
+</body>
+</html>

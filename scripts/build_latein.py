@@ -15,6 +15,41 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # (Lektion, Titel, [(Foto, Buchseite)], Text)
 LEKTIONEN = [
+    (2, "Die römische Hausgemeinschaft", """
+@2a 152
+amāre | amat | lieben, mögen | verb
+soror | sorōrem f. | die Schwester | noun
+respondēre | respondet | antworten | verb
+iterum | Adv. | wieder | adverb
+statim | Adv. | sofort | adverb
+puer | puerum m. | das Kind, der Junge | noun
+puella | puellam f. | das Mädchen | noun
+frāter | frātrem m. | der Bruder | noun
+itaque | Adv. | deshalb | adverb
+sunt | | sie sind | verb
+culīna | culīnam f. | die Küche | noun
+dēbēre | dēbet | müssen | verb
+nōn dēbēre | | nicht dürfen | phrase
+adhūc | Adv. | bis jetzt, noch | adverb
+illīc | Adv. | dort | adverb
+līberī | līberōs m. Pl. | die Kinder | noun
+vir | virum m. | der Mann | noun
+ātrium | ātrium n. | das Atrium | noun
+ōtium | ōtium n. | die Ruhe, die Freizeit | noun
+parentēs | parentēs m. Pl. | die Eltern | noun
+peristȳlium | peristȳlium n. | das Peristyl | noun
+officium | officium n. | die Pflicht | noun
+@2b 153
+explēre | explet | erfüllen | verb
+Salvēte! | | Seid gegrüßt! | phrase
+dīcere | dīcit | sagen | verb
+cūr? | Adv. | warum? | adverb
+semper | Adv. | immer | adverb
+placēre | placet | gefallen, Spaß machen | verb
+labor | labōrem m. | die Mühe, die Arbeit | noun
+neglegere | neglegit | vernachlässigen, nicht beachten | verb
+pergere | pergit | etw. weiter tun, fortsetzen | verb
+"""),
     (3, "Auf dem Land", """
 @5604 154
 equus | equum m. | das Pferd | noun

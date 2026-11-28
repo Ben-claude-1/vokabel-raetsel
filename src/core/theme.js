@@ -1,6 +1,6 @@
 var T = "#0f766e", TL = "#ccfbf1", TD = "#134e4a", AM = "#f59e0b", RE = "#ef4444", GR = "#22c55e";
 
-var G50 = "#f8fafc", G100 = "#f1f5f9", G200 = "#e2e8f0", G400 = "#94a3b8", G600 = "#475569", G900 = "#0f172a";
+var G50 = "#f8fafc", G100 = "#f1f5f9", G200 = "#e2e8f0", G400 = "#94a3b8", G500 = "#64748b", G600 = "#475569", G700 = "#334155", G900 = "#0f172a";
 
 function BtnStyle(bg, col, extra) {
   var base = { padding: "8px 18px", background: bg, color: col || "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: "bold", touchAction: "manipulation", WebkitTapHighlightColor: "transparent" };
@@ -79,4 +79,4 @@ function gameOf(s){ return s.game || (s.run_id ? 'leiterspiel' : 'sonstiges'); }
 
 var WD_LONG=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
 
-export { T, TL, TD, AM, RE, GR, G50, G100, G200, G400, G600, G900, BtnStyle, COLOR_BG, COLOR_FG, COLOR_DOT, POT_PTS_CUM, POT_ICON, POT_LABEL, POT_COL, DAILY_GOAL_SEC, DAILY_GOAL_SEC_ALT, DAILY_GOAL_FROM, dailyGoalSec, dailyGoalMin, SCREEN_GAME, screenGame, GAME_META, gameOf, WD_LONG };
+export { T, TL, TD, AM, RE, GR, G50, G100, G200, G400, G500, G600, G700, G900, BtnStyle, COLOR_BG, COLOR_FG, COLOR_DOT, POT_PTS_CUM, POT_ICON, POT_LABEL, POT_COL, DAILY_GOAL_SEC, DAILY_GOAL_SEC_ALT, DAILY_GOAL_FROM, dailyGoalSec, dailyGoalMin, SCREEN_GAME, screenGame, GAME_META, gameOf, WD_LONG };

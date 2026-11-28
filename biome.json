@@ -1,0 +1,52 @@
+{
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"files": {
+		"includes": [
+			"src/**",
+			"scripts/**/*.js",
+			"scripts/**/*.mjs",
+			"!**/dist",
+			"!**/node_modules"
+		]
+	},
+	"formatter": { "enabled": false },
+	"assist": { "enabled": false },
+	"javascript": {
+		"globals": ["React", "ReactDOM"],
+		"jsxRuntime": "reactClassic"
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "none",
+			"correctness": {
+				"noUndeclaredVariables": "error",
+				"noUnreachable": "error",
+				"noConstAssign": "error",
+				"noInvalidUseBeforeDeclaration": "error",
+				"noSelfAssign": "error",
+				"noSwitchDeclarations": "error",
+				"noUnsafeFinally": "error",
+				"noInvalidConstructorSuper": "error",
+				"noUnusedLabels": "error",
+				"useHookAtTopLevel": "error",
+				"useJsxKeyInIterable": "error"
+			},
+			"suspicious": {
+				"noDuplicateObjectKeys": "error",
+				"noDuplicateCase": "error",
+				"noDuplicateParameters": "error",
+				"noDuplicateClassMembers": "error",
+				"noRedeclare": "error",
+				"noSelfCompare": "error",
+				"noFallthroughSwitchClause": "error",
+				"noFunctionAssign": "error",
+				"noImportAssign": "error",
+				"noUnsafeNegation": "error",
+				"noCompareNegZero": "error",
+				"noSparseArray": "error",
+				"noDuplicateJsxProps": "error"
+			}
+		}
+	}
+}

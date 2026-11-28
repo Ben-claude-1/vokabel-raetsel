@@ -2,3 +2,22 @@ node_modules/
 test-results/
 playwright-report/
 .DS_Store
+
+# Repo ist öffentlich (GitHub Pages): keine Zugangsdaten, keine Kinderdaten, keine Fotos
+migration/CREDENTIALS.md
+migration/postgrest.conf
+migration/docker-compose.yml
+migration/data.sql
+migration/data_*.json
+migration/.env
+.tmp/
+k6-fotos/
+icloud-schule/
+scripts/__pycache__/
+# Claude-Sitzungsprotokolle (enthalten persönliche Daten und Schlüssel)
+session*.md
+SESSIONS.md
+CLAUDE.md
+MEMORY.md
+docs/sessions/
+chart*.png

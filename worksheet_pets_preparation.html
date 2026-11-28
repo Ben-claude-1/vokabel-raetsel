@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Worksheet 5B – Pets and Animals (Vorbereitung Klassenarbeit)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@page { size: A4; margin: 17mm 20mm; }
+
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11pt;
+  color: #000;
+  background: #fff;
+}
+
+@media screen {
+  body { background: #888; padding: 10mm; }
+  .page {
+    background: #fff;
+    width: 210mm;
+    padding: 17mm 20mm;
+    margin: 0 auto 12px auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+}
+
+@media print {
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
+}
+
+/* ── Header ── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+.h-badge {
+  border: 1.5px solid #000;
+  padding: 1px 6px;
+  font-weight: bold;
+  font-size: 9.5pt;
+  white-space: nowrap;
+  height: fit-content;
+}
+.h-title { font-weight: bold; font-size: 13pt; text-align: center; flex: 1; padding-top: 2px; }
+.h-right { text-align: right; font-size: 11pt; min-width: 160px; }
+.h-score { margin-top: 4px; font-size: 11pt; }
+
+/* ── Section heading ── */
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: bold;
+  font-size: 11.5pt;
+  margin: 12px 0 5px 0;
+}
+.s-icon { font-size: 10pt; letter-spacing: -1px; }
+
+/* ── Task instruction ── */
+.task-inst {
+  font-size: 11pt;
+  line-height: 1.55;
+  margin-bottom: 7px;
+}
+.task-inst em { font-style: italic; }
+
+/* ── Reading text box ── */
+.read-box {
+  border: 1.5px solid #000;
+  padding: 11px 14px;
+  margin: 4px 0 10px 0;
+  font-size: 10.5pt;
+  line-height: 1.6;
+}
+.read-box .rb-title { font-weight: bold; font-size: 11pt; margin-bottom: 5px; }
+.read-box .rb-fn { font-size: 9pt; font-style: italic; margin-top: 6px; border-top: 1px solid #ccc; padding-top: 4px; }
+
+/* ── True/False table ── */
+.tf-table { width: 100%; border-collapse: collapse; font-size: 10.5pt; }
+.tf-table th, .tf-table td { border: 1px solid #000; padding: 5.5px 8px; }
+.tf-table th { text-align: center; font-weight: bold; width: 62px; }
+.tf-table td.chk { text-align: center; width: 62px; }
+
+/* ── Word box ── */
+.word-box {
+  border: 1.5px solid #000;
+  padding: 6px 10px;
+  font-size: 10.5pt;
+  margin-bottom: 8px;
+  background: #fafafa;
+}
+.word-box .wb-label { font-weight: bold; font-size: 9.5pt; margin-right: 6px; }
+
+/* ── Fill-in tasks ── */
+.fi-list { list-style: none; margin: 4px 0; }
+.fi-list li {
+  padding: 4px 0;
+  font-size: 10.5pt;
+  line-height: 2;
+  border-bottom: 1px solid #ddd;
+}
+.fi-list li:last-child { border-bottom: none; }
+
+/* ── Blanks ── */
+.bl {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 140px;
+  height: 16px;
+  vertical-align: bottom;
+  margin: 0 2px;
+}
+.bl-sm {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 60px;
+  height: 16px;
+  vertical-align: bottom;
+  margin: 0 2px;
+}
+.bl-md {
+  display: inline-block;
+  border-bottom: 1px solid #000;
+  min-width: 100px;
+  height: 16px;
+  vertical-align: bottom;
+  margin: 0 2px;
+}
+
+/* ── Modal verb sentences ── */
+.mv-list { margin: 4px 0; }
+.mv-item {
+  font-size: 10.5pt;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+
+/* ── Demonstrative list ── */
+.dem-list { margin: 4px 0; }
+.dem-item {
+  font-size: 10.5pt;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+
+/* ── Dialogue ── */
+.dialogue { margin: 6px 0 4px 0; }
+.d-line {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 13px;
+}
+.d-sp { font-weight: bold; min-width: 60px; white-space: nowrap; font-size: 11pt; }
+.d-tx { flex: 1; line-height: 1; font-size: 11pt; }
+
+/* ── Task 7 write lines ── */
+.write-line { border-bottom: 1px solid #000; width: 100%; margin: 19px 0 3px 0; height: 1px; }
+
+/* ── Task 8 fill text ── */
+.t8-text { line-height: 2.7; font-size: 11pt; }
+
+/* ── Task 9 (some/any) ── */
+.t9-items {
+  display: flex;
+  justify-content: space-around;
+  margin: 10px 0 4px 0;
+}
+.t9-item { text-align: center; font-size: 10pt; }
+.t9-em   { font-size: 26pt; display: block; line-height: 1.3; }
+.t9-lbl  { display: block; margin-top: 1px; font-size: 9.5pt; }
+.t9-mrk  { display: block; font-weight: bold; font-size: 12pt; }
+.t9-dial { font-size: 11pt; }
+.t9-line { margin-bottom: 15px; line-height: 1; }
+
+/* ── Task 10 (Writing) ── */
+.writing-box {
+  border: 1.5px solid #000;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 10.5pt;
+}
+.writing-box .wb-title { font-weight: bold; margin-bottom: 5px; font-size: 11pt; }
+.hint-words { font-size: 10pt; color: #333; font-style: italic; margin-bottom: 6px; }
+.w-line { border-bottom: 1px solid #000; width: 100%; margin: 21px 0 3px 0; height: 1px; }
+
+.uline { text-decoration: underline; }
+.bold  { font-weight: bold; }
+.divider { border: none; border-top: 1px solid #ccc; margin: 14px 0 10px 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 1 – Task 1: Reading
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div style="width:70px;"></div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /9 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <span class="s-icon">○○</span> Reading: Sophie's Blog – My Life with Pets
+  </div>
+
+  <div class="task-inst">
+    <strong>Task 1:</strong> Read the blog post and tick 'true' or 'false'.
+  </div>
+
+  <div class="read-box">
+    <div class="rb-title">Sophie's Blog ✏️ &nbsp; My pets are wonderful!</div>
+    Hi, I'm Sophie! I have two pets: a cat called Whiskers and a goldfish called Bubbles. Every morning, I feed Whiskers with cat food and give Bubbles some fish food. Whiskers is very lazy<sup>1</sup> – she usually sleeps for twelve hours a day! But at night she is very active and runs around the flat. I stroke<sup>2</sup> her every day because it helps me feel calm after a long school day. My goldfish lives in a big tank and I must clean it every week. Having a pet teaches you to be responsible<sup>3</sup> – you can never forget to feed your animal or give it fresh water. Pets are wonderful because you never feel alone when they are at home with you.
+    <div class="rb-fn">
+      <sup>1</sup>lazy: faul &nbsp;·&nbsp; <sup>2</sup>stroke: streicheln &nbsp;·&nbsp; <sup>3</sup>responsible: verantwortungsbewusst
+    </div>
+  </div>
+
+  <table class="tf-table">
+    <thead>
+      <tr>
+        <th style="text-align:left; border:1px solid #000;"></th>
+        <th>true</th>
+        <th>false</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>1. Sophie has one pet.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>2. The goldfish is called Whiskers.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>3. Sophie feeds her cat in the morning.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>4. Whiskers is a very active cat during the day.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>5. Stroking a cat helps Sophie feel calm.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>6. Sophie must clean the fish tank every week.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>7. You can sometimes forget to feed your pet.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>8. Sophie feels lonely because she has pets.</td><td class="chk"></td><td class="chk"></td></tr>
+      <tr><td>9. Pets teach you to be responsible.</td><td class="chk"></td><td class="chk"></td></tr>
+    </tbody>
+  </table>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 2 – Tasks 3 & 4: Modal Verbs + This/That/These/Those
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /10 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 3:</strong> Fill in the correct modal verb. Use the words in the box. <span style="float:right;">_____ /10 BE</span>
+  </div>
+
+  <div class="word-box">
+    <span class="wb-label">Word box:</span>
+    must &nbsp;·&nbsp; mustn't &nbsp;·&nbsp; should &nbsp;·&nbsp; shouldn't &nbsp;·&nbsp; can &nbsp;·&nbsp; can't &nbsp;·&nbsp; have to &nbsp;·&nbsp; don't have to
+  </div>
+
+  <div class="mv-list">
+    <div class="mv-item">1. You <span class="bl-md"></span> feed your dog twice a day. It needs food to stay healthy.</div>
+    <div class="mv-item">2. Dogs <span class="bl-md"></span> learn many different tricks if you train them well.</div>
+    <div class="mv-item">3. You <span class="bl-md"></span> leave your pet alone for a very long time. That is not kind.</div>
+    <div class="mv-item">4. You <span class="bl-md"></span> brush your cat's fur regularly to keep it clean.</div>
+    <div class="mv-item">5. A pet owner <span class="bl-md"></span> give fresh water to their animal every day.</div>
+    <div class="mv-item">6. You <span class="bl-md"></span> have a big garden to keep a dog – a park is fine.</div>
+    <div class="mv-item">7. Fish <span class="bl-md"></span> live without water. They need it to survive.</div>
+    <div class="mv-item">8. You <span class="bl-md"></span> take your dog to the vet when it is sick.</div>
+    <div class="mv-item">9. You <span class="bl-md"></span> feed your dog chocolate. It is dangerous for dogs!</div>
+    <div class="mv-item">10. Cats <span class="bl-md"></span> climb trees very well. They are great athletes.</div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="task-inst" style="margin-top:8px;">
+    <strong>Task 4:</strong> Fill in <span class="uline">this / that / these / those</span>. <span style="float:right;">_____ /8 BE</span>
+  </div>
+
+  <div class="dem-list">
+    <div class="dem-item">1. Look at <span class="bl-sm"></span> rabbit over there by the tree.</div>
+    <div class="dem-item">2. I love <span class="bl-sm"></span> kittens here in this basket!</div>
+    <div class="dem-item">3. <span class="bl-sm"></span> hamster in my hand is so soft and warm.</div>
+    <div class="dem-item">4. <span class="bl-sm"></span> fish in the tank over there are so colourful.</div>
+    <div class="dem-item">5. <span class="bl-sm"></span> is my dog Rex. He is very friendly.</div>
+    <div class="dem-item">6. Can you see <span class="bl-sm"></span> cats sleeping on the wall over there?</div>
+    <div class="dem-item">7. <span class="bl-sm"></span> dog here needs a lot of exercise every day.</div>
+    <div class="dem-item">8. I want to buy <span class="bl-sm"></span> toy over there for my rabbit.</div>
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 3 – Task 5: Grammar – Simple Present
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /14 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 5:</strong> Complete the dialogue. Put the verbs in brackets into the correct form of the <span class="uline">simple present</span>. <span style="float:right;">_____ /14 BE</span>
+  </div>
+
+  <div class="dialogue">
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx">How many pets <span class="bl-sm"></span> you <span class="bl-sm"></span> (have)?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Lena:</span>
+      <span class="d-tx">I <span class="bl-sm"></span> (have) a cat and two goldfish.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> you <span class="bl"></span> (enjoy) having pets?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Lena:</span>
+      <span class="d-tx">Yes, I <span class="bl-sm"></span> (do). They <span class="bl"></span> (make) me very happy.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> your cat <span class="bl"></span> (eat) fish food?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Lena:</span>
+      <span class="d-tx">No, she <span class="bl-sm"></span> (not do). She <span class="bl"></span> (eat) cat food.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx"><span class="bl-sm"></span> the fish <span class="bl"></span> (need) a lot of care?</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Lena:</span>
+      <span class="d-tx">Yes, I <span class="bl"></span> (have to) clean the tank every week.</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Emma:</span>
+      <span class="d-tx">Your pets <span class="bl"></span> (sound) wonderful!</span>
+    </div>
+
+    <div class="d-line">
+      <span class="d-sp">Lena:</span>
+      <span class="d-tx">Thanks! Having pets is so much fun!</span>
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 4 – Tasks 7 & 8: Present Progressive + SP vs PP
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /8 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 7:</strong> What are the kids not doing? What are they doing? Write sentences like in the example. <span style="float:right;">_____ /8 BE</span>
+  </div>
+
+  <div class="task-inst" style="margin-top:3px; line-height:1.7;">
+    → Mia: <strong>✗</strong> do homework &nbsp;&nbsp; <strong>✓</strong> stroke the cat<br>
+    1. Tom: <strong>✗</strong> play football &nbsp;&nbsp; <strong>✓</strong> feed the fish<br>
+    2. Anna: <strong>✗</strong> listen to music &nbsp;&nbsp; <strong>✓</strong> clean the rabbit cage<br>
+    3. Leo: <strong>✗</strong> eat lunch &nbsp;&nbsp; <strong>✓</strong> walk the dog<br>
+    4. Kim and Ben: <strong>✗</strong> watch TV &nbsp;&nbsp; <strong>✓</strong> play with the kittens
+  </div>
+
+  <div style="font-style:italic; font-size:10.5pt; margin-bottom:6px;">→ <em>Mia isn't doing her homework. She is stroking the cat.</em></div>
+
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+  <div class="write-line"></div>
+
+  <br>
+
+  <div class="task-inst" style="margin-top:10px;">
+    <strong>Task 8:</strong> Simple present or present progressive? Read the text and fill in the correct forms. The signal words can help you. <span style="float:right;">_____ /8 BE</span><br>
+    <em>Einfache Gegenwart oder Verlaufsform der Gegenwart? Lies den Text und trage die korrekten Formen ein. Die Signalwörter können dir helfen.</em>
+  </div>
+
+  <div class="t8-text">
+    Every weekend, Lena <span class="bl"></span> (visit) the animal shelter with her mum. She usually <span class="bl"></span> (help) the staff with the dogs. They always <span class="bl"></span> (feed) the animals in the morning. At the moment, Lena <span class="bl"></span> (stroke) a shy brown cat. The cat <span class="bl"></span> (purr) quietly and <span class="bl"></span> (close) its eyes. She <span class="bl"></span> (have) so much fun. In the afternoon, Lena usually <span class="bl"></span> (train) the younger dogs.
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 5 – Task 9: some and any
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div class="h-badge">S-V-O</div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /9 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Grammar</div>
+
+  <div class="task-inst">
+    <strong>Task 9:</strong> Mum is at the pet shop for their new cat. Dad calls from home to check what they already have. Look at the pictures. Then complete the phone call. Use <span class="uline">some and any</span>. <span style="float:right;">_____ /9 BE</span><br>
+    <em>Schau dir die Bilder an. Vervollständige dann das Telefongespräch zwischen Mum und Dad. Benutze some oder any in den Fragen und Antworten wie in (1).</em>
+  </div>
+
+  <div class="t9-items">
+    <div class="t9-item">
+      <span class="t9-em">🐟</span>
+      <span class="t9-lbl">cat food</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🛏️</span>
+      <span class="t9-lbl">cat bed</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🧶</span>
+      <span class="t9-lbl">cat toys</span>
+      <span class="t9-mrk">✗</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🪮</span>
+      <span class="t9-lbl">cat brush</span>
+      <span class="t9-mrk">✓</span>
+    </div>
+    <div class="t9-item">
+      <span class="t9-em">🏠</span>
+      <span class="t9-lbl">scratching post</span>
+      <span class="t9-mrk">✗</span>
+    </div>
+  </div>
+
+  <div class="t9-dial">
+
+    <div class="t9-line">
+      <strong>1) Mum:</strong> Have we got <strong>some</strong> cat food?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, we have got <span class="bl"></span> cat food.
+    </div>
+
+    <div class="t9-line">
+      <strong>2) Mum:</strong> <span class="bl"></span> cat bed?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, <span class="bl"></span> cat bed.
+    </div>
+
+    <div class="t9-line">
+      <strong>3) Mum:</strong> <span class="bl"></span> cat toys?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> No, <span class="bl"></span> cat toys.
+    </div>
+
+    <div class="t9-line">
+      <strong>4) Mum:</strong> <span class="bl"></span> cat brush?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> Yes, <span class="bl"></span> cat brush.
+    </div>
+
+    <div class="t9-line">
+      <strong>5) Mum:</strong> <span class="bl"></span> scratching post?<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;<strong>Dad:</strong> No, <span class="bl"></span> scratching post.
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 6 – Task 10: Writing
+     ═══════════════════════════════════════════════════ -->
+<div class="page">
+
+  <div class="page-header">
+    <div style="width:70px;"></div>
+    <div class="h-title">5B</div>
+    <div class="h-right">
+      NAME: ___________________
+      <div class="h-score">_____ /8 BE</div>
+    </div>
+  </div>
+
+  <div class="section-head">Writing</div>
+
+  <div class="task-inst">
+    <strong>Task 10:</strong> Write <strong>4 sentences</strong> about each topic. Use the words in the box to help you. <span style="float:right;">_____ /8 BE</span><br>
+    <em>Schreibe je 4 Sätze zu jedem Thema. Nutze die Wörter in den Kästen als Hilfe. Schreibe vollständige Sätze.</em>
+  </div>
+
+  <!-- Discussion phrases hint -->
+  <div class="word-box" style="margin-bottom:12px;">
+    <span class="wb-label">Discussion phrases:</span>
+    I think … &nbsp;·&nbsp; In my opinion … &nbsp;·&nbsp; First of all … &nbsp;·&nbsp; Also … &nbsp;·&nbsp; In addition … &nbsp;·&nbsp; Finally …
+  </div>
+
+  <!-- Topic 1 -->
+  <div class="writing-box">
+    <div class="wb-title">Topic 1: How to take care of dogs</div>
+    <div class="hint-words">
+      Helpful words: feed · walk · brush · wash · fresh water · play with · vet · every day · must · should · have to
+    </div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+  </div>
+
+  <!-- Topic 2 -->
+  <div class="writing-box">
+    <div class="wb-title">Topic 2: Why it is good to have a pet</div>
+    <div class="hint-words">
+      Helpful words: responsible · calm · alone · active · love · teach · wonderful · friend · enjoy · fun
+    </div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+    <div class="w-line"></div>
+  </div>
+
+</div>
+
+</body>
+</html>

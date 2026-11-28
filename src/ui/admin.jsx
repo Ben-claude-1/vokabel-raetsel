@@ -490,9 +490,9 @@ function VocabCheckAdmin({ chapters, setChapters }) {
           {isEditing&&<div style={{padding:'8px 10px',background:'#fffbeb',borderTop:'1px solid '+AM+'44'}}>
             <div style={{display:'flex',gap:5,marginBottom:5}}>
               <input value={editingWord.w.word||''} onChange={function(e){setEditingWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{word:e.target.value})});});}}
-                style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="EN"/>
+                style={{flex:1,padding:'5px',border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="EN"/>
               <input value={editingWord.w.clue||''} onChange={function(e){setEditingWord(function(ew){return Object.assign({},ew,{w:Object.assign({},ew.w,{clue:e.target.value})});});}}
-                style={{flex:1,padding:'5px',fontSize:12,border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="DE"/>
+                style={{flex:1,padding:'5px',border:'1px solid '+G200,borderRadius:5,fontSize:16}} placeholder="DE"/>
             </div>
             <div style={{display:'flex',gap:5}}>
               <button onClick={function(){

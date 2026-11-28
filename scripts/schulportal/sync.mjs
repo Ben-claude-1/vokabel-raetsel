@@ -15,6 +15,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { withPortal, listCourses, courseHistory } from './portal.mjs';
+import { pushEmma } from './push.mjs';
 
 const EMMA = 'd46d1397-e280-4bfa-9f35-b5a52f3edb50';
 const PG = 'http://127.0.0.1:8766';
@@ -245,6 +246,9 @@ async function remind() {
   if (!res.ok) throw new Error('Alexa-Ansage fehlgeschlagen: ' + res.status + ' ' + (await res.text()).slice(0, 200));
   state.reminded = todayStr; saveState(state);
   log('Alexa-Ansage gesendet');
+  // Zusätzlich aufs Handy. Scheitert das, ist die Erinnerung trotzdem raus.
+  try { await pushEmma(text, 'Lernzeit'); log('Push an Emma gesendet'); }
+  catch (e) { log('Push an Emma fehlgeschlagen:', e.message); }
 }
 
 try {

@@ -3,7 +3,7 @@ import { KA_TOPIC_LABELS, buildKaQuestions, isCorrectAnswer, kaGradeFor, kaResul
 import { lsGetRunsForPlayer, logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { filterRunsByScope, scopeText } from '../core/scope.js';
-import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T } from '../core/theme.js';
+import { AM, BtnStyle, G100, G200, G400, G50, G500, G600, G700, G900, GR, RE, T } from '../core/theme.js';
 import { checkAnswer } from '../core/words.js';
 
 function KlassenarbeitSetup({ player, chapters, scope, onStart, onDone }) {

@@ -147,7 +147,7 @@ function QuizSolo({ chapters, globalWords, player, onDone }) {
   );
 }
 
-function QuizDuelMenu({ chapters, allChapters, player, allUsers, allCategories, onlineIds, quizScoring, setQuizScoring, onDone }) {
+function QuizDuelMenu({ chapters, allChapters, player, allUsers, setAllUsers, allCategories, onlineIds, quizScoring, setQuizScoring, onDone }) {
   var [view, setView] = useState('menu');
   var [history, setHistory] = useState([]);
   var [histLoaded, setHistLoaded] = useState(false);
