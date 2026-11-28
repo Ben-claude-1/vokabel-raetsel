@@ -59,11 +59,13 @@ test('jeder Satz in den Live-Pools besteht die Prüfung', async ({ page }) => {
   await page.goto('/tests/leer.html');
   const r = await page.evaluate(async () => {
     const g = await import('/src/core/grammar.js');
-    const out = { total: 0, bad: [], dup: [], hidden: 0 };
+    const out = { total: 0, bad: [], dup: [], hidden: 0, unapprovedShown: 0, approved: 0 };
     for (const t of Object.keys(g.GRAMMAR_KEYS)) {
       const raw = await g.loadGrammarPoolRaw(t);
       const shown = await g.loadGrammarPool(t);
       out.hidden += raw.length - shown.length;
+      out.unapprovedShown += shown.filter((q) => !g.isApproved(q, t)).length;
+      out.approved += raw.filter((q) => g.isApproved(q, t)).length;
       const seen = new Set();
       for (const q of raw) {
         out.total++;
@@ -77,10 +79,35 @@ test('jeder Satz in den Live-Pools besteht die Prüfung', async ({ page }) => {
     }
     return out;
   });
+  console.log('freigegeben:', r.approved, '/', r.total, '| ausgeblendet:', r.hidden);
   console.log('Sätze geprüft:', r.total, '| beanstandet:', r.bad.length, '| Dubletten:', r.dup.length);
   r.bad.forEach((b) => console.log('  ✗', b));
   expect(r.total).toBeGreaterThan(150);
   expect(r.bad).toEqual([]);
   expect(r.dup).toEqual([]);
-  expect(r.hidden).toBe(0);
+  // gezeigt wird nur, was Regeln + KI-Gegenprüfung freigegeben haben
+  expect(r.unapprovedShown).toBe(0);
+  // ungeprüfte Neuzugänge dürfen höchstens kurz (bis zum nächsten Prüflauf) fehlen
+  expect(r.hidden).toBeLessThan(30);
+});
+
+test('neue oder geänderte Sätze erscheinen erst nach der Gegenprüfung', async ({ page }) => {
+  await page.goto('/tests/leer.html');
+  const r = await page.evaluate(async () => {
+    const g = await import('/src/core/grammar.js');
+    const q = { id: 'x', sentence: 'She ___ football every day. (to play)', answer: 'plays', distractors: ['play', 'playing', 'to play'] };
+    const neu = g.isApproved(q, 'sp');
+    const ok = g.stampReview(q, 'sp', { ok: true, problem: '' });
+    const nachPruefung = g.isApproved(q, 'sp');
+    const q2 = Object.assign({}, q, { sentence: 'She ___ football. (to play)' }); // nachträglich geändert
+    const geaendert = g.isApproved(q2, 'sp');
+    const q3 = Object.assign({}, q, { distractors: ['play', 'played', 'to play'] }); // Ablenker geändert
+    const ablenker = g.isApproved(q3, 'sp');
+    const q4 = { id: 'y', sentence: 'We ___ in a small house. (to live)', answer: 'live', distractors: ['lives', 'living', 'to live'] };
+    const kiOkRegelNicht = g.stampReview(q4, 'sp', { ok: true, problem: '' });
+    const q5 = { id: 'z', sentence: 'She ___ football every day. (to play)', answer: 'plays', distractors: ['play', 'playing', 'to play'] };
+    const kiNein = g.stampReview(q5, 'sp', { ok: false, problem: 'mehrdeutig' });
+    return { neu, ok, nachPruefung, geaendert, ablenker, kiOkRegelNicht, kiNein, kiNeinApproved: g.isApproved(q5, 'sp') };
+  });
+  expect(r).toEqual({ neu: false, ok: true, nachPruefung: true, geaendert: false, ablenker: false, kiOkRegelNicht: false, kiNein: false, kiNeinApproved: false });
 });

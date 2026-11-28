@@ -1,5 +1,5 @@
 import { sbGet, sbPatch } from '../core/api.js';
-import { GRAMMAR_KEYS, aiReviewQuestions, buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, loadGrammarPoolRaw, saveGrammarPool, validateGrammarQuestion } from '../core/grammar.js';
+import { GRAMMAR_KEYS, aiReviewQuestions, isApproved, questionSig, stampReview, buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, loadGrammarPoolRaw, saveGrammarPool, validateGrammarQuestion } from '../core/grammar.js';
 import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, TD } from '../core/theme.js';
@@ -130,7 +130,7 @@ function GrammarAdmin({ player, chapters }) {
         // Stufe 2: unabhängige KI-Gegenprüfung
         return aiReviewQuestions(key, topic, passed).then(function(res){
           var ok=passed.filter(function(q,i){
-            if(res[i].ok){ q.review={ok:true,at:new Date().toISOString()}; return true; }
+            if(stampReview(q,topic,res[i])) return true;
             rejected.push({sentence:q.sentence,why:'KI-Prüfung: '+res[i].problem}); return false;
           });
           allNew=allNew.concat(ok);
@@ -159,10 +159,7 @@ function GrammarAdmin({ player, chapters }) {
       setMsg('Prüfe… ('+idx+'/'+next.length+')');
       return aiReviewQuestions(key,topic,part).then(function(res){
         part.forEach(function(q,i){
-          var pr=validateGrammarQuestion(q,topic);
-          var ok=res[i].ok&&!pr.length;
-          if(!ok) bad++;
-          q.review={ok:ok,problem:[].concat(pr,res[i].ok?[]:[res[i].problem]).join('; '),at:new Date().toISOString()};
+          if(!stampReview(q,topic,res[i])) bad++;
         });
         idx+=15; return step();
       });
@@ -213,13 +210,15 @@ function GrammarAdmin({ player, chapters }) {
       <div style={{maxHeight:300,overflowY:'auto'}}>
         {pool.map(function(q,i){
           var issues=validateGrammarQuestion(q,topic);
-          if(q.review&&q.review.ok===false&&q.review.problem) issues=issues.concat(['KI: '+q.review.problem]);
-          var bad=issues.length>0||(q.review&&q.review.ok===false);
-          return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:bad?'#fee2e2':G50,border:'1px solid '+(bad?RE:G200)}}>
+          if(!issues.length&&q.review&&q.review.ok===false&&q.review.problem&&q.review.sig===questionSig(q)) issues=['KI: '+q.review.problem];
+          var unchecked=!issues.length&&!isApproved(q,topic)&&!(q.review&&q.review.ok===false&&q.review.sig===questionSig(q));
+          var bad=!isApproved(q,topic)&&!unchecked;
+          return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:bad?'#fee2e2':unchecked?'#fef3c7':G50,border:'1px solid '+(bad?RE:unchecked?'#f59e0b':G200)}}>
             <div style={{flex:1}}>
               <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.sentence||q.text}</div>
               {q.answer&&<div style={{fontSize:10,color:T}}>✓ {q.answer}</div>}
               {bad&&<div style={{fontSize:10,color:RE}}>⚠ ausgeblendet: {issues.join('; ')||'von der Prüfung beanstandet'}</div>}
+              {unchecked&&<div style={{fontSize:10,color:'#b45309'}}>⏳ noch nicht gegengeprüft – ausgeblendet bis zur Prüfung (Knopf „Pool prüfen“ oder Nachtlauf)</div>}
               <div style={{fontSize:10,color:G600}}>{q.translation}</div>
             </div>
             <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>×</button>
