@@ -34,7 +34,7 @@ function GrammarAdmin({ player, chapters }) {
     var key = savedKey || localStorage.getItem('claude_api_key') || '';
     if(!key){setMsg('Bitte zuerst API-Key eintragen und speichern');return;}
     setGenerating(true); setMsg('');
-    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':topic==='mm'?'much/many':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
+    var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':topic==='mm'?'much/many':topic==='lf'?'a little/a few':topic==='gf'?'going to future':topic==='cmp'?'Comparatives (Steigerung)':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
     var promptDetail = topic==='sp'
       ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball.","german_hint":"spielen"}'
       : topic==='pp'
@@ -43,8 +43,20 @@ function GrammarAdmin({ player, chapters }) {
       ? 'Die Lücke ist "some" oder "any". Nutze NUR die einfache Schulregel für Klasse 6: "some" in positiven Aussagesätzen, "any" in Fragen und Verneinungen. WICHTIG: KEINE Bitten oder Höflichkeitsfragen wie "Can I have some...?", "Would you like some...?" oder "Could you give me some...?" — dort ist "some" laut englischer Grammatik zwar korrekt, das widerspricht aber der einfachen Schulregel und verwirrt Kinder, die genau diese Regel gerade lernen. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"I have ___ apples in my bag.","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Ich habe ein paar Äpfel in meiner Tasche."}'
       : topic==='mm'
       ? 'Die Lücke ist "much" oder "many". Nutze NUR die einfache Schulregel für Klasse 6: "many" bei zählbaren Nomen (apples, books, friends), "much" bei nicht zählbaren Nomen (water, milk, money, time, homework). Verwende nur Fragen ("How much/many ...?"), Verneinungen ("There aren\'t many ...", "I don\'t have much ...") und Sätze mit "too" / "so" ("too much homework", "so many people") — KEINE einfachen positiven Aussagesätze, dort sagt man "a lot of". Nur EINE Lücke pro Satz. Beispiel: {"sentence":"How ___ apples do you want?","answer":"many","distractors":["much","some","any"],"rule":"much/many","translation":"Wie viele Äpfel möchtest du?"}'
+      : topic==='lf'
+      ? 'Die Lücke ist "a little" oder "a few". Regel: "a few" bei zählbaren Nomen im Plural (a few apples, a few friends), "a little" bei nicht zählbaren Nomen (a little water, a little time). Nur EINE Lücke pro Satz. Beispiel: {"sentence":"I need ___ sugar for the cake.","answer":"a little","distractors":["a few","much","many"],"rule":"a little/a few","translation":"Ich brauche ein bisschen Zucker für den Kuchen."}'
+      : topic==='gf'
+      ? 'Die Lücke ist die going-to-Form (am/is/are going to + Verb). Verwende verschiedene Subjekte (I, you, he, she, we, they) und Zukunftsangaben (tomorrow, next week, on Saturday, tonight). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football tomorrow. (to play)","answer":"is going to play","distractors":["is playing","are going to play","is going to playing"],"rule":"going to","translation":"Sie wird morgen Fußball spielen.","german_hint":"spielen"}'
+      : topic==='cmp'
+      ? 'Die Lücke ist die Steigerungsform (Komparativ) eines Adjektivs, gefolgt von "than" im Satz. Mische kurze Adjektive (cheaper, bigger, nicer, faster) und lange (more expensive, more interesting). Am Ende des Satzes steht das Grundform-Adjektiv in Klammern. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"A bike is ___ than a car. (cheap)","answer":"cheaper","distractors":["more cheap","cheapest","the cheaper"],"rule":"comparatives","translation":"Ein Fahrrad ist billiger als ein Auto."}'
       : 'Erstelle alltagsnahe Sätze für Schüler der 6. Klasse wo ein Modalverb fehlt. Verfügbare Modalverben: must, mustn\'t, should, shouldn\'t, need to, don\'t need to. WICHTIG: Manchmal sind mehrere Modalverben sinnvoll — gib dann ALLE akzeptablen Antworten im "acceptable_answers"-Array an (immer befüllen, auch wenn nur eine Antwort möglich ist). Das "answer"-Feld enthält die beste/typischste Antwort. Kein Hinweis in Klammern am Satzende. Beispiel: {"sentence":"You ___ eat so many sweets.","answer":"shouldn\'t","acceptable_answers":["shouldn\'t","mustn\'t"],"distractors":["must","should","need to"],"rule":"modal verbs","translation":"Du solltest nicht so viele Süßigkeiten essen."}';
-    var distNote = topic==='mm'
+    var distNote = topic==='lf'
+      ? 'Die 3 distractors sind: das jeweils andere Wort (a little/a few) plus much und many.'
+      : topic==='gf'
+      ? 'Die 3 distractors sind falsche Formen (z.B. Present Progressive, falsches am/is/are, falsche Verbform nach going to).'
+      : topic==='cmp'
+      ? 'Die 3 distractors sind falsche Steigerungsformen desselben Adjektivs (Grundform, Superlativ, falsches more/-er).'
+      : topic==='mm'
       ? 'Die 3 distractors sind: das jeweils andere Wort (much/many) plus zwei weitere falsche Alternativen (some, any, a lot).'
       : topic==='sa'
       ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).'
@@ -54,7 +66,7 @@ function GrammarAdmin({ player, chapters }) {
     var promptTemplate = function(n){
       var fields = topic==='mv'
         ? 'sentence (mit ___ als einziger Lücke), answer, acceptable_answers, distractors, rule, translation'
-        : (topic==='sp'||topic==='pp')
+        : (topic==='sp'||topic==='pp'||topic==='gf')
         ? 'sentence (mit ___ als einziger Lücke, Infinitiv am Ende in Klammern), answer, distractors, rule, translation, german_hint'
         : 'sentence (mit ___ als einziger Lücke), answer, distractors, rule, translation';
       return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: '+fields+'. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
@@ -130,7 +142,7 @@ function GrammarAdmin({ player, chapters }) {
         }
       </div>
       <div style={{display:'flex',gap:4,marginBottom:10,background:G100,padding:3,borderRadius:8}}>
-        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any'],['mv','Modalverben'],['mm','much / many']].map(function(t){
+        {[['sp','Simple Present'],['pp','Present Progressive'],['sa','some / any'],['mv','Modalverben'],['mm','much / many'],['lf','a little / a few'],['gf','going to'],['cmp','Steigerung']].map(function(t){
           return <button key={t[0]} onClick={function(){setTopic(t[0]);}} style={{flex:1,padding:'7px',borderRadius:6,border:'none',background:topic===t[0]?'white':G100,color:topic===t[0]?T:G600,fontWeight:'bold',fontSize:12,cursor:'pointer'}}>{t[1]}</button>;
         })}
       </div>
@@ -324,7 +336,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
         <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
-      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to'],['mm','much / many','Mengen — How much water? How many apples?']].map(function(t){
+      {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to'],['mm','much / many','Mengen — How much water? How many apples?'],['lf','a little / a few','Mengen — a little water, a few apples'],['gf','going to','Zukunft — She is going to play.'],['cmp','Steigerung','Vergleiche — cheaper than, more expensive than']].map(function(t){
         var sel=selTopics.indexOf(t[0])>=0;
         return <div key={t[0]} onClick={function(){
             setSelTopics(function(prev){
@@ -387,7 +399,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
 
   var q=questions[qIdx];
   if(!q) return null;
-  var isSomeAny=q.rule==='some/any'||q.rule==='modal verbs'||q.rule==='much/many';
+  var isSomeAny=q.rule==='some/any'||q.rule==='modal verbs'||q.rule==='much/many'||q.rule==='a little/a few';
   var prevCorrect=(qStats[q.id]||{}).correct||0;
   var stage2=!isSomeAny&&prevCorrect>=2; // Stufe 2: Freitext
   var opts=q._opts||[q.answer];
