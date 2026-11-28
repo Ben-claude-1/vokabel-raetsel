@@ -18,6 +18,13 @@ test('Grammatik-Fortschritt zählt je Satz nur die letzte Antwort', async ({ pag
   console.log('Zeilen:', txt);
   await page.screenshot({ path: 'test-results/grammatik-fortschritt.png', fullPage: true });
   expect(txt.length).toBeGreaterThan(0);
+  // going to: der mehrdeutige Hunde-Satz wurde am 28.11. neu gefasst — sein alter
+  // Fehler zählt nicht mehr, präzisierte Sätze behalten ihren Verlauf (old_sentences).
+  const gt = await page.locator('div', { hasText: /^going to\d/ }).last().innerText();
+  const m = gt.match(/(\d+)\/(\d+) Sätze/);
+  console.log('going to:', m && m[0]);
+  expect(m && m[1]).toBe(m && m[2]);
+  expect(Number(m[2])).toBeGreaterThan(20);
 });
 
 test('zuletzt falsch beantwortete Sätze kommen fast immer in die nächste Runde', async ({ page }) => {

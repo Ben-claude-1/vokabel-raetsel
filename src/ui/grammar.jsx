@@ -36,9 +36,9 @@ function GrammarAdmin({ player, chapters }) {
     setGenerating(true); setMsg('');
     var topicLabel = topic==='sp'?'Simple Present':topic==='pp'?'Present Progressive':topic==='sa'?'some/any':topic==='mm'?'much/many':topic==='lf'?'a little/a few':topic==='gf'?'going to future':topic==='cmp'?'Comparatives (Steigerung)':'Modal Verbs (must/mustn\'t/should/shouldn\'t/need to/don\'t need to)';
     var promptDetail = topic==='sp'
-      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","played"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball.","german_hint":"spielen"}'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Simple-Present-Form. Jeder Satz MUSS ein eindeutiges Signalwort für Gewohnheit enthalten (every day, always, usually, on Mondays …), damit keine andere Zeitform passt. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football every day. (to play)","answer":"plays","distractors":["play","playing","to play"],"rule":"Simple Present","translation":"Sie spielt jeden Tag Fußball.","german_hint":"spielen"}'
       : topic==='pp'
-      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball.","german_hint":"spielen"}'
+      ? 'Verwende verschiedene Subjekte (I, you, he, she, we, they). Die Lücke ist das Verb in der richtigen Present-Progressive-Form (am/is/are + Verb+ing). Jeder Satz MUSS ein eindeutiges Signal für "gerade jetzt" enthalten (now, right now, at the moment, Look!, Listen!) — keine Gewohnheiten (every day) und keine Zukunft (tomorrow, tonight). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv (z.B. "spielen" für "to play"). WICHTIG: Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football right now. (to play)","answer":"is playing","distractors":["plays","play","are playing"],"rule":"Present Progressive","translation":"Sie spielt gerade Fußball.","german_hint":"spielen"}'
       : topic==='sa'
       ? 'Die Lücke ist "some" oder "any". Nutze NUR die einfache Schulregel für Klasse 6: "some" in positiven Aussagesätzen, "any" in Fragen und Verneinungen. WICHTIG: KEINE Bitten oder Höflichkeitsfragen wie "Can I have some...?", "Would you like some...?" oder "Could you give me some...?" — dort ist "some" laut englischer Grammatik zwar korrekt, das widerspricht aber der einfachen Schulregel und verwirrt Kinder, die genau diese Regel gerade lernen. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"I have ___ apples in my bag.","answer":"some","distractors":["any","no","a"],"rule":"some/any","translation":"Ich habe ein paar Äpfel in meiner Tasche."}'
       : topic==='mm'
@@ -46,23 +46,23 @@ function GrammarAdmin({ player, chapters }) {
       : topic==='lf'
       ? 'Die Lücke ist "a little" oder "a few". Regel: "a few" bei zählbaren Nomen im Plural (a few apples, a few friends), "a little" bei nicht zählbaren Nomen (a little water, a little time). Nur EINE Lücke pro Satz. Beispiel: {"sentence":"I need ___ sugar for the cake.","answer":"a little","distractors":["a few","much","many"],"rule":"a little/a few","translation":"Ich brauche ein bisschen Zucker für den Kuchen."}'
       : topic==='gf'
-      ? 'Die Lücke ist die going-to-Form (am/is/are going to + Verb). Verwende verschiedene Subjekte (I, you, he, she, we, they) und Zukunftsangaben (tomorrow, next week, on Saturday, tonight). Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football tomorrow. (to play)","answer":"is going to play","distractors":["is playing","are going to play","is going to playing"],"rule":"going to","translation":"Sie wird morgen Fußball spielen.","german_hint":"spielen"}'
+      ? 'Die Lücke ist die going-to-Form (am/is/are going to + Verb). Verwende verschiedene Subjekte (I, you, he, she, we, they) und Zukunftsangaben (tomorrow, next week, on Saturday, tonight). Jeder Satz MUSS eine solche Zukunftsangabe enthalten, damit er eindeutig ist. Am Ende des Satzes steht der Infinitiv in Klammern als Hinweis. Das Feld "german_hint" enthält nur den deutschen Infinitiv. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"She ___ football tomorrow. (to play)","answer":"is going to play","distractors":["is going play","are going to play","is going to playing"],"rule":"going to","translation":"Sie wird morgen Fußball spielen.","german_hint":"spielen"}'
       : topic==='cmp'
       ? 'Die Lücke ist die Steigerungsform (Komparativ) eines Adjektivs, gefolgt von "than" im Satz. Mische kurze Adjektive (cheaper, bigger, nicer, faster) und lange (more expensive, more interesting). Am Ende des Satzes steht das Grundform-Adjektiv in Klammern. Nur EINE Lücke pro Satz. Beispiel: {"sentence":"A bike is ___ than a car. (cheap)","answer":"cheaper","distractors":["more cheap","cheapest","the cheaper"],"rule":"comparatives","translation":"Ein Fahrrad ist billiger als ein Auto."}'
       : 'Erstelle alltagsnahe Sätze für Schüler der 6. Klasse wo ein Modalverb fehlt. Verfügbare Modalverben: must, mustn\'t, should, shouldn\'t, need to, don\'t need to. WICHTIG: Manchmal sind mehrere Modalverben sinnvoll — gib dann ALLE akzeptablen Antworten im "acceptable_answers"-Array an (immer befüllen, auch wenn nur eine Antwort möglich ist). Das "answer"-Feld enthält die beste/typischste Antwort. Kein Hinweis in Klammern am Satzende. Beispiel: {"sentence":"You ___ eat so many sweets.","answer":"shouldn\'t","acceptable_answers":["shouldn\'t","mustn\'t"],"distractors":["must","should","need to"],"rule":"modal verbs","translation":"Du solltest nicht so viele Süßigkeiten essen."}';
     var distNote = topic==='lf'
       ? 'Die 3 distractors sind: das jeweils andere Wort (a little/a few) plus much und many.'
       : topic==='gf'
-      ? 'Die 3 distractors sind falsche Formen (z.B. Present Progressive, falsches am/is/are, falsche Verbform nach going to).'
+      ? 'Die 3 distractors sind falsche Formen (falsches am/is/are, falsche Verbform nach going to, fehlendes "to"). KEIN Present Progressive ("is playing") — das wäre mit Zukunftsangabe ebenfalls richtig.'
       : topic==='cmp'
-      ? 'Die 3 distractors sind falsche Steigerungsformen desselben Adjektivs (Grundform, Superlativ, falsches more/-er).'
+      ? 'Die 3 distractors sind falsche Steigerungsformen desselben Adjektivs (Grundform, Superlativ, falsches more/-er). Keine Formen, die im Englischen auch erlaubt sind (z.B. "more friendly", "more tasty").'
       : topic==='mm'
       ? 'Die 3 distractors sind: das jeweils andere Wort (much/many) plus zwei weitere falsche Alternativen (some, any, a lot).'
       : topic==='sa'
       ? 'Die 3 distractors müssen sinnvolle aber falsche Alternativen sein (any, some, no, a, the).'
       : topic==='mv'
       ? 'Die distractors sind die Modalverben aus [must, mustn\'t, should, shouldn\'t, need to, don\'t need to] die NICHT in acceptable_answers stehen.'
-      : 'Die 3 distractors müssen andere Konjugationsformen DESSELBEN Verbs sein (nicht andere Wörter).';
+      : 'Die 3 distractors müssen andere Formen DESSELBEN Verbs sein (nicht andere Wörter), die im Satz eindeutig falsch sind — keine Vergangenheitsform, die grammatisch auch passen würde.';
     var promptTemplate = function(n){
       var fields = topic==='mv'
         ? 'sentence (mit ___ als einziger Lücke), answer, acceptable_answers, distractors, rule, translation'
@@ -277,13 +277,23 @@ function GrammarGame({ player, setPlayer, onDone }) {
       Promise.all(Object.keys(GRAMMAR_KEYS).map(function(t){return loadGrammarPool(t).catch(function(){return [];});})),
       sbGet('word_events','player_id=eq.'+pid+'&game=eq.grammatik&select=clue,correct,created_at&order=created_at.asc&limit=20000')
     ]).then(function(res){
-      var ruleOf={};
-      [].concat.apply([],res[0]).forEach(function(q){var s=q.sentence||q.text;if(s&&q.rule)ruleOf[s]=q.rule;});
+      // Satz im Log → {Regel, aktueller Satz}. old_sentences: frühere Fassungen,
+      // die nur präzisiert wurden (z. B. Zeitangabe ergänzt) — deren Antworten
+      // zählen für den neuen Wortlaut weiter.
+      // Eine Altfassung, die in mehreren Themen wortgleich vorkam, lässt sich
+      // keinem Thema sicher zuordnen und wird ignoriert.
+      var keyOf={}, oldOf={}, oldCount={};
+      [].concat.apply([],res[0]).forEach(function(q){
+        var s=q.sentence||q.text; if(!s||!q.rule) return;
+        keyOf[s]={rule:q.rule,s:s};
+        (q.old_sentences||[]).forEach(function(o){ oldCount[o]=(oldCount[o]||0)+1; oldOf[o]={rule:q.rule,s:s}; });
+      });
+      Object.keys(oldOf).forEach(function(o){ if(oldCount[o]===1&&!keyOf[o]) keyOf[o]=oldOf[o]; });
       var m={};
       (Array.isArray(res[1])?res[1]:[]).forEach(function(ev){
-        var r=ruleOf[ev.clue]; if(!r) return;
-        if(!m[r]) m[r]={};
-        m[r][ev.clue]=!!ev.correct;
+        var k=keyOf[ev.clue]; if(!k) return;
+        if(!m[k.rule]) m[k.rule]={};
+        m[k.rule][k.s]=!!ev.correct;
       });
       setLastMap(m);
     }).catch(function(){});
