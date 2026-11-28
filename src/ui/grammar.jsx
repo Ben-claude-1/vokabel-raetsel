@@ -1,5 +1,5 @@
 import { sbGet, sbPatch } from '../core/api.js';
-import { GRAMMAR_KEYS, buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, saveGrammarPool } from '../core/grammar.js';
+import { GRAMMAR_KEYS, aiReviewQuestions, buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, loadGrammarPoolRaw, saveGrammarPool, validateGrammarQuestion } from '../core/grammar.js';
 import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, TD } from '../core/theme.js';
@@ -21,7 +21,7 @@ function GrammarAdmin({ player, chapters }) {
 
   useEffect(function(){
     setLoading(true);
-    loadGrammarPool(topic).then(function(p){setPool(p);setLoading(false);}).catch(function(){setLoading(false);});
+    loadGrammarPoolRaw(topic).then(function(p){setPool(p);setLoading(false);}).catch(function(){setLoading(false);});
   },[topic]);
 
   function saveKey(){
@@ -69,26 +69,31 @@ function GrammarAdmin({ player, chapters }) {
         : (topic==='sp'||topic==='pp'||topic==='gf')
         ? 'sentence (mit ___ als einziger Lücke, Infinitiv am Ende in Klammern), answer, distractors, rule, translation, german_hint'
         : 'sentence (mit ___ als einziger Lücke), answer, distractors, rule, translation';
-      return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Antworte NUR mit einem JSON-Array mit genau diesen Feldern: '+fields+'. Keine Erklärungen, kein Markdown, nur das JSON-Array.';
+      return 'Erstelle '+n+' verschiedene Lückentext-Aufgaben auf Englisch für das Thema '+topicLabel+'. '+promptDetail+' '+distNote+' Jede Aufgabe muss eindeutig sein: Nur die Lösung ergibt einen korrekten Satz, keine falsche Option darf eingesetzt ebenfalls korrektes Englisch ergeben. Jede Aufgabe wird danach von einem zweiten Prüfer kontrolliert; fehlerhafte werden verworfen. Felder je Aufgabe: '+fields+' (nicht benötigte Felder leer lassen). Antworte im vorgegebenen JSON-Format {"questions":[…]}.';
     };
     var CHUNK=10;
     var chunks=[];
     for(var ci=0;ci<batchN;ci+=CHUNK) chunks.push(Math.min(CHUNK,batchN-ci));
-    var allNew=[];
+    var allNew=[], rejected=[];
     var currentPool=pool.slice();
+    var qSchema={type:'object',properties:{questions:{type:'array',items:{type:'object',properties:{
+      sentence:{type:'string'},answer:{type:'string'},distractors:{type:'array',items:{type:'string'}},acceptable_answers:{type:'array',items:{type:'string'}},
+      rule:{type:'string'},translation:{type:'string'},german_hint:{type:'string'}},
+      required:['sentence','answer','distractors','acceptable_answers','rule','translation','german_hint'],additionalProperties:false}}},required:['questions'],additionalProperties:false};
+    var ruleName={sp:'Simple Present',pp:'Present Progressive',sa:'some/any',mv:'modal verbs',mm:'much/many',lf:'a little/a few',gf:'going to',cmp:'comparatives'}[topic];
+    function finish(){
+      setPool(currentPool);
+      setGenerating(false);
+      setMsg('✓ '+allNew.length+' geprüfte Sätze gespeichert'+(rejected.length?' — '+rejected.length+' verworfen:\n'+rejected.slice(0,8).map(function(r){return '• '+r.sentence+' → '+r.why;}).join('\n'):''));
+    }
     function runChunk(idx, retries){
-      if(idx>=chunks.length){
-        setPool(currentPool);
-        setMsg('✓ '+allNew.length+' Sätze generiert und gespeichert');
-        setGenerating(false);
-        return;
-      }
+      if(idx>=chunks.length) return finish();
       var attempt=retries||0;
-      setMsg('Generiere… ('+allNew.length+'/'+batchN+')'+(attempt>0?' — Versuch '+(attempt+1):''));
+      setMsg('Generiere und prüfe… ('+allNew.length+'/'+batchN+')'+(attempt>0?' — Versuch '+(attempt+1):''));
       fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:4000,messages:[{role:'user',content:promptTemplate(chunks[idx])}]})
+        body:JSON.stringify({model:'claude-opus-5-5',max_tokens:16000,output_config:{effort:'medium',format:{type:'json_schema',schema:qSchema}},messages:[{role:'user',content:promptTemplate(chunks[idx])}]})
       }).then(function(r){
         if(r.status===529||r.status===503||r.status===429){
           if(attempt<5){
@@ -106,16 +111,63 @@ function GrammarAdmin({ player, chapters }) {
       .then(function(d){
         if(!d) return;
         if(d.error){ throw new Error(d.error.message||'API Fehler'); }
-        var text=d.content&&d.content[0]&&d.content[0].text||'';
-        var clean=text.replace(/```json|```/g,'').trim();
-        var arr=JSON.parse(clean).map(function(q){ return Object.assign({id:Date.now()+'_'+Math.random().toString(36).slice(2)},q); });
-        allNew=allNew.concat(arr);
-        currentPool=currentPool.concat(arr);
-        return saveGrammarPool(topic, currentPool).then(function(){ setTimeout(function(){ runChunk(idx+1,0); }, 500); });
+        if(d.stop_reason==='refusal'||d.stop_reason==='max_tokens') throw new Error('Antwort unvollständig ('+d.stop_reason+')');
+        var text=(d.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+        var arr=(JSON.parse(text).questions||[]).map(function(q){
+          var o={id:Date.now()+'_'+Math.random().toString(36).slice(2),sentence:q.sentence,answer:q.answer,distractors:q.distractors||[],rule:ruleName,translation:q.translation};
+          if(topic==='mv') o.acceptable_answers=(q.acceptable_answers&&q.acceptable_answers.length)?q.acceptable_answers:[q.answer];
+          if(q.german_hint) o.german_hint=q.german_hint;
+          return o;
+        });
+        // Stufe 1: feste Regeln + keine Dubletten zum Pool
+        var known=new Set(currentPool.map(function(q){return (q.sentence||'').toLowerCase();}));
+        var passed=arr.filter(function(q){
+          var pr=validateGrammarQuestion(q, topic);
+          if(known.has(q.sentence.toLowerCase())) pr.push('schon im Pool');
+          if(pr.length){ rejected.push({sentence:q.sentence,why:pr.join('; ')}); return false; }
+          known.add(q.sentence.toLowerCase()); return true;
+        });
+        // Stufe 2: unabhängige KI-Gegenprüfung
+        return aiReviewQuestions(key, topic, passed).then(function(res){
+          var ok=passed.filter(function(q,i){
+            if(res[i].ok){ q.review={ok:true,at:new Date().toISOString()}; return true; }
+            rejected.push({sentence:q.sentence,why:'KI-Prüfung: '+res[i].problem}); return false;
+          });
+          allNew=allNew.concat(ok);
+          currentPool=currentPool.concat(ok);
+          return saveGrammarPool(topic, currentPool).then(function(){ setTimeout(function(){ runChunk(idx+1,0); }, 500); });
+        });
       })
-      .catch(function(e){ setMsg('Fehler bei Batch '+(idx+1)+': '+e.message); setGenerating(false); });
+      .catch(function(e){ setPool(currentPool); setMsg('Fehler bei Batch '+(idx+1)+': '+e.message); setGenerating(false); });
     }
     runChunk(0,0);
+  }
+
+  // Ganzen Pool prüfen: feste Regeln + KI. Beanstandete Sätze werden markiert
+  // (review.ok=false) und damit den Kindern nicht mehr gezeigt.
+  function reviewPool(){
+    var key = savedKey || localStorage.getItem('claude_api_key') || '';
+    if(!key||!pool.length) return;
+    setGenerating(true); setMsg('Prüfe '+pool.length+' Sätze…');
+    var next=pool.map(function(q){return Object.assign({},q);});
+    var idx=0, bad=0;
+    function step(){
+      if(idx>=next.length){
+        return saveGrammarPool(topic,next).then(function(){ setPool(next); setGenerating(false); setMsg(bad?'Fehler: '+bad+' Sätze beanstandet — rot markiert, für die Kinder ausgeblendet. Bitte ändern oder löschen.':'✓ Alle '+next.length+' Sätze bestanden die Prüfung.'); });
+      }
+      var part=next.slice(idx,idx+15);
+      setMsg('Prüfe… ('+idx+'/'+next.length+')');
+      return aiReviewQuestions(key,topic,part).then(function(res){
+        part.forEach(function(q,i){
+          var pr=validateGrammarQuestion(q,topic);
+          var ok=res[i].ok&&!pr.length;
+          if(!ok) bad++;
+          q.review={ok:ok,problem:[].concat(pr,res[i].ok?[]:[res[i].problem]).join('; '),at:new Date().toISOString()};
+        });
+        idx+=15; return step();
+      });
+    }
+    step().catch(function(e){ setGenerating(false); setMsg('Fehler bei der Prüfung: '+e.message); });
   }
 
   function deleteQ(id){
@@ -155,14 +207,19 @@ function GrammarAdmin({ player, chapters }) {
           {[5,10,20,50].map(function(n){return <option key={n} value={n}>{n} Sätze</option>;})}
         </select>
         <button onClick={generate} disabled={generating||!savedKey} style={BtnStyle(T,'white',{flex:1,padding:'8px',fontSize:11,opacity:(!savedKey)?0.5:1})}>{generating?'Generiere…':'🤖 KI-Generierung'}</button>
+        <button onClick={reviewPool} disabled={generating||!savedKey||!pool.length} style={BtnStyle(G600,'white',{padding:'8px 10px',fontSize:11,opacity:(!savedKey||!pool.length)?0.5:1})}>🔍 Pool prüfen</button>
       </div>
-      {msg&&<div style={{fontSize:11,color:msg.startsWith('Fehler')?RE:T,padding:'6px 10px',background:msg.startsWith('Fehler')?'#fee2e2':'#d1fae5',borderRadius:6,marginBottom:8}}>{msg}</div>}
+      {msg&&<div style={{whiteSpace:'pre-line',fontSize:11,color:msg.startsWith('Fehler')?RE:T,padding:'6px 10px',background:msg.startsWith('Fehler')?'#fee2e2':'#d1fae5',borderRadius:6,marginBottom:8}}>{msg}</div>}
       <div style={{maxHeight:300,overflowY:'auto'}}>
         {pool.map(function(q,i){
-          return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:G50,border:'1px solid '+G200}}>
+          var issues=validateGrammarQuestion(q,topic);
+          if(q.review&&q.review.ok===false&&q.review.problem) issues=issues.concat(['KI: '+q.review.problem]);
+          var bad=issues.length>0||(q.review&&q.review.ok===false);
+          return <div key={q.id||i} style={{display:'flex',alignItems:'flex-start',gap:6,padding:'6px 8px',marginBottom:3,borderRadius:6,background:bad?'#fee2e2':G50,border:'1px solid '+(bad?RE:G200)}}>
             <div style={{flex:1}}>
               <div style={{fontSize:11,fontWeight:'bold',color:G900}}>{q.sentence||q.text}</div>
               {q.answer&&<div style={{fontSize:10,color:T}}>✓ {q.answer}</div>}
+              {bad&&<div style={{fontSize:10,color:RE}}>⚠ ausgeblendet: {issues.join('; ')||'von der Prüfung beanstandet'}</div>}
               <div style={{fontSize:10,color:G600}}>{q.translation}</div>
             </div>
             <button onClick={function(){deleteQ(q.id||i);}} style={{border:'none',background:'none',color:G400,cursor:'pointer',fontSize:12,padding:'0 4px'}}>×</button>
