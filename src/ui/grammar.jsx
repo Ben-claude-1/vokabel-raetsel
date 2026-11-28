@@ -1,5 +1,5 @@
 import { sbGet, sbPatch } from '../core/api.js';
-import { buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, saveGrammarPool } from '../core/grammar.js';
+import { GRAMMAR_KEYS, buildOptions, grammarPickQuestions, isCorrectAnswer, loadGrammarPool, saveGrammarPool } from '../core/grammar.js';
 import { logWordEvent, tallyAnswer } from '../core/leitner.js';
 import { useEffect, useRef, useState } from '../core/react.js';
 import { AM, BtnStyle, G100, G200, G400, G50, G600, G900, GR, RE, T, TD } from '../core/theme.js';
@@ -173,11 +173,28 @@ function GrammarAdmin({ player, chapters }) {
   );
 }
 
-function GrammarProgress({ ruleStats, sessions, qStats }) {
+// Stand je Regel: zählt pro Satz nur die LETZTE Antwort. Ein Fehler, der danach
+// am selben Satz richtig gemacht wurde, zählt nicht mehr — wer jeden geübten Satz
+// zuletzt richtig hatte, steht auf 100 %. Fallback auf die alte Gesamtquote nur,
+// solange für eine Regel noch keine Einzelsatz-Daten vorliegen.
+function ruleProgress(rule, ruleStats, lastMap) {
+  var m=lastMap&&lastMap[rule];
+  if(m){
+    var keys=Object.keys(m);
+    if(keys.length>0){
+      var ok=keys.filter(function(k){return m[k];}).length;
+      return {correct:ok,total:keys.length,unit:'Sätze zuletzt richtig'};
+    }
+  }
+  var st=(ruleStats&&ruleStats[rule])||{correct:0,total:0};
+  return {correct:st.correct,total:st.total,unit:'richtig'};
+}
+
+function GrammarProgress({ ruleStats, sessions, qStats, lastMap }) {
   var qs=qStats||{};
   var mastered=Object.keys(qs).filter(function(id){return qs[id].correct>=2;}).length;
   var practiced=Object.keys(qs).length;
-  var rules=Object.keys(ruleStats||{});
+  var rules=Object.keys(Object.assign({},ruleStats||{},lastMap||{}));
   var noData=rules.length===0&&(!sessions||sessions.length===0);
   return(
     <div>
@@ -199,13 +216,13 @@ function GrammarProgress({ ruleStats, sessions, qStats }) {
         </div>
       )}
       {rules.map(function(rule){
-        var st=ruleStats[rule];
-        var pct=st.total>0?Math.round(st.correct/st.total*100):0;
+        var st=ruleProgress(rule,ruleStats,lastMap);
+        var pct=st.total>0?Math.floor(st.correct/st.total*100):0;
         var col=pct>=80?GR:pct>=50?AM:RE;
         return <div key={rule} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',marginBottom:5,background:'white',borderRadius:8,border:'1px solid '+G200}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{fontWeight:'bold',fontSize:12,color:G900}}>{rule}</div>
-            <div style={{fontSize:10,color:G400}}>{st.correct}/{st.total} richtig</div>
+            <div style={{fontSize:10,color:G400}}>{st.correct}/{st.total} {st.unit}</div>
           </div>
           <div style={{width:60,height:5,background:G200,borderRadius:3,overflow:'hidden'}}>
             <div style={{height:'100%',width:pct+'%',background:col}}/>
@@ -245,9 +262,33 @@ function GrammarGame({ player, setPlayer, onDone }) {
     }).catch(function(){});
   },[]);
 
+  var [lastMap, setLastMap] = useState({});
+
   useEffect(function(){
     try{ var s=localStorage.getItem(PROG_KEY); if(s){var p=JSON.parse(s);setRuleStats(p.ruleStats||{});setSessions(p.sessions||[]);setQStats(p.qStats||{});} }catch(e){}
   },[]);
+
+  // Letzte Antwort je Satz aus dem Server-Log (word_events) — geräteübergreifend
+  // und inkl. aller früheren Runden. Die Regel kommt aus den Pools.
+  function reloadLastMap(){
+    var pid=player&&player.id;
+    if(!pid||!/^[0-9a-f-]{36}$/i.test(pid)) return;
+    Promise.all([
+      Promise.all(Object.keys(GRAMMAR_KEYS).map(function(t){return loadGrammarPool(t).catch(function(){return [];});})),
+      sbGet('word_events','player_id=eq.'+pid+'&game=eq.grammatik&select=clue,correct,created_at&order=created_at.asc&limit=20000')
+    ]).then(function(res){
+      var ruleOf={};
+      [].concat.apply([],res[0]).forEach(function(q){var s=q.sentence||q.text;if(s&&q.rule)ruleOf[s]=q.rule;});
+      var m={};
+      (Array.isArray(res[1])?res[1]:[]).forEach(function(ev){
+        var r=ruleOf[ev.clue]; if(!r) return;
+        if(!m[r]) m[r]={};
+        m[r][ev.clue]=!!ev.correct;
+      });
+      setLastMap(m);
+    }).catch(function(){});
+  }
+  useEffect(reloadLastMap,[player&&player.id]);
 
   function saveProg(rs,sess,qs){
     try{ localStorage.setItem(PROG_KEY,JSON.stringify({ruleStats:rs,sessions:sess,qStats:qs})); }catch(e){}
@@ -264,7 +305,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
       }).filter(function(q){return q.sentence&&q.answer&&q.sentence.includes('___');});
       if(!normalized||normalized.length===0){ setLoading(false); setPhase('empty'); return; }
       setPool(normalized);
-      var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length));
+      var qs=grammarPickQuestions(normalized,ruleStats,Math.min(10,normalized.length),lastMap);
       qs=qs.map(function(q){ return Object.assign({},q,{_opts:buildOptions(q,normalized)}); });
       setQuestions(qs); setQIdx(0); setResults([]); setChosen(null); setResult(null); setPhase('game');
       setLoading(false);
@@ -290,6 +331,9 @@ function GrammarGame({ player, setPlayer, onDone }) {
     newQStats[q.id].total++;
     if(correct) newQStats[q.id].correct++;
     setQStats(newQStats);
+    setLastMap(function(prev){
+      var n=Object.assign({},prev); n[q.rule]=Object.assign({},n[q.rule]||{}); n[q.rule][q.sentence]=correct; return n;
+    });
     setResult(newRes);
     if(!correct){
       setAiLoading(true);
@@ -333,7 +377,7 @@ function GrammarGame({ player, setPlayer, onDone }) {
     <div style={{padding:8}}>
       <div style={{marginBottom:12,padding:12,background:G50,borderRadius:10,border:'1px solid '+G200}}>
         <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:6}}>📊 Fortschritt</div>
-        <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats}/>
+        <GrammarProgress ruleStats={ruleStats} sessions={Array.isArray(sessions)?sessions:[]} qStats={qStats} lastMap={lastMap}/>
       </div>
       <div style={{fontWeight:'bold',fontSize:13,color:G900,marginBottom:8}}>Themen wählen:</div>
       {[['sp','Simple Present','Gegenwart — What does she do?'],['pp','Present Progressive','Verlaufsform — She is playing now.'],['sa','some / any','Mengen & Fragen — Can I have some?'],['mv','Modalverben','must / mustn\'t / should / shouldn\'t / need to'],['mm','much / many','Mengen — How much water? How many apples?'],['lf','a little / a few','Mengen — a little water, a few apples'],['gf','going to','Zukunft — She is going to play.'],['cmp','Steigerung','Vergleiche — cheaper than, more expensive than']].map(function(t){

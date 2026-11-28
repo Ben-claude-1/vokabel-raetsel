@@ -69,12 +69,16 @@ function saveGrammarPool(topic, pool) {
   });
 }
 
-function grammarPickQuestions(pool, ruleStats, count) {
+// lastMap (optional): {rule: {sentence: letzte Antwort richtig?}} — Sätze, die
+// zuletzt falsch waren, kommen deutlich öfter dran, damit sie sich ausbügeln lassen.
+function grammarPickQuestions(pool, ruleStats, count, lastMap) {
   if(!pool||pool.length===0) return [];
   var weighted=pool.map(function(q){
     var st=ruleStats[q.rule]||{correct:0,total:0};
     var score=st.total>0?st.correct/st.total:0;
     var weight=1+(1-score)*3;
+    var lm=lastMap&&lastMap[q.rule];
+    if(lm&&lm[q.sentence]===false) weight*=20;
     return Object.assign({},q,{_weight:weight});
   });
   var picked=[], seen=new Set();
