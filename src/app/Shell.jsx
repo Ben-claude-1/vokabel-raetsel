@@ -83,7 +83,7 @@ function ScopeSwitcher({ scopes, scope, onChange, compact }) {
   );
 }
 
-function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout, tailInfo, onSwitch }) {
+function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers, allCategories, setAllCategories, onLogout, onRefresh, tailInfo, onSwitch }) {
   var isAdmin = !!(player && player.is_admin);
   var [screen, setScreen] = useState(isAdmin ? 'admin' : 'home');
   var [screenData, setScreenData] = useState(null);
@@ -386,6 +386,7 @@ function Shell({ player, setPlayer, chapters, setChapters, allUsers, setAllUsers
           <ScopeSwitcher scopes={scopes} scope={scope} onChange={setScope}/>
           {tailInfo&&tailInfo.admin&&player&&player.name===tailInfo.home&&<button onClick={function(){onSwitch(tailInfo.admin);}} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>⚙️ Admin</button>}
           {tailInfo&&tailInfo.admin&&isAdmin&&<button onClick={function(){onSwitch(tailInfo.home);}} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>← {tailInfo.home}</button>}
+          {onRefresh&&<button onClick={onRefresh} title="Aktualisieren" aria-label="Aktualisieren" style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 8px',borderRadius:8,cursor:'pointer',fontSize:13,touchAction:'manipulation'}}>🔄</button>}
           <button onClick={onLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'white',padding:'4px 10px',borderRadius:8,cursor:'pointer',fontSize:11,touchAction:'manipulation'}}>Abmelden</button>
         </div>
 
@@ -593,6 +594,20 @@ function App() {
     Promise.all([p1,p2,p3]).then(finish).catch(finish);
   }
 
+  // Aktualisieren ohne Abmelden: Spieler (Punkte) und Stammdaten neu holen und
+  // die Oberfläche neu aufbauen, damit jeder Bildschirm seinen Lernfortschritt
+  // (ls_progress, word_events …) frisch aus der Datenbank lädt.
+  var [refreshKey, setRefreshKey] = useState(0);
+  function handleRefresh() {
+    if(!player) return;
+    function remount(){ setRefreshKey(function(k){ return k+1; }); }
+    sbGet('players','id=eq.'+encodeURIComponent(player.id)+'&select=*').then(function(d){
+      var u = Array.isArray(d) && d[0];
+      if(u && u.is_active!==false) handleLogin(u);
+      remount();
+    }).catch(remount);
+  }
+
   function handleLogout() {
     // Nach bewusstem Abmelden nicht gleich wieder automatisch anmelden (sonst
     // käme man nie zum Login-Bild, z. B. um sich als jemand anderes anzumelden).
@@ -651,7 +666,7 @@ function App() {
     </div>
   );
 
-  return <Shell key={player.id} tailInfo={tailInfo} onSwitch={handleSwitch} player={player} setPlayer={setPlayer} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onLogout={handleLogout}/>;
+  return <Shell key={player.id+':'+refreshKey} onRefresh={handleRefresh} tailInfo={tailInfo} onSwitch={handleSwitch} player={player} setPlayer={setPlayer} chapters={chapters} setChapters={setChapters} allUsers={allUsers} setAllUsers={setAllUsers} allCategories={allCategories} setAllCategories={setAllCategories} onLogout={handleLogout}/>;
 }
 
 export { ScopeSwitcher, Shell, App };
